@@ -3,6 +3,7 @@ This is a fork of the original repository, containing only my custom plugins and
 ### Included sources:
 
 - [Hako](https://ln.hako.vn)
+- [Akaytruyen](https://akaytruyen.com)
 
 ---
 
