@@ -175,7 +175,7 @@ class HakoPlugin implements Plugin.PluginBase {
   id = 'ln.hako.vn';
   name = 'Hako Novel';
   icon = 'src/vi/hakolightnovel/icon.png';
-  version = '1.1.15';
+  version = '1.1.16';
 
   pluginSettings = {
     usingDocln: {
@@ -198,7 +198,10 @@ class HakoPlugin implements Plugin.PluginBase {
     validator?: (html: string) => boolean,
   ): Promise<string> {
     const res = await fetchApi(this.site + path);
-    console.log(`Fetched ${this.site + path} - Status: ${res.status}`);
+    console.log(
+      `Fetched ${this.site + path} - Status: ${res.status}`,
+      storage.get('usingDocln'),
+    );
     const html = res.ok ? await res.text() : '';
     // Idk why hako returns 403 but fetchjs return 200???
     const $ = load(html);
