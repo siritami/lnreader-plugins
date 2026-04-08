@@ -3,8 +3,7 @@ import { load } from 'cheerio';
 import { Plugin } from '@/types/plugin';
 import { NovelStatus } from '@libs/novelStatus';
 import { FilterTypes, Filters } from '@libs/filterInputs';
-
-const HAKO_MIRRORS = ['https://ln.hako.vn', 'https://docln.sbs'] as const;
+import { storage } from '@libs/storage';
 
 const BASE64_ALPHABET =
   'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
@@ -176,38 +175,34 @@ class HakoPlugin implements Plugin.PluginBase {
   id = 'ln.hako.vn';
   name = 'Hako Novel';
   icon = 'src/vi/hakolightnovel/icon.png';
-  site = 'https://ln.hako.vn';
-  version = '1.1.11';
+  site = this.host;
+  version = '1.1.12';
+
+  pluginSettings = {
+    usingDocln: {
+      value: '',
+      label: 'Sử dụng tên miền docln.sbs (nếu ln.hako.vn bị lỗi)',
+      type: 'Switch',
+    },
+  };
+
+  get usingDocln() {
+    return storage.get('usingDocln') === 'true';
+  }
+
+  get host() {
+    return this.usingDocln ? 'https://docln.sbs' : 'https://ln.hako.vn';
+  }
 
   private async fetchHtmlFromMirrors(
     path: string,
     validator?: (html: string) => boolean,
   ): Promise<string> {
-    const hosts = [
-      this.site,
-      ...HAKO_MIRRORS.filter(host => host !== this.site),
-    ];
-    let fallbackHtml = '';
-
-    for (const host of hosts) {
-      try {
-        const res = await fetchApi(host + path);
-        const html = res.ok ? await res.text() : '';
-
-        if (html && !fallbackHtml) {
-          fallbackHtml = html;
-        }
-
-        if (html && (!validator || validator(html))) {
-          return html;
-        }
-      } catch (err) {
-        // Continue to the next host
-      }
-    }
-
+    const res = await fetchApi(this.host + path);
+    console.log(`Fetched ${this.host + path} - Status: ${res.status}`);
+    const html = res.ok ? await res.text() : '';
     // Idk why hako returns 403 but fetchjs return 200???
-    const $ = load(fallbackHtml);
+    const $ = load(html);
     // Check class: error-page, error-name, error-note
     const errorPage = $('.error-page');
     const errorName = errorPage.find('.error-name')?.first()?.text()?.trim();
@@ -215,7 +210,11 @@ class HakoPlugin implements Plugin.PluginBase {
     if (errorPage?.length && errorName && errorNote) {
       throw new Error(`Hako error: ${errorName} - ${errorNote}`);
     }
-    return fallbackHtml;
+    if (html && (!validator || validator(html))) {
+      return html;
+    } else {
+      throw new Error('Failed to fetch valid HTML from ' + this.host);
+    }
   }
 
   async parseNovels(url: string) {
@@ -571,4 +570,3 @@ class HakoPlugin implements Plugin.PluginBase {
 }
 
 export default new HakoPlugin();
-
