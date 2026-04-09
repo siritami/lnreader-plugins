@@ -9,11 +9,11 @@ class ValvrareTeamPlugin implements Plugin.PluginBase {
   name = 'Valvrareteam';
   icon = 'src/vi/valvrareteam/icon.png';
   site = 'https://valvrareteam.net';
-  version = '1.0.5';
+  version = '1.0.6';
 
   api = 'https://val-ssr-2kzit.ondigitalocean.app/api';
 
-  private allNovels: Plugin.NovelItem[] = [];
+  // private allNovels: Plugin.NovelItem[] = [];
   // private isLoaded = this.loadAllNovels();
 
   private normalizeInline(text = '') {
@@ -192,7 +192,7 @@ class ValvrareTeamPlugin implements Plugin.PluginBase {
       chapters = await this.fallbackGetNovelChapters(novelId);
     }
 
-    const status = this.queryNovelStatus($);
+    // const status = this.queryNovelStatus($);
 
     const novel: Plugin.SourceNovel = {
       path: novelPath,
@@ -202,7 +202,7 @@ class ValvrareTeamPlugin implements Plugin.PluginBase {
       author: author,
       genres: genres,
       chapters: chapters,
-      status,
+      // status,
     };
 
     console.log('Parsed novel:', novel);
@@ -232,6 +232,7 @@ class ValvrareTeamPlugin implements Plugin.PluginBase {
     return $('.chapter-content').first().html()?.trim() ?? '';
   }
 
+  /*
   async loadAllNovels() {
     let page = 1;
     let n = [];
@@ -245,7 +246,9 @@ class ValvrareTeamPlugin implements Plugin.PluginBase {
       }
     } while (n.length > 0);
   }
+    */
 
+  /*
   async searchNovelsOld(
     searchTerm: string,
     pageNo: number,
@@ -261,6 +264,7 @@ class ValvrareTeamPlugin implements Plugin.PluginBase {
 
     return results.slice(startIndex, startIndex + PAGE_SIZE);
   }
+    */
 
   async searchNovels(
     searchTerm: string,
