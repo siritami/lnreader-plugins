@@ -2,13 +2,14 @@ import { fetchApi } from '@libs/fetch';
 import { Plugin } from '@/types/plugin';
 import { load as loadCheerio } from 'cheerio';
 import { defaultCover } from '@libs/defaultCover';
+import { NovelStatus } from '@/types/constants';
 
 class ValvrareTeamPlugin implements Plugin.PluginBase {
   id = 'valvrareteam';
   name = 'Valvrareteam';
   icon = 'src/vi/valvrareteam/icon.png';
   site = 'https://valvrareteam.net';
-  version = '1.0.2';
+  version = '1.0.3';
 
   private allNovels: Plugin.NovelItem[] = [];
   private isLoaded = this.loadAllNovels();
@@ -59,6 +60,18 @@ class ValvrareTeamPlugin implements Plugin.PluginBase {
     });
 
     return novels;
+  }
+
+  async queryNovelStatus($) {
+    let status: string = NovelStatus.Unknown;
+    if ($('.rd-status-completed').length > 0) {
+      status = NovelStatus.Completed;
+    } else if ($('.rd-status-ongoing').length > 0) {
+      status = NovelStatus.Ongoing;
+    } else if ($('.rd-status-hiatus').length > 0) {
+      status = NovelStatus.OnHiatus;
+    }
+    return status;
   }
 
   private extractAuthors($: any) {
@@ -120,12 +133,14 @@ class ValvrareTeamPlugin implements Plugin.PluginBase {
 
         const loginRequired = $item.find('.login-required-text').length > 0;
 
-        chapters.push({
-          name: loginRequired ? '🔒 ' + chapterTitle : chapterTitle,
-          releaseTime: date,
-          path: chapterPath,
-          page: volumeName || undefined,
-        });
+        if (chapterTitle && chapterPath) {
+          chapters.push({
+            name: loginRequired ? '🔒 ' + chapterTitle : chapterTitle,
+            releaseTime: date,
+            path: chapterPath,
+            page: volumeName || undefined,
+          });
+        }
       });
     });
 
@@ -161,6 +176,8 @@ class ValvrareTeamPlugin implements Plugin.PluginBase {
 
     const chapters = this.extractChaptersByVolume($);
 
+    const status = await this.queryNovelStatus($);
+
     const novel: Plugin.SourceNovel = {
       path: novelPath,
       name: title || 'Untitled',
@@ -169,11 +186,19 @@ class ValvrareTeamPlugin implements Plugin.PluginBase {
       author: author,
       genres: genres,
       chapters: chapters,
+      status,
     };
 
     console.log('Parsed novel:', novel);
 
     return novel;
+  }
+
+  async parsePage(novelPath: string, page: string): Promise<Plugin.SourcePage> {
+    const novel = await this.parseNovel(novelPath);
+    return {
+      chapters: novel.chapters || [],
+    };
   }
 
   async parseChapter(chapterPath: string): Promise<string> {
