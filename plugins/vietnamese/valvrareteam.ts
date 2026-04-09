@@ -9,7 +9,7 @@ class ValvrareTeamPlugin implements Plugin.PluginBase {
   name = 'Valvrareteam';
   icon = 'src/vi/valvrareteam/icon.png';
   site = 'https://valvrareteam.net';
-  version = '1.0.6';
+  version = '1.0.7';
 
   api = 'https://val-ssr-2kzit.ondigitalocean.app/api';
 
@@ -67,13 +67,14 @@ class ValvrareTeamPlugin implements Plugin.PluginBase {
     return novels;
   }
 
-  queryNovelStatus($) {
+  queryNovelStatus(html: string) {
     let status: string = NovelStatus.Unknown;
-    if ($('.rd-status-completed').length > 0) {
+    // class="rd-status-badge-inline rd-status-ongoing"
+    if (html.includes(`class="rd-status-badge-inline rd-status-completed"`)) {
       status = NovelStatus.Completed;
-    } else if ($('.rd-status-ongoing').length > 0) {
+    } else if (html.includes(`class="rd-status-badge-inline rd-status-ongoing"`)) {
       status = NovelStatus.Ongoing;
-    } else if ($('.rd-status-hiatus').length > 0) {
+    } else if (html.includes(`class="rd-status-badge-inline rd-status-hiatus"`)) {
       status = NovelStatus.OnHiatus;
     }
     return status;
@@ -192,7 +193,7 @@ class ValvrareTeamPlugin implements Plugin.PluginBase {
       chapters = await this.fallbackGetNovelChapters(novelId);
     }
 
-    // const status = this.queryNovelStatus($);
+    const status = this.queryNovelStatus(html);
 
     const novel: Plugin.SourceNovel = {
       path: novelPath,
@@ -202,7 +203,7 @@ class ValvrareTeamPlugin implements Plugin.PluginBase {
       author: author,
       genres: genres,
       chapters: chapters,
-      // status,
+      status,
     };
 
     console.log('Parsed novel:', novel);
@@ -270,6 +271,9 @@ class ValvrareTeamPlugin implements Plugin.PluginBase {
     searchTerm: string,
     pageNo: number,
   ): Promise<Plugin.NovelItem[]> {
+    if (pageNo > 1) {
+      return [];
+    }
     const url = `${this.api}/novels/search?title=${encodeURIComponent(searchTerm)}`;
     const res = await fetchApi(url);
     const data = await res.json();
