@@ -1,6 +1,6 @@
 import { fetchApi } from '@libs/fetch';
 import { Plugin } from '@/types/plugin';
-import { load as loadCheerio } from 'cheerio';
+import { CheerioAPI, load as loadCheerio } from 'cheerio';
 import { defaultCover } from '@libs/defaultCover';
 import { NovelStatus } from '@libs/novelStatus';
 
@@ -72,15 +72,19 @@ class ValvrareTeamPlugin implements Plugin.PluginBase {
     // class="rd-status-badge-inline rd-status-ongoing"
     if (html.includes(`class="rd-status-badge-inline rd-status-completed"`)) {
       status = NovelStatus.Completed;
-    } else if (html.includes(`class="rd-status-badge-inline rd-status-ongoing"`)) {
+    } else if (
+      html.includes(`class="rd-status-badge-inline rd-status-ongoing"`)
+    ) {
       status = NovelStatus.Ongoing;
-    } else if (html.includes(`class="rd-status-badge-inline rd-status-hiatus"`)) {
+    } else if (
+      html.includes(`class="rd-status-badge-inline rd-status-hiatus"`)
+    ) {
       status = NovelStatus.OnHiatus;
     }
     return status;
   }
 
-  private extractAuthors($: any) {
+  private extractAuthors($: CheerioAPI) {
     let author = '';
     let illustrator = '';
 
@@ -103,7 +107,7 @@ class ValvrareTeamPlugin implements Plugin.PluginBase {
     return { author, illustrator };
   }
 
-  private extractChaptersByVolume($: any) {
+  private extractChaptersByVolume($: CheerioAPI) {
     const chapters: Plugin.ChapterItem[] = [];
 
     $('.module-container').each((_, moduleElement) => {
@@ -140,7 +144,7 @@ class ValvrareTeamPlugin implements Plugin.PluginBase {
         const loginRequired = $item.find('.login-required-text').length > 0;
 
         if (chapterTitle && chapterPath) {
-          const [dd, mm, yyyy] = date.split("/");
+          const [dd, mm, yyyy] = date.split('/');
           const correct = `${yyyy}-${mm}-${dd}`;
           chapters.push({
             name: loginRequired ? '🔒 ' + chapterTitle : chapterTitle,
@@ -228,7 +232,9 @@ class ValvrareTeamPlugin implements Plugin.PluginBase {
     const html = await res.text();
     const $ = loadCheerio(html);
     if ($('.chapter-content').length === 0) {
-      throw new Error('Không thể tải nội dung chương này. Hãy thử đăng nhập WebView trước.');
+      throw new Error(
+        'Không thể tải nội dung chương này. Hãy thử đăng nhập WebView trước.',
+      );
     }
     return $('.chapter-content').first().html()?.trim() ?? '';
   }
@@ -311,7 +317,7 @@ class ValvrareTeamPlugin implements Plugin.PluginBase {
 
   nomalizeName(name: string, id: string) {
     id = id.slice(-8);
-    const map = {
+    const map: Record<string, string> = {
       'a': 'aáàảãạăắằẳẵặâấầẩẫậ',
       'e': 'eéèẻẽẹêếềểễệ',
       'i': 'iíìỉĩị',
@@ -325,7 +331,7 @@ class ValvrareTeamPlugin implements Plugin.PluginBase {
         .toLowerCase()
         .replace(/./g, char => {
           for (const key in map) {
-            if (map[key].includes(char)) {
+            if (map[key]?.includes(char)) {
               return key;
             }
           }

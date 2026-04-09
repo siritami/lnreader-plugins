@@ -20,7 +20,7 @@ class TieuThuyetMangPlugin implements Plugin.PluginBase {
   name = 'Tiểu Thuyết Mạng';
   icon = 'src/vi/tieuthuyetmang/icon.png';
   site = 'https://tieuthuyetmang.com';
-  version = '1.0.0';
+  version = '1.0.1';
 
   imageRequestInit: Plugin.ImageRequestInit = {
     headers: {
@@ -94,8 +94,10 @@ class TieuThuyetMangPlugin implements Plugin.PluginBase {
     novelPath: string,
   ): Plugin.ChapterItem[] {
     const escapedMatch = html.match(
+      // @ts-expect-error
       /\\"chapters\\":\[(.*?)\],\\"contentDescription\\"/s,
     );
+    // @ts-expect-error
     const plainMatch = html.match(/"chapters":\[(.*?)\],"contentDescription"/s);
 
     let rawArray = null;
@@ -107,7 +109,7 @@ class TieuThuyetMangPlugin implements Plugin.PluginBase {
 
     if (!rawArray) return [];
 
-    let chapters;
+    let chapters: any[];
     try {
       chapters = JSON.parse(rawArray);
     } catch {
@@ -128,13 +130,71 @@ class TieuThuyetMangPlugin implements Plugin.PluginBase {
     options: Plugin.PopularNovelsOptions<Filters>,
   ): Promise<Plugin.NovelItem[]> {
     void options;
+    const response = await fetchApi(
+      `https://be.tieuthuyetmang.com/api/stories?sort=hot&page=${pageNo}&per_page=15`,
+    );
+    const json = (await response.json()) as {
+      data: {
+        id: string;
+        title: string;
+        slug: string;
+        coverUrl: string;
+        description: null;
+        excerpt: string | null;
+        contentDescription: string;
+        status: string;
+        viewCount: number;
+        author: {
+          id: string;
+          name: string;
+          slug: string;
+        };
+        categories: {
+          id: string;
+          name: string;
+          slug: string;
+        }[];
+        chapters_count: number;
+        latestChapter: {
+          title: string;
+          chapterNumber: number;
+        };
+        ratings_count: number;
+        avgRating: number;
+        createdAt: string;
+        updatedAt: string;
+      }[];
+      total: number;
+      per_page: number;
+      current_page: number;
+      last_page: number;
+    };
+    const novels: Plugin.NovelItem[] = [];
+    json.data.forEach(item => {
+      if (!item.slug || !item.title) {
+        return;
+      }
+      novels.push({
+        name: item.title,
+        path: `/truyen/${item.slug}`,
+        cover: this.normalizeCoverUrl(item.coverUrl),
+      });
+    });
+    return novels;
+  }
+
+  /*
+  async popularNovelsOld(
+    pageNo: number,
+    options: Plugin.PopularNovelsOptions<Filters>,
+  ): Promise<Plugin.NovelItem[]> {
+    void options;
     if (pageNo > 1) {
       return [];
     }
     const url = new URL('/truyen', this.site);
     url.searchParams.set('editor_pick', '1');
     url.searchParams.set('sort', 'new');
-    url.searchParams.set('page', String(pageNo));
 
     const response = await fetchApi(url.toString());
     const html = await response.text();
@@ -163,6 +223,7 @@ class TieuThuyetMangPlugin implements Plugin.PluginBase {
 
     return novels;
   }
+    */
 
   async parseNovel(novelPath: string): Promise<Plugin.SourceNovel> {
     const response = await fetchApi(this.resolveUrl(novelPath));
@@ -234,7 +295,9 @@ class TieuThuyetMangPlugin implements Plugin.PluginBase {
     const chapterContent = $('.whitespace-pre-wrap').first();
 
     if (!chapterContent?.text().trim()) {
-      throw new Error('Không tìm thấy nội dung chương');
+      throw new Error(
+        'Không thể tải nội dung chương này. Hãy thử đăng nhập WebView trước.',
+      );
     }
 
     return `<div>${chapterContent.html()?.trim().split('\n').join('<br>')}<div>`;
