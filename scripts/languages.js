@@ -4,7 +4,7 @@ export default {
   // English: 'English',
   // French: 'Français',
   // Indonesian: 'Bahasa Indonesia',
-  // Japanese: '日本語',
+  Japanese: '日本語',
   // Korean: '조선말, 한국어',
   // Polish: 'Polski',
   // Portuguese: 'Português',
