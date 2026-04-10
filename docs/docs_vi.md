@@ -53,3 +53,28 @@ const PLUGINS: Plugin.PluginBase[] = [
 // Xuất mảng để hệ thống có thể nhận diện và biên dịch
 export default PLUGINS;
 ```
+
+## Hướng dẫn Debug (Gỡ lỗi)
+
+Trong quá trình phát triển Plugin, chắc chắn bạn sẽ cần kiểm tra xem code của mình có hoạt động đúng hay không. Môi trường phát triển của Repository này đã tích hợp sẵn một giao diện Web (Web UI) để mô phỏng hoạt động của ứng dụng LNReader ngay trên trình duyệt.
+
+### 1. Khởi chạy môi trường test cục bộ (Local Web Interface)
+
+Mở terminal và chạy lệnh sau:
+```bash
+npm run dev:start
+```
+
+- Lệnh này sẽ tự động biên dịch toàn bộ các files và khởi chạy một Web Server mô phỏng.
+- Bạn có thể truy cập vào địa chỉ được hiển thị trên console (thường là `http://localhost:5173` hoặc `http://localhost:3000`).
+- Giao diện này cho phép bạn tương tác trực tiếp: duyệt danh sách truyện mới, tìm kiếm, xem danh sách chương truyện và nội dung trang đọc giống như một người dùng đang sử dụng LNReader.
+
+### 2. Sử dụng `console.log`
+
+- Vì code của bạn đang chạy thông qua trình duyệt ở giao diện Web, bạn hoàn toàn có thể sử dụng `console.log`, `console.warn`, hoặc `console.error` ngay bên trong các hàm xử lý của Plugin (`popularNovels`, `parseNovel`, `parseChapter`,...).
+- **Cách xem:** Mô phỏng các thao tác tương ứng trên Web UI (ví dụ ấn vào xem truyện), ấn phím **F12** để mở Developer Tools của trình duyệt (Chrome, Edge...), chuyển sang tab `Console` và theo dõi quá trình in kết quả.
+
+### 3. Debug lỗi kẹt tại Fetch API hoặc Parse HTML
+
+- Nếu truyện không tải được danh sách, hãy mở **tab Network** trong Developer Tools để xem các request lấy HTML có trả về nội dung kỳ vọng hay bị chặn (Block/CORS/Cloudflare).
+- Nếu Request trả về nội dung đúng (Status 200) nhưng thông tin hiển thị lên trang web lại sai/trống, bạn hãy dùng `console.log` hiển thị các biến lưu kết quả parse (`cheerio`) trước khi `return` để kiểm tra độ chính xác của Selectors CSS mà bạn cung cấp. Quá trình này giúp phát hiện trường hợp phía website đã thay đổi giao diện làm bộ lọc cũ không hoạt động.
