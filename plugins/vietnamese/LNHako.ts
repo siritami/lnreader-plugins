@@ -174,7 +174,7 @@ class HakoPlugin implements Plugin.PluginBase {
   id = 'ln.hako.vn';
   name = 'Hako Novel';
   icon = 'src/vi/hakolightnovel/icon.png';
-  version = '1.1.22';
+  version = '1.1.23';
 
   pluginSettings = {
     usingDocln: {
@@ -798,6 +798,7 @@ const styleHtmlComment = String.raw`<style>
     cursor: pointer;
     font-weight: 700;
     margin-right: 10px;
+    color: #111111;
     transition: 0.25s;
     -webkit-transition: 0.25s;
     -moz-transition: 0.25s;
