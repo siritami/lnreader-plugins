@@ -174,7 +174,7 @@ class HakoPlugin implements Plugin.PluginBase {
   id = 'ln.hako.vn';
   name = 'Hako Novel';
   icon = 'src/vi/hakolightnovel/icon.png';
-  version = '1.1.29';
+  version = '1.1.30';
 
   pluginSettings = {
     usingDocln: {
@@ -886,9 +886,9 @@ const styleHtmlComment = String.raw`<style>
     font-size: inherit;
     font-weight: inherit;
   }
-  a {
-    color: inherit;
-    text-decoration: inherit;
+  .none {
+    /* hard code for note */
+    color: #007bff;
   }
   h3 {
     margin: 0;
