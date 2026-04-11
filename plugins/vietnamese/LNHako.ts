@@ -174,7 +174,7 @@ class HakoPlugin implements Plugin.PluginBase {
   id = 'ln.hako.vn';
   name = 'Hako Novel';
   icon = 'src/vi/hakolightnovel/icon.png';
-  version = '1.1.25';
+  version = '1.1.26';
 
   pluginSettings = {
     usingDocln: {
@@ -825,51 +825,27 @@ const styleHtmlComment = String.raw`<style>
   .ln-comment-item {
     position: relative;
   }
+  .ln-comment-item.deleted {
+    font-size: 14px;
+    font-size: 0.875rem;
+    line-height: 20px;
+    line-height: 1.25rem;
+  }
+  .ln-comment-item.deleted .ln-comment-content {
+    margin: 0;
+    padding: 0;
+  }
   .ln-comment-content {
     word-wrap: break-word;
     margin-bottom: 10px;
     max-height: 90px;
     overflow-y: hidden;
   }
-  .expand {
-    background: linear-gradient(
-      180deg,
-      rgba(241, 242, 244, 0) 0,
-      #f1f2f4 50%,
-      #f1f2f4
-    );
-    cursor: pointer;
-    filter: progid:DXImageTransform.Microsoft.gradient(startColorstr="#00ffffff",endColorstr="#ffffff",GradientType=0);
-    font-weight: 700;
-    height: 60px;
-    margin-top: -54px;
-    padding-bottom: 5px;
-    padding-top: 30px;
-    position: relative;
-  }
-  .expand:hover {
-    text-decoration: underline;
-  }
   .fetch_reply {
     cursor: pointer;
     display: inline-block;
     font-weight: 700;
     margin-top: 10px;
-  }
-  .visible-toolkit .visible-toolkit-item {
-    border-bottom: 0 solid #111;
-    cursor: pointer;
-    display: inline-block;
-    font-size: 13px;
-    font-size: 0.8125rem;
-    line-height: 15px;
-    line-height: 0.9375rem;
-    margin-right: 10px;
-    opacity: 1;
-  }
-  .visible-toolkit .visible-toolkit-item:hover {
-    border-bottom-width: 1px;
-    color: inherit;
   }
   @media only screen and (max-width: 787px) {
     .ln-comment-item {
