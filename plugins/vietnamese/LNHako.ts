@@ -174,7 +174,7 @@ class HakoPlugin implements Plugin.PluginBase {
   id = 'ln.hako.vn';
   name = 'Hako Novel';
   icon = 'src/vi/hakolightnovel/icon.png';
-  version = '1.1.17';
+  version = '1.1.18';
 
   pluginSettings = {
     usingDocln: {
@@ -205,7 +205,7 @@ class HakoPlugin implements Plugin.PluginBase {
     const errorPage = $('.error-page');
     const errorName = errorPage.find('.error-name')?.first()?.text()?.trim();
     const errorNote = errorPage.find('.error-note')?.first().text()?.trim();
-    if (errorPage?.length && errorName && errorNote) {
+    if (errorPage?.length || errorName?.length || errorNote?.length) {
       throw new Error(`Hako error: ${errorName} - ${errorNote}`);
     }
     if (html && (!validator || validator(html))) {
