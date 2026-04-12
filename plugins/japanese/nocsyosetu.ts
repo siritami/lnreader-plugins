@@ -11,7 +11,7 @@ class NocSyosetu implements Plugin.PagePlugin {
   name = 'NocSyosetu';
   icon = 'src/jp/nocsyosetu/icon.png';
   site = 'https://noc.syosetu.com/';
-  version = '1.1.0';
+  version = '1.1.1';
   headers = {
     'Cookie': 'over18=yes',
     'User-Agent':
@@ -409,30 +409,15 @@ class NocSyosetu implements Plugin.PagePlugin {
   async searchNovels(
     searchTerm: string,
     pageNo: number,
-    filters?: any,
   ): Promise<Plugin.NovelItem[]> {
     let finalSearchTerm = searchTerm;
     if (searchTerm && !this.isJapanese(searchTerm)) {
       finalSearchTerm = await this.translateService(searchTerm, 'ja', 'auto');
     }
 
-    let url = `${this.site}search/search/search.php?order_former=search&word=${encodeURIComponent(
+    const url = `${this.site}search/search/search.php?order_former=search&word=${encodeURIComponent(
       finalSearchTerm,
     )}&p=${pageNo}`;
-
-    if (filters) {
-      if (filters.order?.value) url += `&order=${filters.order.value}`;
-      if (filters.type?.value) url += `&type=${filters.type.value}`;
-      if (Array.isArray(filters.scope?.value)) {
-        filters.scope.value.forEach((s: string) => (url += `&${s}=1`));
-      }
-      if (Array.isArray(filters.tags?.value)) {
-        filters.tags.value.forEach((t: string) => (url += `&${t}=1`));
-      }
-      if (Array.isArray(filters.tag?.value)) {
-        filters.tag.value.forEach((t: string) => (url += `&${t}=1`));
-      }
-    }
 
     const result = await fetchApi(url, { headers: this.headers });
     const body = await result.text();
@@ -440,7 +425,7 @@ class NocSyosetu implements Plugin.PagePlugin {
     const $ = loadCheerio(body);
     const novels = this.parseNovels($);
 
-    if (novels.length === 0) {
+    if (novels.length === 0 && pageNo === 1) {
       if (
         !body.includes('searchkekka_box') &&
         !body.includes('trackback_list')
