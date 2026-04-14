@@ -11,7 +11,7 @@ class NocSyosetu implements Plugin.PagePlugin {
   name = 'NocSyosetu';
   icon = 'src/jp/nocsyosetu/icon.png';
   site = 'https://noc.syosetu.com/';
-  version = '1.1.2';
+  version = '1.1.3';
   headers = {
     'Cookie': 'over18=yes',
     'User-Agent':
@@ -294,9 +294,11 @@ class NocSyosetu implements Plugin.PagePlugin {
     const novels = this.parseNovels($);
 
     if (novels.length === 0) {
-      throw new Error(
-        'Cannot load novels. Please check the age gate in WebView. / 作品をロードできません。WebViewで年齢確認を行ってください。',
-      );
+      if (!body.includes('0作品')) {
+        throw new Error(
+          'Failed to load novels. Please check the age gate in WebView. / 小説の読み込みに失敗しました。WebViewでの年齢確認をご確認ください。',
+        );
+      }
     }
 
     const translate = storage.get('nocsyosetu_translate');
@@ -390,9 +392,7 @@ class NocSyosetu implements Plugin.PagePlugin {
       summary,
       genres,
       cover: defaultCover,
-      status: body.includes('完結済')
-        ? NovelStatus.Completed
-        : NovelStatus.Ongoing,
+      status: NovelStatus.Unknown,
       chapters,
       totalPages: lastPageNum,
     };
@@ -442,12 +442,9 @@ class NocSyosetu implements Plugin.PagePlugin {
     const novels = this.parseNovels($);
 
     if (novels.length === 0 && pageNo === 1) {
-      if (
-        !body.includes('searchkekka_box') &&
-        !body.includes('trackback_list')
-      ) {
+      if (!body.includes('0作品')) {
         throw new Error(
-          'Cannot load results. Please check the age gate in WebView. / 結果をロードできません。WebViewで年齢確認を行ってください。',
+          'Failed to load novels. Please check the age gate in WebView. / 小説の読み込みに失敗しました。WebViewでの年齢確認をご確認ください。',
         );
       }
     }
