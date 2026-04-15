@@ -9,7 +9,7 @@ class PixivNovelPlugin implements Plugin.PagePlugin {
   name = 'Pixiv Novel';
   icon = 'src/jp/pixivnovel/icon.png';
   site = 'https://www.pixiv.net';
-  version = '1.0.3';
+  version = '1.0.4';
 
   get imageRequestInit() {
     return {
@@ -74,17 +74,16 @@ class PixivNovelPlugin implements Plugin.PagePlugin {
 
     for (const series of seriesList) {
       const coverUrl =
-        series.cover?.urls?.['480mw'] || series.cover?.urls?.['240mw'] || '';
-      const newURL = '/' + coverUrl;
+        series.cover?.urls?.['480mw'] || series.cover?.urls?.['240mw'] || defaultCover;
       const isOneshot = series.isOneshot === true;
       const path = isOneshot
         ? `/novel/show.php?id=${series.novelId}`
         : `/novel/series/${series.id}`;
 
       novels.push({
-        name: series.title || '',
+        name: series.title || 'Untitled',
         path,
-        cover: newURL || defaultCover,
+        cover: coverUrl,
       });
     }
 
@@ -133,7 +132,7 @@ class PixivNovelPlugin implements Plugin.PagePlugin {
       seriesBody.cover?.urls?.['480mw'] ||
       seriesBody.cover?.urls?.['240mw'] ||
       seriesBody.firstEpisode?.url ||
-      '';
+      defaultCover;
 
     // Parse chapters from page.seriesContents
     const seriesContents = contentBody?.page?.seriesContents || [];
@@ -163,10 +162,10 @@ class PixivNovelPlugin implements Plugin.PagePlugin {
     const novel: Plugin.SourceNovel & { totalPages: number } = {
       path: novelPath,
       name: seriesBody.title || 'Untitled',
-      author: seriesBody.userName || '',
+      author: seriesBody.userName || 'Unknown',
       summary,
       genres: tags.join(','),
-      cover: coverUrl || defaultCover,
+      cover: coverUrl,
       status: seriesBody.isConcluded
         ? NovelStatus.Completed
         : NovelStatus.Ongoing,
@@ -188,7 +187,7 @@ class PixivNovelPlugin implements Plugin.PagePlugin {
       `${this.site}/ajax/novel/${novelId}?lang=en`,
     );
 
-    const coverUrl = body.coverUrl || '';
+    const coverUrl = body.coverUrl || defaultCover;
     const tags: string[] = (body.tags?.tags || []).map((t: any) => t.tag || '');
 
     // Clean summary
@@ -198,10 +197,10 @@ class PixivNovelPlugin implements Plugin.PagePlugin {
     return {
       path: novelPath,
       name: body.title || 'Untitled',
-      author: body.userName || '',
+      author: body.userName || 'Unknown',
       summary,
       genres: tags.join(','),
-      cover: coverUrl || defaultCover,
+      cover: coverUrl,
       status: NovelStatus.Completed,
       chapters: [
         {
@@ -286,7 +285,7 @@ class PixivNovelPlugin implements Plugin.PagePlugin {
       seenPaths.add(path);
 
       novels.push({
-        name: item.title || '',
+        name: item.title || 'Untitled',
         path,
         cover: item.url || defaultCover,
       });
