@@ -174,7 +174,7 @@ class HakoPlugin implements Plugin.PluginBase {
   id = 'ln.hako.vn';
   name = 'Hako Novel';
   icon = 'src/vi/hakolightnovel/icon.png';
-  version = '1.1.31';
+  version = '1.1.32';
 
   pluginSettings = {
     usingDocln: {
@@ -510,6 +510,12 @@ class HakoPlugin implements Plugin.PluginBase {
       return "";
     }
 
+    const disableClickLink = `document.querySelectorAll('a').forEach(a => {
+  a.addEventListener('click', e => {
+    e.preventDefault();
+  });
+});`;
+
     if (this.showChapterComments) {
       // Comment
       const commentSection = $('#chapter-comments').first();
@@ -533,9 +539,9 @@ class HakoPlugin implements Plugin.PluginBase {
       // Remove loading svg
       commentSection.find('.loading').remove();
 
-      return `<div>\n${chapterText}\n</div>\n${styleHtmlComment}\n${commentSection.prop('outerHTML')}`;
+      return `<div>\n${chapterText}\n</div>\n${styleHtmlComment}\n${commentSection.prop('outerHTML')}\n<script>${disableClickLink}</script>`;
     } else {
-      return `<div>\n${chapterText}\n</div>`;
+      return `<div>\n${chapterText}\n</div>\n<script>${disableClickLink}</script>`;
     }
   }
 
