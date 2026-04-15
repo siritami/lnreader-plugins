@@ -11,7 +11,7 @@ class NocSyosetu implements Plugin.PagePlugin {
   name = 'NocSyosetu';
   icon = 'src/jp/nocsyosetu/icon.png';
   site = 'https://noc.syosetu.com/';
-  version = '1.1.4';
+  version = '1.1.5';
   headers = {
     'Cookie': 'over18=yes',
     'User-Agent':
@@ -301,9 +301,9 @@ class NocSyosetu implements Plugin.PagePlugin {
 
     const $ = loadCheerio(body);
 
-    const novels = this.parseNovels($);
+    const pageNovels = this.parseNovels($);
 
-    if (novels.length === 0) {
+    if (pageNovels.length === 0) {
       if (!body.includes('0作品')) {
         throw new Error(
           'Failed to load novels. Please check the age gate in WebView. / 小説の読み込みに失敗しました。WebViewでの年齢確認をご確認ください。',
@@ -311,36 +311,37 @@ class NocSyosetu implements Plugin.PagePlugin {
       }
     }
 
-    if (this.settingNocSyosetuTranslate && novels.length > 0) {
-      for (const novel of novels) {
-        novel.name = await this.translateService(novel.name);
-        await this.delay(300); // add delay to avoid hitting rate limits
+    if (this.settingNocSyosetuTranslate && pageNovels.length > 0) {
+      let content = ``;
+      for (const novel of pageNovels) {
+        content += novel.name + '\n';
+      }
+      content = await this.translateService(content);
+      const translatedNames = content.split('\n');
+      for (let i = 0; i < pageNovels.length; i++) {
+        pageNovels[i].name = translatedNames[i] || pageNovels[i].name;
       }
     }
 
-    return novels;
-  }
-
-  private delay(ms: number): Promise<void> {
-    return new Promise(resolve => setTimeout(resolve, ms));
+    return pageNovels;
   }
 
   parseChapters($page: any): Plugin.ChapterItem[] {
     const chapters: Plugin.ChapterItem[] = [];
 
-//    const chapterSelectors =
-//      '.novel_sublist2 .subtitle a, .p-eplist__sublist a.p-eplist__subtitle, .index_box .subtitle a';
-//    $page(chapterSelectors).each((i: number, el: any) => {
-//      const name = $page(el).text().trim();
-//      const path = $page(el).attr('href');
-//      if (name && path) {
-//        chapters.push({
-//          name,
-//          path: this.normalizeNovelUrl(path),
-//          releaseTime: '',
-//        });
-//      }
-//    });
+    //    const chapterSelectors =
+    //      '.novel_sublist2 .subtitle a, .p-eplist__sublist a.p-eplist__subtitle, .index_box .subtitle a';
+    //    $page(chapterSelectors).each((i: number, el: any) => {
+    //      const name = $page(el).text().trim();
+    //      const path = $page(el).attr('href');
+    //      if (name && path) {
+    //        chapters.push({
+    //          name,
+    //          path: this.normalizeNovelUrl(path),
+    //          releaseTime: '',
+    //        });
+    //      }
+    //    });
 
     $page('.p-eplist__sublist').each((i: number, element: any) => {
       const chapterLink = $page(element).find('a');
@@ -415,10 +416,20 @@ class NocSyosetu implements Plugin.PagePlugin {
       .join(',');
 
     if (this.settingNocSyosetuTranslate) {
-      name = await this.translateService(name);
-      summary = await this.translateService(summary);
       if (genres) {
-        genres = await this.translateService(genres);
+        const trans = await this.translateService(
+          `${name}\n${genres}\n${summary}`,
+        );
+        const [translatedName, translatedGenres, translatedSummary] =
+          trans.split('\n');
+        name = translatedName;
+        genres = translatedGenres;
+        summary = translatedSummary;
+      } else {
+        const trans = await this.translateService(`${name}\n${summary}`);
+        const [translatedName, translatedSummary] = trans.split('\n');
+        name = translatedName;
+        summary = translatedSummary;
       }
     }
 
@@ -501,9 +512,14 @@ class NocSyosetu implements Plugin.PagePlugin {
     }
 
     if (this.settingNocSyosetuTranslate && pageNovels.length > 0) {
+      let content = ``;
       for (const novel of pageNovels) {
-        novel.name = await this.translateService(novel.name);
-        await this.delay(300); // add delay to avoid hitting rate limits
+        content += novel.name + '\n';
+      }
+      content = await this.translateService(content);
+      const translatedNames = content.split('\n');
+      for (let i = 0; i < pageNovels.length; i++) {
+        pageNovels[i].name = translatedNames[i] || pageNovels[i].name;
       }
     }
 
