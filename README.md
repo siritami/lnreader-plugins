@@ -10,6 +10,8 @@ This is a fork of the original repository, containing only my custom plugins and
 - [truyenfull](https://truyenfull.vision)
 - [WanwanSekai](https://wanwansekai.com)
 - [DocTruyenLN](https://quykiep.com)
+- [NovelBin](https://novelbin.me)
+- [PixivNovel](https://pixiv.net)
 
 ### Install URL
 ```sh
