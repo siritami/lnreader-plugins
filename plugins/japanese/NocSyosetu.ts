@@ -11,7 +11,7 @@ class NocSyosetu implements Plugin.PagePlugin {
   name = 'NocSyosetu';
   icon = 'src/jp/nocsyosetu/icon.png';
   site = 'https://noc.syosetu.com/';
-  version = '1.1.5';
+  version = '1.1.6';
   headers = {
     'Cookie': 'over18=yes',
     'User-Agent':
@@ -420,16 +420,15 @@ class NocSyosetu implements Plugin.PagePlugin {
         const trans = await this.translateService(
           `${name}\n${genres}\n${summary}`,
         );
-        const [translatedName, translatedGenres, translatedSummary] =
-          trans.split('\n');
-        name = translatedName;
-        genres = translatedGenres;
-        summary = translatedSummary;
+        const arr = trans.split('\n');
+        name = arr[0];
+        genres = arr[1];
+        summary = arr.slice(2).join('\n');
       } else {
         const trans = await this.translateService(`${name}\n${summary}`);
-        const [translatedName, translatedSummary] = trans.split('\n');
-        name = translatedName;
-        summary = translatedSummary;
+        const arr = trans.split('\n');
+        name = arr[0];
+        summary = arr.slice(1).join('\n');
       }
     }
 

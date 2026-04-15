@@ -12,7 +12,7 @@ class BaoMoiPlugin implements Plugin.PluginBase {
   name = 'Báo Mới';
   icon = 'src/vi/baomoi/icon.png';
   site = 'https://baomoi.com';
-  version = '1.0.0';
+  version = '1.0.1';
   filters: Filters | undefined = undefined;
   async popularNovels(
     pageNo: number,
@@ -30,11 +30,13 @@ class BaoMoiPlugin implements Plugin.PluginBase {
       const items = nextData.props.pageProps.resp.data.content.items;
       console.log('Parsed __NEXT_DATA__:', items);
       items.forEach((item: any) => {
-        novels.push({
-          name: item.title,
-          path: item.url,
-          cover: item.thumb || defaultCover,
-        });
+        if (item.title && item.url) {
+          novels.push({
+            name: item.title,
+            path: item.url,
+            cover: item.thumb || defaultCover,
+          });
+        }
       });
     } else {
       throw new Error(
@@ -80,7 +82,7 @@ class BaoMoiPlugin implements Plugin.PluginBase {
           ).toISOString(),
         },
       ];
-      novel.content = data.bodys
+      novel.content = `<h1>${data.title}</h1>\n` + data.bodys
         .map((item: any) => {
           switch (item.type) {
             case 'text': {
