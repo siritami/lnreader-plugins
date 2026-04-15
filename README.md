@@ -11,6 +11,7 @@ This is a fork of the original repository, containing only my custom plugins and
 - [WanwanSekai](https://wanwansekai.com)
 - [DocTruyenLN](https://quykiep.com)
 - [PixivNovel](https://pixiv.net)
+- [Luvevaland](https://luvevaland.co)
 
 ### Install URL
 ```sh
