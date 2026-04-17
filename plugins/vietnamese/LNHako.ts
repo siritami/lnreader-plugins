@@ -174,7 +174,7 @@ class HakoPlugin implements Plugin.PluginBase {
   id = 'ln.hako.vn';
   name = 'Hako Novel';
   icon = 'src/vi/hakolightnovel/icon.png';
-  version = '1.1.39';
+  version = '1.1.40';
 
   pluginSettings = {
     usingDocln: {
@@ -292,6 +292,8 @@ class HakoPlugin implements Plugin.PluginBase {
 
     const $ = load(html);
 
+    const novelType = $(".series-type").first().text().trim();
+
     novel.name = $('.series-name').first().text().trim();
     novel.summary = $('.summary-content p')
       .map(function () {
@@ -317,6 +319,8 @@ class HakoPlugin implements Plugin.PluginBase {
       .get()
       .filter(Boolean)
       .join(',');
+
+    novel.genres = `${novelType ? novelType : '🐛'},${novel.genres}`;
 
     const infoItems = $('.series-information .info-item');
     novel.author = '';
