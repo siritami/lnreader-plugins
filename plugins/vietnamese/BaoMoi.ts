@@ -12,7 +12,7 @@ class BaoMoiPlugin implements Plugin.PluginBase {
   name = 'Báo Mới';
   icon = 'src/vi/baomoi/icon.png';
   site = 'https://baomoi.com';
-  version = '1.0.4';
+  version = '1.0.5';
   filters: Filters = {
     page: {
       label: 'Tìm theo trang',
@@ -189,6 +189,7 @@ class BaoMoiPlugin implements Plugin.PluginBase {
       value: 'tin-moi.epi',
     },
   };
+  cacheSet = new Set<string>();
   async popularNovels(
     pageNo: number,
     {
@@ -197,6 +198,10 @@ class BaoMoiPlugin implements Plugin.PluginBase {
     }: Plugin.PopularNovelsOptions<typeof this.filters>,
   ): Promise<Plugin.NovelItem[]> {
     const novels: Plugin.NovelItem[] = [];
+    if (pageNo === 1) {
+      console.log('Loading first page, clearing cache to ensure fresh data');
+      this.cacheSet.clear();
+    }
     if (
       !filters.page?.value ||
       (filters.page?.value as string)?.endsWith('.epi')
@@ -214,11 +219,16 @@ class BaoMoiPlugin implements Plugin.PluginBase {
         console.log('Parsed __NEXT_DATA__:', items);
         items.forEach((item: any) => {
           if (item.title && item.url) {
+            if (this.cacheSet.has(item.title)) {
+              console.log('Skipping duplicate post:', item.title);
+              return;
+            }
             novels.push({
               name: item.title,
               path: item.url,
               cover: item.thumb || defaultCover,
             });
+            this.cacheSet.add(item.title);
           }
         });
       } else {
@@ -229,6 +239,8 @@ class BaoMoiPlugin implements Plugin.PluginBase {
     } else {
       throw new Error('Not implemented for the selected filter option');
     }
+
+    console.log("Current cache size:", this.cacheSet.size);
 
     return novels;
   }
