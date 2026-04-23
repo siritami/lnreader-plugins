@@ -295,7 +295,7 @@ class ValvrareTeamPlugin implements Plugin.PluginBase {
         name: novel.title,
         cover: novel.illustration || defaultCover,
         // Idk???
-        path: `/truyen/${this.nomalizeName(novel.title, novel._id)}`,
+        path: `/truyen/${this.normalizeName(novel.title, novel._id)}`,
       }),
     );
 
@@ -315,7 +315,7 @@ class ValvrareTeamPlugin implements Plugin.PluginBase {
     return lastHalf.substring(0, end);
   }
 
-  nomalizeName(name: string, id: string) {
+  normalizeName(name: string, id: string) {
     id = id.slice(-8);
     const map: Record<string, string> = {
       'a': 'aáàảãạăắằẳẵặâấầẩẫậ',
@@ -427,7 +427,7 @@ class ValvrareTeamPlugin implements Plugin.PluginBase {
         chapters.push({
           name: chapter.title,
           releaseTime: chapter.createdAt,
-          path: `/truyen/${this.nomalizeName(data.novel.title, data.novel._id)}/chuong/${this.nomalizeName(chapter.title, chapter._id)}`,
+          path: `/truyen/${this.normalizeName(data.novel.title, data.novel._id)}/chuong/${this.normalizeName(chapter.title, chapter._id)}`,
           page: module.title,
         });
       }
