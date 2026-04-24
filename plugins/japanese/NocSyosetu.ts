@@ -11,7 +11,7 @@ class NocSyosetu implements Plugin.PagePlugin {
   name = 'NocSyosetu';
   icon = 'src/jp/nocsyosetu/icon.png';
   site = 'https://noc.syosetu.com/';
-  version = '1.1.8';
+  version = '1.1.7';
   headers = {
     'Cookie': 'over18=yes',
     'User-Agent':
