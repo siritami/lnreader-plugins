@@ -4,6 +4,88 @@ import { FilterTypes, Filters } from '@libs/filterInputs';
 import { load as loadCheerio } from 'cheerio';
 import { defaultCover } from '@libs/defaultCover';
 import { NovelStatus } from '@libs/novelStatus';
+import { storage } from '@libs/storage';
+
+
+const BASE64_ALPHABET =
+    'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
+
+const decodeBase64ToBytes = (encoded: string): number[] => {
+    const normalized = encoded
+        .replace(/-/g, '+')
+        .replace(/_/g, '/')
+        .replace(/\s+/g, '');
+    const padded =
+        normalized.length % 4 === 0
+            ? normalized
+            : normalized + '='.repeat(4 - (normalized.length % 4));
+    const bytes: number[] = [];
+
+    for (let i = 0; i < padded.length; i += 4) {
+        const c1 = BASE64_ALPHABET.indexOf(padded.charAt(i));
+        const c2 = BASE64_ALPHABET.indexOf(padded.charAt(i + 1));
+        const c3Char = padded.charAt(i + 2);
+        const c4Char = padded.charAt(i + 3);
+        const c3 = c3Char === '=' ? 0 : BASE64_ALPHABET.indexOf(c3Char);
+        const c4 = c4Char === '=' ? 0 : BASE64_ALPHABET.indexOf(c4Char);
+
+        if (
+            c1 < 0 ||
+            c2 < 0 ||
+            (c3Char !== '=' && c3 < 0) ||
+            (c4Char !== '=' && c4 < 0)
+        ) {
+            continue;
+        }
+
+        const bitStream = (c1 << 18) | (c2 << 12) | (c3 << 6) | c4;
+        bytes.push((bitStream >> 16) & 255);
+        if (c3Char !== '=') {
+            bytes.push((bitStream >> 8) & 255);
+        }
+        if (c4Char !== '=') {
+            bytes.push(bitStream & 255);
+        }
+    }
+
+    return bytes;
+};
+
+const utf8BytesToString = (bytes: number[]): string => {
+    let out = '';
+    let i = 0;
+
+    while (i < bytes.length) {
+        const c = bytes[i++];
+
+        if (c < 128) {
+            out += String.fromCharCode(c);
+        } else if (c < 224) {
+            out += String.fromCharCode(((c & 31) << 6) | (bytes[i++] & 63));
+        } else if (c < 240) {
+            out += String.fromCharCode(
+                ((c & 15) << 12) | ((bytes[i++] & 63) << 6) | (bytes[i++] & 63),
+            );
+        } else {
+            let codePoint =
+                ((c & 7) << 18) |
+                ((bytes[i++] & 63) << 12) |
+                ((bytes[i++] & 63) << 6) |
+                (bytes[i++] & 63);
+            codePoint -= 65536;
+            out += String.fromCharCode(
+                55296 + (codePoint >> 10),
+                56320 + (codePoint & 1023),
+            );
+        }
+    }
+
+    return out;
+};
+
+const decodeBase64Utf8 = (encoded: string) =>
+    utf8BytesToString(decodeBase64ToBytes(encoded));
+
 
 class JukaNovelPlugin implements Plugin.PluginBase {
     id = 'jukanovel';
@@ -11,6 +93,19 @@ class JukaNovelPlugin implements Plugin.PluginBase {
     icon = 'src/multi/jukanovel/icon.png';
     site = 'https://jukaza.site';
     version = '1.0.0';
+
+    pluginSettings = {
+        preferRaw: {
+            value: false,
+            label: 'Ưu tiên hiển thị nội dung gốc (Raw)',
+            type: 'Switch',
+        },
+    };
+
+    get preferRaw() {
+        return storage.get('preferRaw') as boolean;
+    }
+
     async popularNovels(
         pageNo: number,
         {
@@ -111,32 +206,33 @@ class JukaNovelPlugin implements Plugin.PluginBase {
         const o = (e: string) => {
             if (!e) return null;
             try {
-                const r = atob(e);
+                const r = decodeBase64ToBytes(e);
                 const i = n.length;
                 let a = "";
                 for (let o = 0; o < r.length; o++) {
-                    a += String.fromCharCode(r.charCodeAt(o) ^ n.charCodeAt(o % i));
+                    a += String.fromCharCode(r[o] ^ n.charCodeAt(o % i));
                 }
-                return decodeURIComponent(escape(atob(a)));
+                return decodeBase64Utf8(a);
             } catch (error) {
                 return null;
             }
         };
 
-        let content =
-            o(chapter.published_content) ||
-            o(chapter.translated_content) ||
-            o(chapter.raw_content) ||
-            "";
+        //published test toàn null nên bỏ
+        let content = "";
+        if (this.preferRaw) {
+            content = o(chapter.raw_content) || o(chapter.translated_content) || "";
+        } else {
+            content = o(chapter.translated_content) || o(chapter.raw_content) || "";
+        }
 
-        if (!content) return "Chương này hiện chưa có nội dung.";
+        if (!content) return "";
         const notes: string[] = [];
         content = content.replace(/<span class="ann-marker"[^>]*>.*?<span class="ann-bubble">(.*?)<\/span><\/span>/gs, (match, noteContent) => {
             const noteId = notes.length + 1;
             notes.push(noteContent);
             return ` <span id="anchor-note-${noteId}" class="note-icon none-print inline note-tooltip" data-tooltip-content="#note${noteId} .note-content" data-note-id="note${noteId}"><i class="fas fa-sticky-note"></i></span><a class="inline-print none" href="#note${noteId}">[note]</a>`;
         });
-
         if (
             content.indexOf("<p>") !== -1 ||
             content.indexOf("<img") !== -1 ||
@@ -172,7 +268,7 @@ class JukaNovelPlugin implements Plugin.PluginBase {
             notesHtml += '</div>';
             content += notesHtml;
         }
-
+        content = "<div>" + content + "</div>"; // idk nhưng thêm div cho giống pixiv
         return content;
     }
 
