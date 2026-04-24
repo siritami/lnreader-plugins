@@ -1,16 +1,17 @@
 import { Plugin } from '@/types/plugin';
 import p_0 from '@plugins/japanese/NocSyosetu';
 import p_1 from '@plugins/japanese/Pixiv';
-import p_2 from '@plugins/vietnamese/akaytruyen';
-import p_3 from '@plugins/vietnamese/BaoMoi';
-import p_4 from '@plugins/vietnamese/doctruyenln';
-import p_5 from '@plugins/vietnamese/LNHako';
-import p_6 from '@plugins/vietnamese/LNKuro';
-import p_7 from '@plugins/vietnamese/luvevaland';
-import p_8 from '@plugins/vietnamese/tieuthuyetmang';
-import p_9 from '@plugins/vietnamese/truyenfull';
-import p_10 from '@plugins/vietnamese/valvrareteam';
-import p_11 from '@plugins/vietnamese/wanwansekai';
+import p_2 from '@plugins/multi/jukanovel';
+import p_3 from '@plugins/vietnamese/akaytruyen';
+import p_4 from '@plugins/vietnamese/BaoMoi';
+import p_5 from '@plugins/vietnamese/doctruyenln';
+import p_6 from '@plugins/vietnamese/LNHako';
+import p_7 from '@plugins/vietnamese/LNKuro';
+import p_8 from '@plugins/vietnamese/luvevaland';
+import p_9 from '@plugins/vietnamese/tieuthuyetmang';
+import p_10 from '@plugins/vietnamese/truyenfull';
+import p_11 from '@plugins/vietnamese/valvrareteam';
+import p_12 from '@plugins/vietnamese/wanwansekai';
 
 const PLUGINS: Plugin.PluginBase[] = [
   p_0,
@@ -25,5 +26,6 @@ const PLUGINS: Plugin.PluginBase[] = [
   p_9,
   p_10,
   p_11,
+  p_12,
 ];
 export default PLUGINS;

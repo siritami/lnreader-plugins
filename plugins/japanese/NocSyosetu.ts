@@ -304,11 +304,7 @@ class NocSyosetu implements Plugin.PagePlugin {
     const pageNovels = this.parseNovels($);
 
     if (pageNovels.length === 0) {
-      if (!body.includes('0作品')) {
-        throw new Error(
-          'Failed to load novels. Please check the age gate in WebView. / 小説の読み込みに失敗しました。WebViewでの年齢確認をご確認ください。',
-        );
-      }
+      this.checkCacheR18(body);
     }
 
     if (this.settingNocSyosetuTranslate && pageNovels.length > 0) {
@@ -381,6 +377,8 @@ class NocSyosetu implements Plugin.PagePlugin {
   ): Promise<Plugin.SourceNovel & { totalPages: number }> {
     const result = await fetchApi(novelUrl, { headers: this.headers });
     const body = await result.text();
+
+    this.checkCacheR18(body);
 
     const $ = loadCheerio(body);
 
@@ -481,6 +479,7 @@ class NocSyosetu implements Plugin.PagePlugin {
     const body = await result.text();
 
     const cheerioQuery = loadCheerio(body);
+    this.checkCacheR18(body);
     // Get the chapter title
     const chapterTitle = cheerioQuery('.p-novel__title').html() || '';
 
@@ -519,11 +518,7 @@ class NocSyosetu implements Plugin.PagePlugin {
     const pageNovels = this.parseNovels(cheerioQuery);
 
     if (pageNovels.length === 0 && pageNo === 1) {
-      if (!body.includes('0作品')) {
-        throw new Error(
-          'Failed to load novels. Please check the age gate in WebView. / 小説の読み込みに失敗しました。WebViewでの年齢確認をご確認ください。',
-        );
-      }
+      this.checkCacheR18(body);
     }
 
     if (this.settingNocSyosetuTranslate && pageNovels.length > 0) {
@@ -539,6 +534,14 @@ class NocSyosetu implements Plugin.PagePlugin {
     }
 
     return pageNovels;
+  }
+
+  checkCacheR18(body: string): void {
+    if ((body.includes('JavaScript') || body.includes('Javascript')) && body.includes('Cookie') && body.includes('ご利用ください。') && body.includes('18歳以上')) {
+      throw new Error(
+        'Failed to load novels. Please check the age gate in WebView. / 小説の読み込みに失敗しました。WebViewでの年齢確認をご確認ください。',
+      );
+    }
   }
 }
 
