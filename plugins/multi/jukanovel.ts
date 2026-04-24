@@ -129,7 +129,7 @@ class JukaNovelPlugin implements Plugin.PluginBase {
             o(chapter.raw_content) ||
             "";
 
-        if (!content) return "Chương này hiện chưa có nội dung.";
+        if (!content) return "";
         const notes: string[] = [];
         content = content.replace(/<span class="ann-marker"[^>]*>.*?<span class="ann-bubble">(.*?)<\/span><\/span>/gs, (match, noteContent) => {
             const noteId = notes.length + 1;
