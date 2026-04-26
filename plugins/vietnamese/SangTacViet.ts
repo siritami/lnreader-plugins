@@ -152,7 +152,7 @@ class SangTacVietPlugin implements Plugin.PluginBase {
   get site() {
     return this.usingAlternativeDomain ? ALTERNATIVE_DOMAIN : SITE;
   }
-  version = '1.0.2';
+  version = '1.0.3';
   webStorageUtilized = true;
 
   pluginSettings: Plugin.PluginSettings = {
@@ -382,16 +382,32 @@ class SangTacVietPlugin implements Plugin.PluginBase {
   }
 
   // Apply Set-Cookie response header into our local cookie jar.
+  // Handles cookie deletion (expires=1970 or value="deleted") by dropping the
+  // entry from the jar instead of storing the literal "deleted" string.
   applySetCookie(cookies: Record<string, string>, setCookie: string): void {
     if (!setCookie) return;
-    // The server uses comma-separated header sometimes; split conservatively
-    // by `;` first and pick `key=value` tokens that look like cookie pairs.
-    // For now, rely on the well-known names that the server actually rotates.
     const names = ['_ac', '_acx', '_gac', 'PHPSESSID', 'arouting'];
     for (const name of names) {
-      const re = new RegExp(name + '=([^;\\s,]+)', 'i');
-      const m = setCookie.match(re);
-      if (m && m[1]) cookies[name] = m[1];
+      // Find the segment of the header that defines this cookie so we can
+      // inspect its expires/value attributes per-cookie.
+      const segRe = new RegExp(
+        '\\b' + name + '=([^;,]*)([^,]*)',
+        'i',
+      );
+      const seg = setCookie.match(segRe);
+      if (!seg) continue;
+      const value = seg[1].trim();
+      const attrs = seg[2] || '';
+      const expired =
+        value === 'deleted' ||
+        value === '' ||
+        /expires=Thu,\s*01[\s-]Jan[\s-]1970/i.test(attrs) ||
+        /max-age=0\b/i.test(attrs);
+      if (expired) {
+        delete cookies[name];
+      } else {
+        cookies[name] = value;
+      }
     }
   }
 
@@ -431,7 +447,13 @@ class SangTacVietPlugin implements Plugin.PluginBase {
     apiUrl.searchParams.set('sty', '1');
     apiUrl.searchParams.set('exts', '');
 
-    // Step 2: probe POST that rotates `_ac`. We don't care about the body
+    // Step 2: probe POST that rotates `_ac`. The body must be a non-empty
+    // 32-char hex blob (the server treats this as a chapterkey hash). On the
+    // main domain an empty body still rotates `_ac`, but on the alternative
+    // domain (`dns1.stv-appdomain-…`) an empty body causes the server to
+    // *delete* `_ac` instead, which then breaks the chapter fetch. The
+    // contents themselves are not validated, so any 32-char hex works.
+    const probeBody = '0'.repeat(32);
     try {
       const probeHeaders: Record<string, string> = {
         'Content-Type': 'application/x-www-form-urlencoded',
@@ -443,7 +465,7 @@ class SangTacVietPlugin implements Plugin.PluginBase {
       const probeRes = await fetchApi(apiUrl.toString(), {
         method: 'POST',
         headers: probeHeaders,
-        body: '',
+        body: probeBody,
       });
       // Drain the response so the underlying fetch implementation doesn't
       // hold the connection open, but we don't actually need the JSON.
