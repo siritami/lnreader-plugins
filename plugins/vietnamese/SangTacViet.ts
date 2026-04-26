@@ -201,10 +201,10 @@ class SangTacVietPlugin implements Plugin.PluginBase {
 
     // Step 1: Fetch novel info via JSON API
     if (bookHost && bookId) {
-      const infoUrl =
-        `${SITE}/mobile/bookinfo.php?host=${encodeURIComponent(bookHost)}` +
-        `&hid=${encodeURIComponent(bookId)}`;
-      const infoRes = await fetchApi(infoUrl, { headers });
+      const infoUrl = new URL(`${SITE}/mobile/bookinfo.php`);
+      infoUrl.searchParams.set('host', bookHost);
+      infoUrl.searchParams.set('hid', bookId);
+      const infoRes = await fetchApi(infoUrl.toString(), { headers });
       const infoJson = await infoRes.json();
 
       if (infoJson.code === 100 && infoJson.book) {
