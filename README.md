@@ -16,6 +16,7 @@ This is a fork of the original repository, containing only my custom plugins and
 - [BaoMoi](https://baomoi.com)
 - [LNKuro](https://lnkuro.top)
 - [JukaNovel](https://jukaza.site)
+- [ZumiNovel](https://zuminovel.com)
 
 ### Install URL
 ```sh
