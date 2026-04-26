@@ -167,15 +167,18 @@ class SangTacVietPlugin implements Plugin.PluginBase {
       tag = filters.tag?.value?.join(',') || '';
     }
 
-    let url = `${SITE}/io/searchtp/searchBooks?find=&minc=${minc}&sort=${sort}&tag=${tag}`;
-    if (category) url += `&category=${category}`;
-    if (type) url += `&type=${type}`;
-    if (step) url += `&step=${step}`;
-    if (host) url += `&host=${host}`;
-    url += `&p=${pageNo}`;
+    const url = new URL(`${SITE}/io/searchtp/searchBooks`);
+    url.searchParams.set('find', '');
+    url.searchParams.set('minc', minc);
+    url.searchParams.set('sort', sort);
+    url.searchParams.set('tag', tag);
+    if (category) url.searchParams.set('category', category);
+    if (type) url.searchParams.set('type', type);
+    if (step) url.searchParams.set('step', step);
+    if (host) url.searchParams.set('host', host);
+    url.searchParams.set('p', String(pageNo));
 
-    const res = await fetchApi(url);
-    const html = await res.text();
+    const html = await fetchText(url.toString());
     return this.parseNovelsFromHTML(html);
   }
 
