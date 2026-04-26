@@ -152,7 +152,7 @@ class SangTacVietPlugin implements Plugin.PluginBase {
   get site() {
     return this.usingAlternativeDomain ? ALTERNATIVE_DOMAIN : SITE;
   }
-  version = '1.0.3';
+  version = '1.0.4';
   webStorageUtilized = true;
 
   pluginSettings: Plugin.PluginSettings = {
@@ -447,13 +447,14 @@ class SangTacVietPlugin implements Plugin.PluginBase {
     apiUrl.searchParams.set('sty', '1');
     apiUrl.searchParams.set('exts', '');
 
-    // Step 2: probe POST that rotates `_ac`. The body must be a non-empty
-    // 32-char hex blob (the server treats this as a chapterkey hash). On the
-    // main domain an empty body still rotates `_ac`, but on the alternative
-    // domain (`dns1.stv-appdomain-…`) an empty body causes the server to
-    // *delete* `_ac` instead, which then breaks the chapter fetch. The
-    // contents themselves are not validated, so any 32-char hex works.
-    const probeBody = '0'.repeat(32);
+    // Step 2: probe POST that rotates `_ac`. The browser's
+    // `stv.readinit.js` calls `xhr.send()` with an empty body — verified by
+    // hooking `XMLHttpRequest.prototype.send` in a Playwright-driven Chrome.
+    // The server's `_ac` rotation is purely driven by the
+    // `X-Requested-With: XmlHttpRequest` header on this first POST, not by
+    // the body. Sending a non-empty body here on the main domain trips the
+    // anti-bot heuristic (server replies `code:21` with the captcha
+    // challenge "Vui lòng xác nhận để tiếp tục").
     try {
       const probeHeaders: Record<string, string> = {
         'Content-Type': 'application/x-www-form-urlencoded',
@@ -465,7 +466,7 @@ class SangTacVietPlugin implements Plugin.PluginBase {
       const probeRes = await fetchApi(apiUrl.toString(), {
         method: 'POST',
         headers: probeHeaders,
-        body: probeBody,
+        body: '',
       });
       // Drain the response so the underlying fetch implementation doesn't
       // hold the connection open, but we don't actually need the JSON.
