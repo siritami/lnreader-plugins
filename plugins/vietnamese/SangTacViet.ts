@@ -1,3 +1,5 @@
+/* eslint-disable no-useless-escape */
+
 import { load as parseHTML } from 'cheerio';
 import { fetchApi, fetchText } from '@libs/fetch';
 import { Plugin } from '@/types/plugin';
@@ -14,6 +16,7 @@ const GH_UPDATE =
 const ALTERNATIVE_DOMAIN = 'https://dns1.stv-appdomain-00000001.org';
 
 // ── Webfont glyph decode ─────────────────────────────
+// prettier-ignore
 const GLYPH_MAP: Record<string, string> = {};
 ([
   [0xE01B,'A'],[0xE01E,'y'],[0xE05F,'3'],[0xE063,'z'],[0xE06B,'K'],[0xE06C,'t'],
@@ -63,8 +66,7 @@ const GLYPH_MAP: Record<string, string> = {};
 
 function decodeGlyphs(text: string): string {
   let out = '';
-  for (let i = 0; i < text.length; i++) {
-    const ch = text[i];
+  for (const ch of text) {
     out += GLYPH_MAP[ch] ?? ch;
   }
   return out;
@@ -152,7 +154,7 @@ class SangTacVietPlugin implements Plugin.PluginBase {
   get site() {
     return this.usingAlternativeDomain ? ALTERNATIVE_DOMAIN : SITE;
   }
-  version = '1.0.4';
+  version = '1.0.5';
   webStorageUtilized = true;
 
   pluginSettings: Plugin.PluginSettings = {
@@ -230,7 +232,7 @@ class SangTacVietPlugin implements Plugin.PluginBase {
     const headers = {
       'x-stv-transport': 'app',
       'x-requested-with': 'com.sangtacviet.mobilereader',
-      Referer: `${this.site}/truyen/${bookHost}/1/${bookId}/`,
+      Referer: `${this.site}/truyen/${bookHost}/${pathParts[2]}/${bookId}/`,
     };
 
     const novel: Plugin.SourceNovel = {
@@ -304,17 +306,29 @@ class SangTacVietPlugin implements Plugin.PluginBase {
 
     // Step 2: Fetch chapter list
     if (bookHost && bookId) {
-      const chapUrl =
-        `${this.site}/index.php?ngmar=chapterlist` +
-        `&h=${encodeURIComponent(bookHost)}` +
-        `&bookid=${encodeURIComponent(bookId)}` +
-        `&sajax=getchapterlist`;
-      const chapRes = await fetchApi(chapUrl, { headers });
-      const chapJson = await chapRes.json();
+      const chapUrl = new URL(`${this.site}/index.php`);
+      chapUrl.searchParams.set('ngmar', 'chapterlist');
+      chapUrl.searchParams.set('h', bookHost);
+      chapUrl.searchParams.set('bookid', bookId);
+      chapUrl.searchParams.set('sajax', 'getchapterlist');
+      const chapRes = await fetchApi(chapUrl.toString(), { headers });
+      const chapJson = (await chapRes.json()) as {
+        code: number;
+        enckey?: string; // Unknown purpose
+        data: string;
+        oridata?: string;
+        unlocked?: null | Record<string, any>;
+        unvip?: number;
+        val?: number;
+      };
       if (chapJson.code === 1 && chapJson.data) {
         const chapters: Plugin.ChapterItem[] = [];
         const seen: Record<string, boolean> = {};
-        const rows = (chapJson.data as string).split('-//-');
+        const rows = chapJson.data.split('-//-');
+        // idk
+        if (bookHost === 'uukanshu') {
+          chapters.reverse();
+        }
         let chapterNum = 0;
         rows.forEach(row => {
           const trimmed = row.trim();
@@ -328,18 +342,29 @@ class SangTacVietPlugin implements Plugin.PluginBase {
           if (seen[dedup]) return;
           seen[dedup] = true;
           chapterNum++;
-          const vipFlag = (cols.length >= 4 ? cols[3] : '').trim().toLowerCase();
-          const isVip = vipFlag === 'vip';
-          const isUnlocked = vipFlag === 'unvip';
+          const check_vip = cols[3];
+          const isVip =
+            check_vip &&
+            check_vip !== 'unvip' &&
+            check_vip !== 'unvip\n' &&
+            !(chapJson.unlocked && chapJson.unlocked[chapId as string]);
           chapters.push({
-            name: isVip && !isUnlocked ? '[VIP] ' + chapName : chapName,
-            path: `/truyen/${bookHost}/1/${bookId}/${chapId}/`,
+            name: isVip ? `[VIP] ${chapName}` : chapName,
+            path: `/truyen/${bookHost}/${cols[0]}/${bookId}/${chapId}/`,
             chapterNumber: chapterNum,
           });
         });
         novel.chapters = chapters;
+      } else if (chapJson.code === 2) {
+        throw new Error('Truyện đã bị xóa hoặc không có nội dung');
+      } else {
+        throw new Error(
+          `Lỗi không xác định: ${JSON.stringify(chapJson)}`,
+        );
       }
     }
+
+    novel.genres = `${bookHost},${novel.genres?.split(',').map(g => g.trim()).filter(g => g).join(',')}`;
 
     novel.summary = decodeHTMLEntities(novel.summary || '');
 
@@ -477,30 +502,46 @@ class SangTacVietPlugin implements Plugin.PluginBase {
     }
 
     // Step 3: actual chapter fetch using the rotated cookies.
-    try {
-      const headers: Record<string, string> = {
-        'Content-Type': 'application/x-www-form-urlencoded',
-        Referer: referer,
-      };
-      const cookieHeader = this.buildCookieHeader(cookies);
-      if (cookieHeader) headers.Cookie = cookieHeader;
-      const chapRes = await fetchApi(apiUrl.toString(), {
-        method: 'POST',
-        headers,
-        body: '',
-      });
-      const data = this.parseLooseJson(await chapRes.text());
-      if (data && String(data.code) === '0' && data.data) {
-        const host = data.bookhost || bookHost;
-        const content = normalizeChapterHtml(host, data.data);
-        const title = data.chaptername?.trim();
-        return (title ? `<h2>${title}</h2>` : '') + content;
-      }
-    } catch {
-      // fall through
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/x-www-form-urlencoded',
+      Referer: referer,
+    };
+    const cookieHeader = this.buildCookieHeader(cookies);
+    if (cookieHeader) headers.Cookie = cookieHeader;
+    const chapRes = await fetchApi(apiUrl.toString(), {
+      method: 'POST',
+      headers,
+      body: '',
+    });
+    const data = this.parseLooseJson(await chapRes.text());
+    if (!data) {
+      throw new Error(
+        'Bạn đang tải chương quá nhanh. Hãy thử lại sau vài giây.',
+      );
     }
-
-    return '';
+    if (String(data.code) === '0' && data.data) {
+      const host = data.bookhost || bookHost;
+      const content = normalizeChapterHtml(host, data.data);
+      const title = data.chaptername?.trim();
+      return (title ? `<h2>${title}</h2>` : '') + content;
+    } else {
+      console.warn('Unexpected chapter API response', data);
+      switch (String(data.code)) {
+        case '7': {
+          throw new Error(
+            'Bạn đang tải chương quá nhanh. Hãy thử lại sau vài giây.',
+          );
+        }
+        case '21': {
+          throw new Error(
+            'Bạn cần xác nhận captcha. Hãy thử lại sau vài giây.',
+          );
+        }
+        default: {
+          throw new Error(`Unexpected response: ${JSON.stringify(data)}`);
+        }
+      }
+    }
   }
 
   async searchNovels(
