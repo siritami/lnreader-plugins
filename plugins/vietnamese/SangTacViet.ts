@@ -152,7 +152,7 @@ class SangTacVietPlugin implements Plugin.PluginBase {
   get site() {
     return this.usingAlternativeDomain ? ALTERNATIVE_DOMAIN : SITE;
   }
-  version = '1.0.1';
+  version = '1.0.2';
   webStorageUtilized = true;
 
   pluginSettings: Plugin.PluginSettings = {
@@ -206,7 +206,7 @@ class SangTacVietPlugin implements Plugin.PluginBase {
       tag = filters.tag?.value?.join(',') || '';
     }
 
-    const url = new URL(`${SITE}/io/searchtp/searchBooks`);
+    const url = new URL(`${this.site}/io/searchtp/searchBooks`);
     url.searchParams.set('find', '');
     url.searchParams.set('minc', minc);
     url.searchParams.set('sort', sort);
@@ -230,7 +230,7 @@ class SangTacVietPlugin implements Plugin.PluginBase {
     const headers = {
       'x-stv-transport': 'app',
       'x-requested-with': 'com.sangtacviet.mobilereader',
-      Referer: `${SITE}/truyen/${bookHost}/1/${bookId}/`,
+      Referer: `${this.site}/truyen/${bookHost}/1/${bookId}/`,
     };
 
     const novel: Plugin.SourceNovel = {
@@ -240,7 +240,7 @@ class SangTacVietPlugin implements Plugin.PluginBase {
 
     // Step 1: Fetch novel info via JSON API
     if (bookHost && bookId) {
-      const infoUrl = new URL(`${SITE}/mobile/bookinfo.php`);
+      const infoUrl = new URL(`${this.site}/mobile/bookinfo.php`);
       infoUrl.searchParams.set('host', bookHost);
       infoUrl.searchParams.set('hid', bookId);
       const infoRes = await fetchApi(infoUrl.toString(), { headers });
@@ -259,7 +259,7 @@ class SangTacVietPlugin implements Plugin.PluginBase {
         novel.cover = book.thumb
           ? book.thumb.startsWith('http')
             ? book.thumb
-            : `${SITE}${book.thumb}`
+            : `${this.site}${book.thumb}`
           : defaultCover;
 
         const st = String(book.status || '').trim().toLowerCase();
@@ -272,7 +272,7 @@ class SangTacVietPlugin implements Plugin.PluginBase {
         else novel.status = NovelStatus.Unknown;
       } else {
         // Fallback to HTML scraping if JSON API fails
-        const res = await fetchApi(SITE + novelPath, { headers });
+        const res = await fetchApi(this.site + novelPath, { headers });
         const html = await res.text();
         const $ = parseHTML(html);
         novel.name =
@@ -305,7 +305,7 @@ class SangTacVietPlugin implements Plugin.PluginBase {
     // Step 2: Fetch chapter list
     if (bookHost && bookId) {
       const chapUrl =
-        `${SITE}/index.php?ngmar=chapterlist` +
+        `${this.site}/index.php?ngmar=chapterlist` +
         `&h=${encodeURIComponent(bookHost)}` +
         `&bookid=${encodeURIComponent(bookId)}` +
         `&sajax=getchapterlist`;
@@ -408,7 +408,7 @@ class SangTacVietPlugin implements Plugin.PluginBase {
     const bookHost = pathParts[1] || '';
     const bookId = pathParts[3] || '';
     const chapterId = pathParts[4] || '';
-    const referer = `${SITE}${chapterPath}`;
+    const referer = `${this.site}${chapterPath}`;
 
     const cookies: Record<string, string> = {};
 
@@ -422,7 +422,7 @@ class SangTacVietPlugin implements Plugin.PluginBase {
       // continue — server may still recognise the WebView's cookie jar
     }
 
-    const apiUrl = new URL(`${SITE}/index.php`);
+    const apiUrl = new URL(`${this.site}/index.php`);
     apiUrl.searchParams.set('bookid', bookId);
     apiUrl.searchParams.set('h', bookHost);
     apiUrl.searchParams.set('c', chapterId);
@@ -484,7 +484,7 @@ class SangTacVietPlugin implements Plugin.PluginBase {
     searchTerm: string,
     pageNo: number,
   ): Promise<Plugin.NovelItem[]> {
-    const url = new URL(`${SITE}/io/searchtp/searchBooks`);
+    const url = new URL(`${this.site}/io/searchtp/searchBooks`);
     url.searchParams.set('find', searchTerm);
     url.searchParams.set('minc', '0');
     url.searchParams.set('sort', '');
