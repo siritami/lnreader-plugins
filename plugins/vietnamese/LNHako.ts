@@ -5,7 +5,7 @@ import { NovelStatus } from '@libs/novelStatus';
 import { FilterTypes, Filters } from '@libs/filterInputs';
 import { storage } from '@libs/storage';
 import { bytesToUtf8, Buffer } from '@libs/utils';
-import { isUrlAbsolute } from '@/lib/utils';
+import { isUrlAbsolute } from '@libs/isAbsoluteUrl';
 
 function urlToPath(url: string): string {
   if (!isUrlAbsolute(url)) {
@@ -106,7 +106,7 @@ class HakoPlugin implements Plugin.PluginBase {
   id = 'ln.hako.vn';
   name = 'Hako Novel';
   icon = 'src/vi/hakolightnovel/icon.png';
-  version = '1.2.0';
+  version = '1.2.1';
 
   pluginSettings: Plugin.PluginSettings = {
     usingDocln: {
