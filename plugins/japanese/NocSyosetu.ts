@@ -1,19 +1,19 @@
 import { load as loadCheerio } from 'cheerio';
-import { fetchApi } from '@libs/fetch';
+import { fetchApi, fetchText } from '@libs/fetch';
 import { Plugin } from '@/types/plugin';
 import { defaultCover } from '@libs/defaultCover';
 import { FilterTypes, Filters } from '@libs/filterInputs';
 import { NovelStatus } from '@libs/novelStatus';
 import { storage } from '@libs/storage';
+import { get, set } from '@libs/cookie';
 
 class NocSyosetu implements Plugin.PagePlugin {
   id = 'noc.syosetu';
   name = 'NocSyosetu';
   icon = 'src/jp/nocsyosetu/icon.png';
   site = 'https://noc.syosetu.com/';
-  version = '1.1.8';
+  version = '1.1.9';
   headers = {
-    'Cookie': 'over18=yes',
     'User-Agent':
       'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
     'Referer': 'https://noc.syosetu.com/',
@@ -31,6 +31,18 @@ class NocSyosetu implements Plugin.PagePlugin {
       type: 'Text',
     },
   };
+
+  async preFetch(url: string) {
+    const origin = new URL(url).origin;
+    // check over18 cookie
+    const cookies = await get(origin);
+    if (!cookies.over18 || cookies.over18.value !== 'yes') {
+      await set(origin, {
+        name: 'over18',
+        value: 'yes',
+      });
+    }
+  }
 
   get settingNocSyosetuTranslate() {
     return storage.get('nocsyosetu_translate');
@@ -296,8 +308,9 @@ class NocSyosetu implements Plugin.PagePlugin {
       }
     }
 
-    const result = await fetchApi(url, { headers: this.headers });
-    const body = await result.text();
+    await this.preFetch(url);
+
+    const body = await fetchText(url, { headers: this.headers });
 
     const $ = loadCheerio(body);
 
@@ -375,8 +388,9 @@ class NocSyosetu implements Plugin.PagePlugin {
   async parseNovel(
     novelUrl: string,
   ): Promise<Plugin.SourceNovel & { totalPages: number }> {
-    const result = await fetchApi(novelUrl, { headers: this.headers });
-    const body = await result.text();
+    await this.preFetch(novelUrl);
+
+    const body = await fetchText(novelUrl, { headers: this.headers });
 
     this.checkCacheR18(body);
 
@@ -465,8 +479,10 @@ class NocSyosetu implements Plugin.PagePlugin {
   async parsePage(novelPath: string, page: string): Promise<Plugin.SourcePage> {
     const url = new URL(novelPath);
     url.searchParams.set('p', page);
-    const result = await fetchApi(url.toString(), { headers: this.headers });
-    const body = await result.text();
+
+    await this.preFetch(url.toString());
+
+    const body = await fetchText(url.toString(), { headers: this.headers });
     const $ = loadCheerio(body);
 
     return {
@@ -475,8 +491,9 @@ class NocSyosetu implements Plugin.PagePlugin {
   }
 
   async parseChapter(chapterPath: string): Promise<string> {
-    const result = await fetchApi(chapterPath, { headers: this.headers });
-    const body = await result.text();
+    await this.preFetch(chapterPath);
+
+    const body = await fetchText(chapterPath, { headers: this.headers });
 
     const cheerioQuery = loadCheerio(body);
     this.checkCacheR18(body);
@@ -510,8 +527,9 @@ class NocSyosetu implements Plugin.PagePlugin {
         : '' // if isn't don't set ?p
     }`;
 
-    const result = await fetchApi(url, { headers: this.headers });
-    const body = await result.text();
+    await this.preFetch(url);
+
+    const body = await fetchText(url, { headers: this.headers });
 
     const cheerioQuery = loadCheerio(body);
 

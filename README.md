@@ -2,26 +2,37 @@ This is a fork of the original repository, containing only my custom plugins and
 
 ### Included sources:
 
-- [NocSyosetu](https://noc.syosetu.com)
-- [Hako](https://ln.hako.vn)
+- [NocSyosetu](https://noc.syosetu.com)[^1]
+- [Hako Novel](https://ln.hako.vn)[^1]
 - [Akaytruyen](https://akaytruyen.com)
 - [Valvrareteam](https://valvrareteam.net)
 - [tieuthuyetmang](https://tieuthuyetmang.com)
 - [truyenfull](https://truyenfull.vision)
-- [Sáng Tác Việt](https://sangtacviet.app/)
+- [Sáng Tác Việt](https://sangtacviet.app/)[^1]
 - [WanwanSekai](https://wanwansekai.com)
 - [DocTruyenLN](https://quykiep.com)
 - [PixivNovel](https://pixiv.net)
 - [Luvevaland](https://luvevaland.co)
 - [BaoMoi](https://baomoi.com)
 - [LNKuro](https://lnkuro.top)
-- [JukaNovel](https://jukaza.site)
+- [JukaNovel](https://jukaza.site)[^1]
 - [ZumiNovel](https://zuminovel.com)
+
+[^1]: This plugin is incompatible with the original LNReader as it utilizes new APIs introduced in [LNReader-Extended](https://github.com/Yuneko-dev/lnreader-extended)
 
 ### Install URL
 ```sh
 https://raw.githubusercontent.com/Yuneko-dev/lnreader-plugins/plugins/v3.0.0/.dist/plugins.min.json
 ```
+
+### Additional APIs
+
+Plugins in this repository make use of new API functions that are not available in the original LNReader. Below is a (potentially incomplete) list:
+
+- `@libs/aes`: added `cbc`
+- `@libs/utils`: added `utf8ToBytes`, `bytesToUtf8`, `Buffer`
+- `@libs/fetch`: removed `fetchFile`
+- `@libs/cookie`
 
 ---
 
