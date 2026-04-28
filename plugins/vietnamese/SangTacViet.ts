@@ -7,6 +7,7 @@ import { NovelStatus } from '@libs/novelStatus';
 import { FilterTypes, Filters } from '@libs/filterInputs';
 import { defaultCover } from '@libs/defaultCover';
 import { storage } from '@libs/storage';
+import { get, set, setFromResponse } from '@libs/cookie';
 
 const SITE = 'https://sangtacviet.app';
 
@@ -329,21 +330,22 @@ class SangTacVietPlugin implements Plugin.PluginBase {
   get site() {
     return this.usingAlternativeDomain ? ALTERNATIVE_DOMAIN : SITE;
   }
-  version = '1.0.8';
+  version = '1.0.9';
   webStorageUtilized = true;
 
   pluginSettings: Plugin.PluginSettings = {
     usingAlternativeDomain: {
-      type: "Switch",
-      label: "Sử dụng tên miền thay thế",
+      type: 'Switch',
+      label: 'Sử dụng tên miền thay thế',
       value: false,
     },
     autoRetry: {
-      type: "Switch",
-      label: "Tự động thử lại khi tải chương thất bại (Tối đa 10 lần, cách nhau 1 giây)",
+      type: 'Switch',
+      label:
+        'Tự động thử lại khi tải chương thất bại (Tối đa 10 lần, cách nhau 1 giây)',
       value: false,
-    }
-  }
+    },
+  };
 
   get usingAlternativeDomain(): boolean {
     return storage.get('usingAlternativeDomain') as boolean;
@@ -359,9 +361,7 @@ class SangTacVietPlugin implements Plugin.PluginBase {
     $('a.booksearch').each((_, el) => {
       const href = $(el).attr('href') || '';
       const name = $(el).find('.searchbooktitle').text().trim();
-      const cover =
-        $(el).find('img').attr('src') ||
-        defaultCover;
+      const cover = $(el).find('img').attr('src') || defaultCover;
       if (href && name) {
         novels.push({ name, cover, path: href });
       }
@@ -448,7 +448,9 @@ class SangTacVietPlugin implements Plugin.PluginBase {
             : `${this.site}${book.thumb}`
           : defaultCover;
 
-        const st = String(book.status || '').trim().toLowerCase();
+        const st = String(book.status || '')
+          .trim()
+          .toLowerCase();
         if (st === '0' || st === 'hoàn thành')
           novel.status = NovelStatus.Completed;
         else if (st === '1' || st === 'còn tiếp')
@@ -542,13 +544,15 @@ class SangTacVietPlugin implements Plugin.PluginBase {
       } else if (chapJson.code === 2) {
         throw new Error('Truyện đã bị xóa hoặc không có nội dung');
       } else {
-        throw new Error(
-          `Lỗi không xác định: ${JSON.stringify(chapJson)}`,
-        );
+        throw new Error(`Lỗi không xác định: ${JSON.stringify(chapJson)}`);
       }
     }
 
-    novel.genres = `${bookHost},${novel.genres?.split(',').map(g => g.trim()).filter(g => g).join(',')}`;
+    novel.genres = `${bookHost},${novel.genres
+      ?.split(',')
+      .map(g => g.trim())
+      .filter(g => g)
+      .join(',')}`;
 
     novel.summary = decodeHTMLEntities(novel.summary || '');
 
@@ -590,43 +594,6 @@ class SangTacVietPlugin implements Plugin.PluginBase {
     }
   }
 
-  // Apply Set-Cookie response header into our local cookie jar.
-  // Handles cookie deletion (expires=1970 or value="deleted") by dropping the
-  // entry from the jar instead of storing the literal "deleted" string.
-  applySetCookie(cookies: Record<string, string>, setCookie: string): void {
-    if (!setCookie) return;
-    const names = ['_ac', '_acx', '_gac', 'PHPSESSID', 'arouting'];
-    for (const name of names) {
-      // Find the segment of the header that defines this cookie so we can
-      // inspect its expires/value attributes per-cookie.
-      const segRe = new RegExp(
-        '\\b' + name + '=([^;,]*)([^,]*)',
-        'i',
-      );
-      const seg = setCookie.match(segRe);
-      if (!seg) continue;
-      const value = seg[1].trim();
-      const attrs = seg[2] || '';
-      const expired =
-        value === 'deleted' ||
-        value === '' ||
-        /expires=Thu,\s*01[\s-]Jan[\s-]1970/i.test(attrs) ||
-        /max-age=0\b/i.test(attrs);
-      if (expired) {
-        delete cookies[name];
-      } else {
-        cookies[name] = value;
-      }
-    }
-  }
-
-  buildCookieHeader(cookies: Record<string, string>): string {
-    return Object.keys(cookies)
-      .filter(k => cookies[k])
-      .map(k => `${k}=${cookies[k]}`)
-      .join('; ');
-  }
-
   // @ts-expect-error - public method with auto-retry wrapper
   async parseChapter(chapterPath: string): Promise<string> {
     const maxRetries = this.autoRetry ? 10 : 1;
@@ -653,14 +620,32 @@ class SangTacVietPlugin implements Plugin.PluginBase {
     const chapterId = pathParts[4] || '';
     const referer = `${this.site}${chapterPath}`;
 
-    const cookies: Record<string, string> = {};
+    const origin = new URL(this.site).origin;
+
+    // Step 0: clear any existing cookies for the domain, to ensure a clean slate for the rotation logic.
+    const oldCookies = await get(origin);
+    for (const k in oldCookies) {
+      // Why doesn’t Android have a reliable method to clear cookies?
+      await set(origin, {
+        name: k,
+        value: '',
+      });
+    }
 
     // Step 1: prime the session
     try {
       const pageRes = await fetchApi(referer);
       const html = await pageRes.text();
-      Object.assign(cookies, this.extractCookiesFromHtml(html));
-      this.applySetCookie(cookies, pageRes.headers.get('set-cookie') || '');
+      const firstCookies = this.extractCookiesFromHtml(html);
+      for (const k in firstCookies) {
+        await set(origin, {
+          name: k,
+          value: firstCookies[k],
+        });
+      }
+      if (pageRes.headers.get('set-cookie')) {
+        await setFromResponse(origin, pageRes.headers.get('set-cookie')!);
+      }
     } catch {
       // continue — server may still recognise the WebView's cookie jar
     }
@@ -683,36 +668,32 @@ class SangTacVietPlugin implements Plugin.PluginBase {
     // anti-bot heuristic (server replies `code:21` with the captcha
     // challenge "Vui lòng xác nhận để tiếp tục").
     try {
-      const probeHeaders: Record<string, string> = {
-        'Content-Type': 'application/x-www-form-urlencoded',
-        'X-Requested-With': 'XmlHttpRequest',
-        Referer: referer,
-      };
-      const probeCookie = this.buildCookieHeader(cookies);
-      if (probeCookie) probeHeaders.Cookie = probeCookie;
       const probeRes = await fetchApi(apiUrl.toString(), {
         method: 'POST',
-        headers: probeHeaders,
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+          'X-Requested-With': 'XmlHttpRequest',
+          Referer: referer,
+        },
         body: '',
       });
       // Drain the response so the underlying fetch implementation doesn't
       // hold the connection open, but we don't actually need the JSON.
       await probeRes.text();
-      this.applySetCookie(cookies, probeRes.headers.get('set-cookie') || '');
+      if (probeRes.headers.get('set-cookie')) {
+        await setFromResponse(origin, probeRes.headers.get('set-cookie')!);
+      }
     } catch {
       // probe is best-effort; carry on
     }
 
     // Step 3: actual chapter fetch using the rotated cookies.
-    const headers: Record<string, string> = {
-      'Content-Type': 'application/x-www-form-urlencoded',
-      Referer: referer,
-    };
-    const cookieHeader = this.buildCookieHeader(cookies);
-    if (cookieHeader) headers.Cookie = cookieHeader;
     const chapRes = await fetchApi(apiUrl.toString(), {
       method: 'POST',
-      headers,
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+        Referer: referer,
+      },
       body: '',
     });
     const data = this.parseLooseJson(await chapRes.text());
@@ -723,7 +704,10 @@ class SangTacVietPlugin implements Plugin.PluginBase {
     }
     if (String(data.code) === '0' && data.data) {
       const host = data.bookhost || bookHost;
-      const rawData = String(data.data).replace("@Bạn đang đọc bản lưu trong hệ thống", "");
+      const rawData = String(data.data).replace(
+        '@Bạn đang đọc bản lưu trong hệ thống',
+        '',
+      );
       const content = normalizeChapterHtml(host, rawData);
       const title = data.chaptername?.trim();
       return (title ? `<h2>${title}</h2>` : '') + wrapWithParagraphs(content);
