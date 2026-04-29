@@ -416,6 +416,17 @@ class SangTacVietPlugin implements Plugin.PluginBase {
     await set(origin, { name: 'foreignlang', value: foreignlang });
   }
 
+  private async _cookieHeader(origin: string): Promise<Record<string, string>> {
+    const jar = await get(origin);
+    const parts: string[] = [];
+    for (const k in jar) {
+      const c = jar[k];
+      const v = typeof c === 'string' ? c : c && c.value;
+      if (v) parts.push(k + '=' + v);
+    }
+    return parts.length ? { Cookie: parts.join('; ') } : {};
+  }
+
   parseNovelsFromHTML(html: string): Plugin.NovelItem[] {
     const novels: Plugin.NovelItem[] = [];
     const $ = parseHTML(html);
@@ -724,14 +735,7 @@ class SangTacVietPlugin implements Plugin.PluginBase {
     apiUrl.searchParams.set('sty', '1');
     apiUrl.searchParams.set('exts', '');
 
-    // Step 2: probe POST that rotates `_ac`. The browser's
-    // `stv.readinit.js` calls `xhr.send()` with an empty body — verified by
-    // hooking `XMLHttpRequest.prototype.send` in a Playwright-driven Chrome.
-    // The server's `_ac` rotation is purely driven by the
-    // `X-Requested-With: XmlHttpRequest` header on this first POST, not by
-    // the body. Sending a non-empty body here on the main domain trips the
-    // anti-bot heuristic (server replies `code:21` with the captcha
-    // challenge "Vui lòng xác nhận để tiếp tục").
+    // Step 2: probe POST that rotates `_ac`.
     try {
       const probeRes = await fetchApi(apiUrl.toString(), {
         method: 'POST',
@@ -739,11 +743,10 @@ class SangTacVietPlugin implements Plugin.PluginBase {
           'Content-Type': 'application/x-www-form-urlencoded',
           'X-Requested-With': 'XmlHttpRequest',
           Referer: referer,
+          ...(await this._cookieHeader(origin)),
         },
         body: '',
       });
-      // Drain the response so the underlying fetch implementation doesn't
-      // hold the connection open, but we don't actually need the JSON.
       await probeRes.text();
       if (probeRes.headers.get('set-cookie')) {
         await setFromResponse(origin, probeRes.headers.get('set-cookie')!);
@@ -758,6 +761,7 @@ class SangTacVietPlugin implements Plugin.PluginBase {
       headers: {
         'Content-Type': 'application/x-www-form-urlencoded',
         Referer: referer,
+        ...(await this._cookieHeader(origin)),
       },
       body: '',
     });
