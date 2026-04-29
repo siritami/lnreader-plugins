@@ -20,7 +20,7 @@ class TieuThuyetMangPlugin implements Plugin.PluginBase {
   name = 'Tiểu Thuyết Mạng';
   icon = 'src/vi/tieuthuyetmang/icon.png';
   site = 'https://tieuthuyetmang.com';
-  version = '1.0.2';
+  version = '1.0.3';
 
   imageRequestInit: Plugin.ImageRequestInit = {
     headers: {
@@ -231,7 +231,7 @@ class TieuThuyetMangPlugin implements Plugin.PluginBase {
     const $ = loadCheerio(html);
 
     const title = $('h1').first().text().trim();
-    const summary = $('meta[name="description"]').attr('content')?.trim() || '';
+    const summary = $('.prose').text().trim() || '';
 
     const statusText =
       $('h1').next('div').find('span').first().text().trim() ||
