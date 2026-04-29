@@ -339,6 +339,21 @@ class SangTacVietPlugin implements Plugin.PluginBase {
       label: 'Sử dụng tên miền thay thế',
       value: false,
     },
+    translateEnabled: {
+      type: 'Switch',
+      label: 'Dịch truyện (Mở/Tắt)',
+      value: true,
+    },
+    translateEngine: {
+      type: 'Select',
+      label: 'Công cụ dịch (Tiếng Việt)',
+      value: 'convert',
+      options: [
+        { label: 'Convert', value: 'convert' },
+        { label: 'Bing', value: 'bing' },
+        { label: 'Google', value: 'google' },
+      ],
+    },
     autoRetry: {
       type: 'Switch',
       label:
@@ -347,12 +362,58 @@ class SangTacVietPlugin implements Plugin.PluginBase {
     },
   };
 
+  constructor() {
+    const ps = this.pluginSettings;
+    for (const key in ps) {
+      if (storage.get(key) === undefined) {
+        storage.set(key, ps[key].value);
+      }
+    }
+  }
+
   get usingAlternativeDomain(): boolean {
     return storage.get('usingAlternativeDomain') as boolean;
   }
 
+  get translateEnabled(): boolean {
+    return Boolean(storage.get('translateEnabled'));
+  }
+
+  get translateEngine(): string {
+    return (storage.get('translateEngine') as string) || 'convert';
+  }
+
   get autoRetry() {
     return storage.get('autoRetry') as boolean;
+  }
+
+  async applyTranslationCookies(origin: string): Promise<void> {
+    let transmode: string;
+    let foreignlang: string;
+
+    if (!this.translateEnabled) {
+      transmode = 'chinese';
+      foreignlang = 'vi';
+    } else {
+      switch (this.translateEngine) {
+        case 'bing':
+          transmode = 'tfms';
+          foreignlang = 'vi';
+          break;
+        case 'google':
+          transmode = 'name';
+          foreignlang = 'gg_vi';
+          break;
+        case 'convert':
+        default:
+          transmode = 'name';
+          foreignlang = 'vi';
+          break;
+      }
+    }
+
+    await set(origin, { name: 'transmode', value: transmode });
+    await set(origin, { name: 'foreignlang', value: foreignlang });
   }
 
   parseNovelsFromHTML(html: string): Plugin.NovelItem[] {
@@ -650,6 +711,9 @@ class SangTacVietPlugin implements Plugin.PluginBase {
     } catch {
       // continue — server may still recognise the WebView's cookie jar
     }
+
+    // Set translation cookies based on plugin settings
+    await this.applyTranslationCookies(origin);
 
     const apiUrl = new URL(`${this.site}/index.php`);
     apiUrl.searchParams.set('bookid', bookId);
