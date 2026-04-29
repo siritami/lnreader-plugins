@@ -416,6 +416,31 @@ class SangTacVietPlugin implements Plugin.PluginBase {
     await set(origin, { name: 'foreignlang', value: foreignlang });
   }
 
+  // OkHttp's CookieJarContainer has no delegate in this build, so fetch()
+  // never reads from CookieManager. We must build the Cookie header manually.
+  async buildCookieHeader(origin: string): Promise<string> {
+    const jar = await get(origin);
+    const parts: string[] = [];
+    for (const k in jar) {
+      const c = jar[k];
+      const v = typeof c === 'string' ? c : c && c.value;
+      if (v) parts.push(`${k}=${v}`);
+    }
+    return parts.join('; ');
+  }
+
+  async applySetCookieToJar(
+    origin: string,
+    header: string | null,
+  ): Promise<void> {
+    if (!header) return;
+    try {
+      await setFromResponse(origin, header);
+    } catch {
+      // best-effort
+    }
+  }
+
   parseNovelsFromHTML(html: string): Plugin.NovelItem[] {
     const novels: Plugin.NovelItem[] = [];
     const $ = parseHTML(html);
