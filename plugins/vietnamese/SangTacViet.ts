@@ -7,7 +7,7 @@ import { NovelStatus } from '@libs/novelStatus';
 import { FilterTypes, Filters } from '@libs/filterInputs';
 import { defaultCover } from '@libs/defaultCover';
 import { storage } from '@libs/storage';
-import { get, set, setFromResponse } from '@libs/cookie';
+import { get, set, setFromResponse, removeSessionCookies } from '@libs/cookie';
 
 const SITE = 'https://sangtacviet.app';
 
@@ -330,7 +330,7 @@ class SangTacVietPlugin implements Plugin.PluginBase {
   get site() {
     return this.usingAlternativeDomain ? ALTERNATIVE_DOMAIN : SITE;
   }
-  version = '1.0.9';
+  version = '1.0.10';
   webStorageUtilized = true;
 
   pluginSettings: Plugin.PluginSettings = {
@@ -631,6 +631,7 @@ class SangTacVietPlugin implements Plugin.PluginBase {
         value: '',
       });
     }
+    await removeSessionCookies();
 
     // Step 1: prime the session
     try {

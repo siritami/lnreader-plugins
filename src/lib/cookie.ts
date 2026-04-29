@@ -30,4 +30,8 @@ function flush() {
   return Promise.resolve();
 }
 
-export { set, get, setFromResponse, flush };
+function removeSessionCookies() {
+  return Promise.resolve(true);
+}
+
+export { set, get, setFromResponse, flush, removeSessionCookies };
