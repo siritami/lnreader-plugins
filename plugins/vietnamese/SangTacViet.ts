@@ -416,31 +416,6 @@ class SangTacVietPlugin implements Plugin.PluginBase {
     await set(origin, { name: 'foreignlang', value: foreignlang });
   }
 
-  // OkHttp's CookieJarContainer has no delegate in this build, so fetch()
-  // never reads from CookieManager. We must build the Cookie header manually.
-  async buildCookieHeader(origin: string): Promise<string> {
-    const jar = await get(origin);
-    const parts: string[] = [];
-    for (const k in jar) {
-      const c = jar[k];
-      const v = typeof c === 'string' ? c : c && c.value;
-      if (v) parts.push(`${k}=${v}`);
-    }
-    return parts.join('; ');
-  }
-
-  async applySetCookieToJar(
-    origin: string,
-    header: string | null,
-  ): Promise<void> {
-    if (!header) return;
-    try {
-      await setFromResponse(origin, header);
-    } catch {
-      // best-effort
-    }
-  }
-
   parseNovelsFromHTML(html: string): Plugin.NovelItem[] {
     const novels: Plugin.NovelItem[] = [];
     const $ = parseHTML(html);
@@ -730,7 +705,9 @@ class SangTacVietPlugin implements Plugin.PluginBase {
           value: firstCookies[k],
         });
       }
-      await this.applySetCookieToJar(origin, pageRes.headers.get('set-cookie'));
+      if (pageRes.headers.get('set-cookie')) {
+        await setFromResponse(origin, pageRes.headers.get('set-cookie')!);
+      }
     } catch {
       // continue — server may still recognise the WebView's cookie jar
     }
@@ -756,31 +733,31 @@ class SangTacVietPlugin implements Plugin.PluginBase {
     // anti-bot heuristic (server replies `code:21` with the captcha
     // challenge "Vui lòng xác nhận để tiếp tục").
     try {
-      const probeCookie = await this.buildCookieHeader(origin);
       const probeRes = await fetchApi(apiUrl.toString(), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/x-www-form-urlencoded',
           'X-Requested-With': 'XmlHttpRequest',
           Referer: referer,
-          ...(probeCookie ? { Cookie: probeCookie } : {}),
         },
         body: '',
       });
+      // Drain the response so the underlying fetch implementation doesn't
+      // hold the connection open, but we don't actually need the JSON.
       await probeRes.text();
-      await this.applySetCookieToJar(origin, probeRes.headers.get('set-cookie'));
+      if (probeRes.headers.get('set-cookie')) {
+        await setFromResponse(origin, probeRes.headers.get('set-cookie')!);
+      }
     } catch {
       // probe is best-effort; carry on
     }
 
     // Step 3: actual chapter fetch using the rotated cookies.
-    const step3Cookie = await this.buildCookieHeader(origin);
     const chapRes = await fetchApi(apiUrl.toString(), {
       method: 'POST',
       headers: {
         'Content-Type': 'application/x-www-form-urlencoded',
         Referer: referer,
-        ...(step3Cookie ? { Cookie: step3Cookie } : {}),
       },
       body: '',
     });
