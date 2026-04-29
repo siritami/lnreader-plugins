@@ -730,6 +730,7 @@ class SangTacVietPlugin implements Plugin.PluginBase {
           value: firstCookies[k],
         });
       }
+      await this.applySetCookieToJar(origin, pageRes.headers.get('set-cookie'));
     } catch {
       // continue — server may still recognise the WebView's cookie jar
     }
