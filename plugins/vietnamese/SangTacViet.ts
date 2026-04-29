@@ -334,7 +334,7 @@ class SangTacVietPlugin implements Plugin.PluginBase {
     const domain = this.selectedDomain;
     return domain ? (ALTERNATIVE_DOMAINS[domain] || SITE) : SITE;
   }
-  version = '1.0.10';
+  version = '1.0.11';
   webStorageUtilized = true;
 
   pluginSettings: Plugin.PluginSettings = {
