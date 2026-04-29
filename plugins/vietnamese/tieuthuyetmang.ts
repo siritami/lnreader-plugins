@@ -231,7 +231,7 @@ class TieuThuyetMangPlugin implements Plugin.PluginBase {
     const $ = loadCheerio(html);
 
     const title = $('h1').first().text().trim();
-    const summary = $('meta[name="description"]').attr('content')?.trim() || '';
+    const summary = $('.prose').text().trim();
 
     const statusText =
       $('h1').next('div').find('span').first().text().trim() ||
