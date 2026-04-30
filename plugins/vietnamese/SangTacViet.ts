@@ -694,20 +694,22 @@ class SangTacVietPlugin implements Plugin.PluginBase {
 
     const origin = new URL(this.site).origin;
 
-    // Step 0: clear any existing cookies for the domain, to ensure a clean slate for the rotation logic.
+    // Step 0: clear session cookies but preserve translation preference.
     const oldCookies = await get(origin);
     for (const k in oldCookies) {
-      // Why doesn’t Android have a reliable method to clear cookies?
-      await set(origin, {
-        name: k,
-        value: '',
-      });
+      await set(origin, { name: k, value: '' });
     }
     await removeSessionCookies();
 
-    // Step 1: prime the session
+    // Set translation cookies BEFORE Step 1 so the server sees them
+    // on the very first request (session creation).
+    await this.applyTranslationCookies(origin);
+
+    // Step 1: prime the session — sends translation cookies with the GET.
     try {
-      const pageRes = await fetchApi(referer);
+      const pageRes = await fetchApi(referer, {
+        headers: { ...(await this._cookieHeader(origin)) },
+      });
       const html = await pageRes.text();
       const firstCookies = this.extractCookiesFromHtml(html);
       for (const k in firstCookies) {
@@ -723,7 +725,7 @@ class SangTacVietPlugin implements Plugin.PluginBase {
       // continue — server may still recognise the WebView's cookie jar
     }
 
-    // Set translation cookies based on plugin settings
+    // Re-apply translation cookies in case Step 1's Set-Cookie overwrote them.
     await this.applyTranslationCookies(origin);
 
     const apiUrl = new URL(`${this.site}/index.php`);
@@ -736,7 +738,11 @@ class SangTacVietPlugin implements Plugin.PluginBase {
     apiUrl.searchParams.set('exts', '');
 
     // Step 2: probe POST that rotates `_ac`.
+    // The browser sends the current `_ac` cookie value as the POST body.
+    // Sending an empty body triggers the anti-bot heuristic (code 21).
     try {
+      const jar = await get(origin);
+      const acValue = (jar._ac && (typeof jar._ac === 'string' ? jar._ac : jar._ac.value)) || '';
       const probeRes = await fetchApi(apiUrl.toString(), {
         method: 'POST',
         headers: {
@@ -745,7 +751,7 @@ class SangTacVietPlugin implements Plugin.PluginBase {
           Referer: referer,
           ...(await this._cookieHeader(origin)),
         },
-        body: '',
+        body: acValue,
       });
       await probeRes.text();
       if (probeRes.headers.get('set-cookie')) {
