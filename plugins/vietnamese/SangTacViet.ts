@@ -14,7 +14,11 @@ const SITE = 'https://sangtacviet.app';
 const GH_UPDATE =
   'https://raw.githubusercontent.com/sangtacviet/sangtacviet.github.io/main/update.json';
 
-const ALTERNATIVE_DOMAIN = 'https://dns1.stv-appdomain-00000001.org';
+const DOMAINS: Record<string, string> = {
+  'sangtacviet.app': 'https://sangtacviet.app',
+  'sangtacviet.pro': 'https://sangtacviet.pro',
+  'dns1.stv-appdomain-00000001.org': 'https://dns1.stv-appdomain-00000001.org',
+};
 
 // ── External-URL
 const HOST_PATTERNS: Record<string, string[]> = {
@@ -328,16 +332,21 @@ class SangTacVietPlugin implements Plugin.PluginBase {
   name = 'Sáng Tác Việt';
   icon = 'src/vi/sangtacviet/icon.png';
   get site() {
-    return this.usingAlternativeDomain ? ALTERNATIVE_DOMAIN : SITE;
+    return DOMAINS[this.selectedDomain] || SITE;
   }
   version = '1.0.12';
   webStorageUtilized = true;
 
   pluginSettings: Plugin.PluginSettings = {
-    usingAlternativeDomain: {
-      type: 'Switch',
-      label: 'Sử dụng tên miền thay thế',
-      value: false,
+    selectedDomain: {
+      type: 'Select',
+      label: 'Tên miền',
+      value: 'sangtacviet.app',
+      options: [
+        { label: 'sangtacviet.app', value: 'sangtacviet.app' },
+        { label: 'sangtacviet.pro', value: 'sangtacviet.pro' },
+        { label: 'dns1.stv-appdomain-00000001.org', value: 'dns1.stv-appdomain-00000001.org' },
+      ],
     },
     translateEnabled: {
       type: 'Switch',
@@ -371,8 +380,8 @@ class SangTacVietPlugin implements Plugin.PluginBase {
     }
   }
 
-  get usingAlternativeDomain(): boolean {
-    return storage.get('usingAlternativeDomain') as boolean;
+  get selectedDomain(): string {
+    return (storage.get('selectedDomain') as string) || 'sangtacviet.app';
   }
 
   get translateEnabled(): boolean {
@@ -779,10 +788,9 @@ class SangTacVietPlugin implements Plugin.PluginBase {
     }
     if (String(data.code) === '0' && data.data) {
       const host = data.bookhost || bookHost;
-      const rawData = String(data.data).replace(
-        '@Bạn đang đọc bản lưu trong hệ thống',
-        '',
-      );
+      const rawData = String(data.data)
+        .replace('@Bạn đang đọc bản lưu trong hệ thống', '')
+        .replace('Bạn đang xem văn bản gốc chưa dịch, có thể kéo xuống cuối trang để chọn bản dịch.', '');
       const content = normalizeChapterHtml(host, rawData);
       const title = data.chaptername?.trim();
       return (title ? `<h2>${title}</h2>` : '') + wrapWithParagraphs(content);
