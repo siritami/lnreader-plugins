@@ -49,8 +49,12 @@ const HOST_PATTERNS: Record<string, string[]> = {
   ],
   trxs: ['trxs\\.cc/tongren/(\\d+)/?(\\d+)?(.html)?'],
   ikshu8: ['ikshu8\\.com/book/(\\d+)/?(\\d+)?(.html)?'],
-  shulinw: ['shulinw\\.com/(?:shu/|yuedu/|book/|\\d+/|modules/article/articleinfo\\.php\\?id=)(\\d+)(?:/)?(\\d*)(.html)?'],
-  wuxia1: ['wuxia1\\.com/(?:shu/|yuedu/|book/|\\d+/|modules/article/articleinfo\\.php\\?id=)(\\d+)(?:/)?(\\d*)(.html)?'],
+  shulinw: [
+    'shulinw\\.com/(?:shu/|yuedu/|book/|\\d+/|modules/article/articleinfo\\.php\\?id=)(\\d+)(?:/)?(\\d*)(.html)?',
+  ],
+  wuxia1: [
+    'wuxia1\\.com/(?:shu/|yuedu/|book/|\\d+/|modules/article/articleinfo\\.php\\?id=)(\\d+)(?:/)?(\\d*)(.html)?',
+  ],
   shu05: ['shu05\\.com/\\d+[/_](\\d+)/(\\d*)(.html)?'],
   kuhu168: ['kuhu168\\.com/\\d+[/_](\\d+)/(\\d*)(.html)?'],
   '2kxs': ['2kxs\\.org/\\d+[/_](\\d+)/(\\d*)(.html)?'],
@@ -185,8 +189,8 @@ function detectHostFromUrl(
 }
 
 // ── Webfont glyph decode ─────────────────────────────
-// prettier-ignore
 const GLYPH_MAP: Record<string, string> = {};
+// prettier-ignore
 ([
   [0xE01B,'A'],[0xE01E,'y'],[0xE05F,'3'],[0xE063,'z'],[0xE06B,'K'],[0xE06C,'t'],
   [0xE089,'l'],[0xE0D5,'S'],[0xE0D6,'T'],[0xE100,'o'],[0xE101,'P'],[0xE116,'4'],
@@ -249,18 +253,39 @@ function looksLikeInterlinear(text: string): boolean {
 function normalizeInterlinear(raw: string): string {
   let t = raw.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
   t = t.replace(/<br\s*\/?>\s*/gi, '\n').replace(/<\/br\s*>/gi, '\n');
-  t = t.replace(/<\/i>\s*\n+\s*(?=[,.;:!?%\)\]\}\u3002\uff0c\u3001\uff01\uff1f\uff1b\uff1a\u201d\u2019\u300d\u300f\u3011\u300b])/gi, '</i>');
+  t = t.replace(
+    /<\/i>\s*\n+\s*(?=[,.;:!?%\)\]\}\u3002\uff0c\u3001\uff01\uff1f\uff1b\uff1a\u201d\u2019\u300d\u300f\u3011\u300b])/gi,
+    '</i>',
+  );
   const marker = '__STV_GAP__';
   t = t.replace(/<\/i>\s*<i\b/gi, '</i>' + marker + '<i');
   t = t.replace(/<i\b[^>]*>([\s\S]*?)<\/i>/gi, '$1');
-  t = t.replace(/<\/?(p|div|article|section|li|tr|h[1-6]|blockquote|ul|ol)[^>]*>/gi, '\n');
+  t = t.replace(
+    /<\/?(p|div|article|section|li|tr|h[1-6]|blockquote|ul|ol)[^>]*>/gi,
+    '\n',
+  );
   t = t.replace(/<[^>]+>/g, '').replace(/[<>]/g, '');
-  t = t.replace(/&nbsp;/gi, ' ').replace(/&quot;/gi, '"').replace(/&#39;/gi, "'").replace(/&lt;/gi, '<').replace(/&gt;/gi, '>').replace(/&amp;/gi, '&');
+  t = t
+    .replace(/&nbsp;/gi, ' ')
+    .replace(/&quot;/gi, '"')
+    .replace(/&#39;/gi, "'")
+    .replace(/&lt;/gi, '<')
+    .replace(/&gt;/gi, '>')
+    .replace(/&amp;/gi, '&');
   t = t.replace(new RegExp(marker, 'g'), ' ');
   t = t.replace(/[\t\f\v ]+/g, ' ');
-  t = t.replace(/ +([,.;:!?%\)\]\}\u3002\uff0c\u3001\uff01\uff1f\uff1b\uff1a\u201d\u2019\u300d\u300f\u3011\u300b])/g, '$1');
-  t = t.replace(/\n+([,.;:!?%\)\]\}\u3002\uff0c\u3001\uff01\uff1f\uff1b\uff1a\u201d\u2019\u300d\u300f\u3011\u300b])/g, '$1');
-  t = t.replace(/[ ]*\n[ ]*/g, '\n').replace(/\n{3,}/g, '\n\n').trim();
+  t = t.replace(
+    / +([,.;:!?%\)\]\}\u3002\uff0c\u3001\uff01\uff1f\uff1b\uff1a\u201d\u2019\u300d\u300f\u3011\u300b])/g,
+    '$1',
+  );
+  t = t.replace(
+    /\n+([,.;:!?%\)\]\}\u3002\uff0c\u3001\uff01\uff1f\uff1b\uff1a\u201d\u2019\u300d\u300f\u3011\u300b])/g,
+    '$1',
+  );
+  t = t
+    .replace(/[ ]*\n[ ]*/g, '\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
   return t ? t.replace(/\n/g, '<br>') : '';
 }
 
@@ -282,15 +307,27 @@ function normalizeChapterHtml(host: string, raw: string): string {
     text = decodeGlyphs(text);
     if (looksLikeInterlinear(text)) return normalizeInterlinear(text);
     if (!/<\w+[^>]*>/.test(text)) {
-      text = text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-      text = text.replace(/\r\n/g, '\n').replace(/\r/g, '\n').replace(/\n/g, '<br>');
+      text = text
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;');
+      text = text
+        .replace(/\r\n/g, '\n')
+        .replace(/\r/g, '\n')
+        .replace(/\n/g, '<br>');
     }
     return text;
   }
 
   if (!/<\w+[^>]*>/.test(text)) {
-    text = text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-    text = text.replace(/\r\n/g, '\n').replace(/\r/g, '\n').replace(/\n/g, '<br>');
+    text = text
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;');
+    text = text
+      .replace(/\r\n/g, '\n')
+      .replace(/\r/g, '\n')
+      .replace(/\n/g, '<br>');
     return text;
   }
   if (looksLikeInterlinear(text)) return normalizeInterlinear(text);
@@ -303,7 +340,7 @@ function wrapWithParagraphs(rawText: string): string {
   const paragraphs = cleanText.split('\n');
   const htmlResult = paragraphs
     .map(line => line.trim())
-    .filter(line => line.length > 0) 
+    .filter(line => line.length > 0)
     .map(line => `<p>${line}</p>`)
     .join('\n');
   return htmlResult;
@@ -328,6 +365,27 @@ function decodeHTMLEntities(str: string) {
   );
 }
 
+class STVChapterError extends Error {
+  public errorCode: number;
+  public raw: any;
+  constructor(message: string, code: number, detail: any) {
+    super(`${message} (code ${code})`);
+    this.name = 'STVChapterError';
+    this.errorCode = code;
+    this.raw = detail;
+    Object.setPrototypeOf(this, STVChapterError.prototype);
+  }
+  get shouldStopRetry(): boolean {
+    switch (this.errorCode) {
+      case 0: // OK
+      case 1: // empty
+        return true;
+      default:
+        return false;
+    }
+  }
+}
+
 class SangTacVietPlugin implements Plugin.PluginBase {
   id = 'sangtacviet';
   name = 'Sáng Tác Việt';
@@ -335,7 +393,7 @@ class SangTacVietPlugin implements Plugin.PluginBase {
   get site() {
     return DOMAINS[this.selectedDomain] || SITE;
   }
-  version = '1.0.12';
+  version = '1.0.13';
   webStorageUtilized = true;
 
   pluginSettings: Plugin.PluginSettings = {
@@ -680,6 +738,9 @@ class SangTacVietPlugin implements Plugin.PluginBase {
       try {
         return await this._parseChapter(chapterPath);
       } catch (err) {
+        if (err instanceof STVChapterError && err.shouldStopRetry) {
+          throw err;
+        }
         attempt++;
         if (attempt >= maxRetries) {
           throw err;
@@ -748,7 +809,9 @@ class SangTacVietPlugin implements Plugin.PluginBase {
     // Sending an empty body triggers the anti-bot heuristic (code 21).
     try {
       const jar = await get(origin);
-      const acValue = (jar._ac && (typeof jar._ac === 'string' ? jar._ac : jar._ac.value)) || '';
+      const acValue =
+        (jar._ac && (typeof jar._ac === 'string' ? jar._ac : jar._ac.value)) ||
+        '';
       const probeRes = await fetchApi(apiUrl.toString(), {
         method: 'POST',
         headers: {
@@ -787,7 +850,10 @@ class SangTacVietPlugin implements Plugin.PluginBase {
       const host = data.bookhost || bookHost;
       const rawData = String(data.data)
         .replace('@Bạn đang đọc bản lưu trong hệ thống', '')
-        .replace('Bạn đang xem văn bản gốc chưa dịch, có thể kéo xuống cuối trang để chọn bản dịch.', '');
+        .replace(
+          'Bạn đang xem văn bản gốc chưa dịch, có thể kéo xuống cuối trang để chọn bản dịch.',
+          '',
+        );
       const content = normalizeChapterHtml(host, rawData);
       const title = data.chaptername?.trim();
       return (title ? `<h2>${title}</h2>` : '') + wrapWithParagraphs(content);
@@ -795,13 +861,24 @@ class SangTacVietPlugin implements Plugin.PluginBase {
       console.warn('Unexpected chapter API response', data);
       switch (String(data.code)) {
         case '7': {
-          throw new Error(
-            'Bạn đang tải chương quá nhanh. Hãy thử lại sau vài giây.\nReason: code 7',
+          throw new STVChapterError(
+            'Bạn đang tải chương quá nhanh. Hãy thử lại sau vài giây.',
+            7,
+            data,
           );
         }
         case '21': {
-          throw new Error(
-            'Bạn cần xác nhận captcha. Hãy thử lại sau vài giây.\nReason: code 21',
+          throw new STVChapterError(
+            'Bạn cần xác nhận captcha. Hãy thử lại sau vài giây.',
+            21,
+            data,
+          );
+        }
+        case '1': {
+          throw new STVChapterError(
+            'Đây là chương VIP và không có nội dung.',
+            1,
+            data,
           );
         }
         default: {
