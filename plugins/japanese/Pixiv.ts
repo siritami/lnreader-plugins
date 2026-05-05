@@ -6,7 +6,6 @@ import { FilterTypes, Filters } from '@libs/filterInputs';
 import { storage } from '@libs/storage';
 
 const supportedLanguages: Record<string, string> = {
-  auto: 'Auto-detect',
   af: 'Afrikaans',
   sq: 'Albanian',
   ar: 'Arabic',
@@ -86,7 +85,7 @@ class PixivNovelPlugin implements Plugin.PagePlugin {
   name = 'Pixiv Novel';
   icon = 'src/jp/pixivnovel/icon.png';
   site = 'https://www.pixiv.net';
-  version = '1.0.8';
+  version = '1.0.9';
 
   pluginSettings: Plugin.PluginSettings = {
     pixiv_translate: {

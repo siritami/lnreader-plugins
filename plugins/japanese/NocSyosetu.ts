@@ -8,7 +8,6 @@ import { storage } from '@libs/storage';
 import { get, set } from '@libs/cookie';
 
 const supportedLanguages: Record<string, string> = {
-  auto: 'Auto-detect',
   af: 'Afrikaans',
   sq: 'Albanian',
   ar: 'Arabic',
@@ -88,7 +87,7 @@ class NocSyosetu implements Plugin.PagePlugin {
   name = 'NocSyosetu';
   icon = 'src/jp/nocsyosetu/icon.png';
   site = 'https://noc.syosetu.com/';
-  version = '1.1.12';
+  version = '1.1.13';
   headers = {
     'User-Agent':
       'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',

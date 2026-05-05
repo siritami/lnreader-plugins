@@ -46,7 +46,6 @@ type EncryptedPayload = {
 };
 
 const supportedLanguages: Record<string, string> = {
-  auto: 'Auto-detect',
   af: 'Afrikaans',
   sq: 'Albanian',
   ar: 'Arabic',
@@ -126,7 +125,7 @@ class TomatoMTLPlugin implements Plugin.PluginBase {
   name = 'TomatoMTL';
   icon = 'src/vi/tomatomtl/icon.png';
   site = SITE;
-  version = '1.0.1';
+  version = '1.0.2';
   webStorageUtilized = true;
 
   pluginSettings: Plugin.PluginSettings = {
