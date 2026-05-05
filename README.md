@@ -17,7 +17,7 @@ This is a fork of the original repository, containing only my custom plugins and
 - [truyenfull](https://truyenfull.vision)
 - [Valvrareteam](https://valvrareteam.net)
 - [WanwanSekai](https://wanwansekai.com)
-- [ZumiNovel](https://zuminovel.com)
+- [ZumiNovel](https://zuminovel.com)[^1]
 
 [^1]: This plugin is incompatible with the original LNReader as it utilizes new APIs introduced in [LNReader-Extended](https://github.com/Yuneko-dev/lnreader-extended)
 
@@ -31,7 +31,7 @@ https://raw.githubusercontent.com/Yuneko-dev/lnreader-plugins/plugins/v3.0.0/.di
 Plugins in this repository make use of new API functions that are not available in the original LNReader. Below is a (potentially incomplete) list:
 
 - `@libs/aes`: added `cbc`
-- `@libs/utils`: added `utf8ToBytes`, `bytesToUtf8`, `Buffer`
+- `@libs/utils`: added `utf8ToBytes`, `bytesToUtf8`, `Buffer`, `encodeHtmlEntities`, `decodeHtmlEntities`
 - `@libs/fetch`: removed `fetchFile`
 - `@libs/cookie`
 

@@ -4,6 +4,7 @@ import { NovelStatus } from '@libs/novelStatus';
 import { FilterTypes, Filters } from '@libs/filterInputs';
 import { defaultCover } from '@libs/defaultCover';
 import { storage } from '@libs/storage';
+import { decodeHtmlEntities } from '@libs/utils';
 
 const SITE = 'https://zuminovel.com';
 
@@ -56,26 +57,6 @@ function zumiSlugify(input: string): string {
   }
   out = out.replace(/-+/g, '-').replace(/^-+|-+$/g, '');
   return out || '_';
-}
-
-const HTML_ENTITIES: Record<string, string> = {
-  '&nbsp;': ' ',
-  '&amp;': '&',
-  '&lt;': '<',
-  '&gt;': '>',
-  '&quot;': '"',
-  '&#39;': "'",
-  '&#x2F;': '/',
-  '&#x60;': '`',
-  '&#x3D;': '=',
-};
-
-function decodeHtmlEntities(s: string): string {
-  if (!s) return '';
-  return s.replace(
-    new RegExp(Object.keys(HTML_ENTITIES).join('|'), 'gi'),
-    m => HTML_ENTITIES[m.toLowerCase()] ?? m,
-  );
 }
 
 function cleanDescriptionHtml(raw: string): string {
@@ -146,7 +127,7 @@ class ZumiNovelPlugin implements Plugin.PluginBase {
   name = 'ZumiNovel';
   icon = 'src/vi/zuminovel/icon.png';
   site = SITE;
-  version = '1.0.1';
+  version = '1.0.2';
 
   pluginSettings: Plugin.PluginSettings = {
     showRaw: {

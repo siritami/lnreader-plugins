@@ -3,3 +3,4 @@
  * TODO: Remove in 4.0.0
  */
 export { utf8ToBytes, bytesToUtf8, Buffer } from '../lib/utils';
+export { encodeHtmlEntities, decodeHtmlEntities } from '../lib/html-entities';

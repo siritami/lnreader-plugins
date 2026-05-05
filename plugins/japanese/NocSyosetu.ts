@@ -7,12 +7,88 @@ import { NovelStatus } from '@libs/novelStatus';
 import { storage } from '@libs/storage';
 import { get, set } from '@libs/cookie';
 
+const supportedLanguages: Record<string, string> = {
+  auto: 'Auto-detect',
+  af: 'Afrikaans',
+  sq: 'Albanian',
+  ar: 'Arabic',
+  be: 'Belarusian',
+  bn: 'Bengali',
+  bg: 'Bulgarian',
+  ca: 'Catalan',
+  zh: 'Chinese',
+  'zh-CN': 'Chinese (Simplified)',
+  'zh-TW': 'Chinese (Traditional)',
+  hr: 'Croatian',
+  cs: 'Czech',
+  da: 'Danish',
+  nl: 'Dutch',
+  en: 'English',
+  eo: 'Esperanto',
+  et: 'Estonian',
+  fi: 'Finnish',
+  fr: 'French',
+  gl: 'Galician',
+  ka: 'Georgian',
+  de: 'German',
+  el: 'Greek',
+  gu: 'Gujarati',
+  ht: 'Haitian Creole',
+  he: 'Hebrew',
+  hi: 'Hindi',
+  hu: 'Hungarian',
+  is: 'Icelandic',
+  id: 'Indonesian',
+  ga: 'Irish',
+  it: 'Italian',
+  ja: 'Japanese',
+  kn: 'Kannada',
+  ko: 'Korean',
+  lv: 'Latvian',
+  lt: 'Lithuanian',
+  mk: 'Macedonian',
+  mr: 'Marathi',
+  ms: 'Malay',
+  mt: 'Maltese',
+  no: 'Norwegian',
+  fa: 'Persian',
+  pl: 'Polish',
+  pt: 'Portuguese',
+  ro: 'Romanian',
+  ru: 'Russian',
+  sr: 'Serbian',
+  sk: 'Slovak',
+  sl: 'Slovenian',
+  es: 'Spanish',
+  sw: 'Swahili',
+  sv: 'Swedish',
+  tl: 'Tagalog',
+  ta: 'Tamil',
+  te: 'Telugu',
+  th: 'Thai',
+  tr: 'Turkish',
+  uk: 'Ukrainian',
+  ur: 'Urdu',
+  vi: 'Vietnamese',
+  cy: 'Welsh',
+};
+
+const pluginSettingTranslate: Plugin.SelectSetting = {
+  label: 'Language',
+  type: 'Select',
+  options: Object.keys(supportedLanguages).map(key => ({
+    value: key,
+    label: supportedLanguages[key],
+  })),
+  value: 'en',
+};
+
 class NocSyosetu implements Plugin.PagePlugin {
   id = 'noc.syosetu';
   name = 'NocSyosetu';
   icon = 'src/jp/nocsyosetu/icon.png';
   site = 'https://noc.syosetu.com/';
-  version = '1.1.11';
+  version = '1.1.12';
   headers = {
     'User-Agent':
       'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
@@ -22,14 +98,10 @@ class NocSyosetu implements Plugin.PagePlugin {
   pluginSettings: Plugin.PluginSettings = {
     nocsyosetu_translate: {
       value: false,
-      label: 'Translate Titles & Summaries (Google Translate) - EN Default',
+      label: 'Translate Titles & Summaries (Google Translate)',
       type: 'Switch',
     },
-    nocsyosetu_translateLang: {
-      value: 'en',
-      label: 'Language (e.g: en, vi, th, ...)',
-      type: 'Text',
-    },
+    nocsyosetu_translateLang: pluginSettingTranslate,
   };
 
   async preFetch(url: string) {

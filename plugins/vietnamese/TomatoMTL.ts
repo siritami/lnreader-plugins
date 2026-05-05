@@ -5,7 +5,7 @@ import { NovelStatus } from '@libs/novelStatus';
 import { FilterTypes, Filters } from '@libs/filterInputs';
 import { defaultCover } from '@libs/defaultCover';
 import { storage } from '@libs/storage';
-import { Buffer } from '@libs/utils';
+import { Buffer, decodeHtmlEntities, encodeHtmlEntities } from '@libs/utils';
 import { cbc } from '@libs/aes';
 
 const SITE = 'https://tomatomtl.com';
@@ -45,28 +45,106 @@ type EncryptedPayload = {
   enc: string;
 };
 
+const supportedLanguages: Record<string, string> = {
+  auto: 'Auto-detect',
+  af: 'Afrikaans',
+  sq: 'Albanian',
+  ar: 'Arabic',
+  be: 'Belarusian',
+  bn: 'Bengali',
+  bg: 'Bulgarian',
+  ca: 'Catalan',
+  zh: 'Chinese',
+  'zh-CN': 'Chinese (Simplified)',
+  'zh-TW': 'Chinese (Traditional)',
+  hr: 'Croatian',
+  cs: 'Czech',
+  da: 'Danish',
+  nl: 'Dutch',
+  en: 'English',
+  eo: 'Esperanto',
+  et: 'Estonian',
+  fi: 'Finnish',
+  fr: 'French',
+  gl: 'Galician',
+  ka: 'Georgian',
+  de: 'German',
+  el: 'Greek',
+  gu: 'Gujarati',
+  ht: 'Haitian Creole',
+  he: 'Hebrew',
+  hi: 'Hindi',
+  hu: 'Hungarian',
+  is: 'Icelandic',
+  id: 'Indonesian',
+  ga: 'Irish',
+  it: 'Italian',
+  ja: 'Japanese',
+  kn: 'Kannada',
+  ko: 'Korean',
+  lv: 'Latvian',
+  lt: 'Lithuanian',
+  mk: 'Macedonian',
+  mr: 'Marathi',
+  ms: 'Malay',
+  mt: 'Maltese',
+  no: 'Norwegian',
+  fa: 'Persian',
+  pl: 'Polish',
+  pt: 'Portuguese',
+  ro: 'Romanian',
+  ru: 'Russian',
+  sr: 'Serbian',
+  sk: 'Slovak',
+  sl: 'Slovenian',
+  es: 'Spanish',
+  sw: 'Swahili',
+  sv: 'Swedish',
+  tl: 'Tagalog',
+  ta: 'Tamil',
+  te: 'Telugu',
+  th: 'Thai',
+  tr: 'Turkish',
+  uk: 'Ukrainian',
+  ur: 'Urdu',
+  vi: 'Vietnamese',
+  cy: 'Welsh',
+};
+
+const pluginSettingTranslate: Plugin.SelectSetting = {
+  label: 'Language',
+  type: 'Select',
+  options: Object.keys(supportedLanguages).map(key => ({
+    value: key,
+    label: supportedLanguages[key],
+  })),
+  value: 'en',
+};
+
 class TomatoMTLPlugin implements Plugin.PluginBase {
   id = 'tomatomtl';
   name = 'TomatoMTL';
   icon = 'src/vi/tomatomtl/icon.png';
   site = SITE;
-  version = '1.0.0';
+  version = '1.0.1';
   webStorageUtilized = true;
 
   pluginSettings: Plugin.PluginSettings = {
-    translateToVietnamese: {
-      type: 'Switch',
-      label: 'Dịch sang tiếng Việt',
+    translate: {
       value: false,
+      label: 'Translate Titles (Google Translate)',
+      type: 'Switch',
     },
+    translateLang: pluginSettingTranslate,
   };
 
   // ─── Setting accessors ──────────────────────────────
-  get translateToVietnamese(): boolean {
-    const v = storage.get('translateToVietnamese');
-    if (v === undefined || v === null) return false;
-    if (typeof v === 'string') return v === 'true' || v === '1';
-    return Boolean(v);
+  get translate(): boolean {
+    return storage.get('translate');
+  }
+
+  get translateLang(): string {
+    return storage.get('translateLang') || 'en';
   }
 
   // ─── Cookie / session management ───────────────────────────
@@ -150,16 +228,20 @@ class TomatoMTLPlugin implements Plugin.PluginBase {
       // Drain the body so the underlying connection is released.
       await res.text();
     } catch {
+      //
     }
   }
 
   // ─── AES-128-CBC decryption matching the site's chapter_decrypt() ─────
-  private decryptPayload(unlockCode: string, payload: EncryptedPayload): string {
+  private decryptPayload(
+    unlockCode: string,
+    payload: EncryptedPayload,
+  ): string {
     const keyBytes = base64ToBytes(unlockCode).subarray(0, 16);
     const ivBytes = base64ToBytes(payload.iv);
     const encBytes = base64ToBytes(payload.enc);
     const decrypted = cbc(keyBytes, ivBytes).decrypt(encBytes);
-    return bytesToUtf8(decrypted);
+    return new TextDecoder('utf-8').decode(decrypted);
   }
 
   private extractInlineString(html: string, name: string): string {
@@ -183,11 +265,11 @@ class TomatoMTLPlugin implements Plugin.PluginBase {
   private async translateNovelNames(
     novels: Plugin.NovelItem[],
   ): Promise<Plugin.NovelItem[]> {
-    if (!novels.length) return novels;
+    if (!novels.length || !this.translate) return novels;
 
     const names = novels.map(n => n.name);
     try {
-      const translated = await this.translateGoogle(names, 'vi');
+      const translated = await this.translateGoogle(names, this.translateLang);
       if (translated.length === names.length) {
         return novels.map((n, i) => ({
           ...n,
@@ -195,6 +277,7 @@ class TomatoMTLPlugin implements Plugin.PluginBase {
         }));
       }
     } catch {
+      //
     }
     return novels;
   }
@@ -270,12 +353,9 @@ class TomatoMTLPlugin implements Plugin.PluginBase {
       page_index: String(Math.max(0, pageNo - 1)),
       page_count: '18',
       gender: (filters?.gender?.value as string) || '-1',
-      creation_status:
-        (filters?.creation_status?.value as string) || '-1',
+      creation_status: (filters?.creation_status?.value as string) || '-1',
       word_count: (filters?.word_count?.value as string) || '-1',
-      sort: showLatestNovels
-        ? '1'
-        : ((filters?.sort?.value as string) || '0'),
+      sort: showLatestNovels ? '1' : (filters?.sort?.value as string) || '0',
       category_id: (filters?.category_id?.value as string) || '-1',
     });
 
@@ -289,6 +369,9 @@ class TomatoMTLPlugin implements Plugin.PluginBase {
     if (cookieHeader) headers.Cookie = cookieHeader;
 
     const res = await fetchApi(url, { headers });
+    if (!res.ok) {
+      throw new Error('Mở plugin này trong WebView của LNReader để bỏ qua Cloudflare');
+    }
     this.absorbSetCookie(res.headers.get('set-cookie'));
 
     const data = (await res.json().catch(() => null)) as {
@@ -299,8 +382,7 @@ class TomatoMTLPlugin implements Plugin.PluginBase {
     const novels = data.books
       .filter(b => b && b.book_id)
       .map(book => ({
-        name:
-          String(book.book_name || '').trim() || `#${book.book_id}`,
+        name: String(book.book_name || '').trim() || `#${book.book_id}`,
         path: `/book/${book.book_id}`,
         cover: normalizeCoverUrl(book.thumb_url) || defaultCover,
       }));
@@ -357,8 +439,7 @@ class TomatoMTLPlugin implements Plugin.PluginBase {
           if (!id || seen.has(id)) continue;
           seen.add(id);
           novels.push({
-            name:
-              String(book.book_name || '').trim() || `#${id}`,
+            name: String(book.book_name || '').trim() || `#${id}`,
             path: `/book/${id}`,
             cover: normalizeCoverUrl(book.thumb_url) || defaultCover,
           });
@@ -373,9 +454,7 @@ class TomatoMTLPlugin implements Plugin.PluginBase {
     const bookId = extractBookId(novelPath);
     if (!bookId) throw new Error(`Invalid novel path: ${novelPath}`);
 
-    const { html } = await this.fetchHtml(
-      `${SITE}/book/${bookId}`,
-    );
+    const { html } = await this.fetchHtml(`${SITE}/book/${bookId}`);
     const $ = parseHTML(html);
 
     // The inline script has the original Chinese title as `book_name`.
@@ -393,8 +472,9 @@ class TomatoMTLPlugin implements Plugin.PluginBase {
 
     let novelName = chineseName || fallbackName || `#${bookId}`;
     try {
-      const [viName] = await this.translateGoogle([novelName], 'vi');
-      if (viName) novelName = viName;
+      if (!this.translate) throw new Error('Translation disabled');
+      const [translateName] = await this.translateGoogle([novelName], this.translateLang);
+      if (translateName) novelName = translateName;
     } catch {
       // Keep original name if translation fails
     }
@@ -406,8 +486,10 @@ class TomatoMTLPlugin implements Plugin.PluginBase {
 
     // Extract cover from inline JS `book_cover` variable (direct byteimg URL)
     // or fall back to the HTML element / og:image.
-    const inlineCover = this.extractInlineString(html, 'book_cover')
-      .replace(/\\\//g, '/');
+    const inlineCover = this.extractInlineString(html, 'book_cover').replace(
+      /\\\//g,
+      '/',
+    );
     const coverEl = $('#book_cover').first();
     novel.cover =
       normalizeCoverUrl(inlineCover) ||
@@ -552,7 +634,9 @@ class TomatoMTLPlugin implements Plugin.PluginBase {
     try {
       parsed = JSON.parse(plaintext);
     } catch {
-      throw new Error('Danh sách chương sau khi giải mã không phải JSON hợp lệ.');
+      throw new Error(
+        'Danh sách chương sau khi giải mã không phải JSON hợp lệ.',
+      );
     }
 
     const entries: { id: string; title: string }[] = [];
@@ -584,7 +668,8 @@ class TomatoMTLPlugin implements Plugin.PluginBase {
     const titles = entries.map(e => e.title);
     let translatedTitles = titles;
     try {
-      const result = await this.translateChunked(titles, 'vi');
+      if (!this.translate) throw new Error('Translation disabled');
+      const result = await this.translateChunked(titles, this.translateLang);
       if (result.length === titles.length) translatedTitles = result;
     } catch {
       // Fall back to original Chinese titles
@@ -640,8 +725,7 @@ class TomatoMTLPlugin implements Plugin.PluginBase {
 
     const $ = parseHTML(html);
     const chapterTitle =
-      $('#chapter_title').first().text().trim() ||
-      $('title').text().trim();
+      $('#chapter_title').first().text().trim() || $('title').text().trim();
 
     // The decrypted blob is plain Chinese text with `\n` paragraph breaks.
     const rawLines = plaintext
@@ -655,32 +739,13 @@ class TomatoMTLPlugin implements Plugin.PluginBase {
       throw new Error('Nội dung chương rỗng sau khi giải mã.');
     }
 
-    let translatedLines: string[] | null = null;
-    if (this.translateToVietnamese) {
-      try {
-        translatedLines = await this.translateChunked(
-          rawLines,
-          'vi',
-        );
-      } catch (err) {
-        console.warn('TomatoMTL: translation failed, returning raw text', err);
-        translatedLines = null;
-      }
-    }
-
     const out: string[] = [];
     if (chapterTitle) {
-      out.push(`<h2>${escapeHtml(chapterTitle)}</h2>`);
+      out.push(`<h2>${encodeHtmlEntities(chapterTitle)}</h2>`);
     }
 
-    if (translatedLines && translatedLines.length === rawLines.length) {
-      for (let i = 0; i < rawLines.length; i++) {
-        out.push(`<p>${escapeHtml(translatedLines[i] || rawLines[i])}</p>`);
-      }
-    } else {
-      for (const line of rawLines) {
-        out.push(`<p>${escapeHtml(line)}</p>`);
-      }
+    for (const line of rawLines) {
+      out.push(`<p>${encodeHtmlEntities(line)}</p>`);
     }
 
     return out.join('\n');
@@ -761,39 +826,6 @@ function base64ToBytes(b64: string): Uint8Array {
   let s = (b64 || '').replace(/-/g, '+').replace(/_/g, '/').replace(/\s+/g, '');
   while (s.length % 4) s += '=';
   return new Uint8Array(Buffer.from(s, 'base64'));
-}
-
-function bytesToUtf8(bytes: Uint8Array): string {
-  return new TextDecoder('utf-8').decode(bytes);
-}
-
-function escapeHtml(text: string): string {
-  return String(text).replace(/[&<>"']/g, ch => {
-    switch (ch) {
-      case '&':
-        return '&amp;';
-      case '<':
-        return '&lt;';
-      case '>':
-        return '&gt;';
-      case '"':
-        return '&quot;';
-      case "'":
-        return '&#39;';
-      default:
-        return ch;
-    }
-  });
-}
-
-function decodeHtmlEntities(str: string): string {
-  return str
-    .replace(/&amp;/g, '&')
-    .replace(/&lt;/g, '<')
-    .replace(/&gt;/g, '>')
-    .replace(/&quot;/g, '"')
-    .replace(/&#39;/g, "'")
-    .replace(/&nbsp;/g, ' ');
 }
 
 export default new TomatoMTLPlugin();

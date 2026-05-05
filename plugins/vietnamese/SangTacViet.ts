@@ -8,6 +8,7 @@ import { FilterTypes, Filters } from '@libs/filterInputs';
 import { defaultCover } from '@libs/defaultCover';
 import { storage } from '@libs/storage';
 import { get, set, setFromResponse, removeSessionCookies } from '@libs/cookie';
+import { decodeHtmlEntities } from '@libs/utils';
 
 const SITE = 'https://sangtacviet.app';
 
@@ -265,13 +266,7 @@ function normalizeInterlinear(raw: string): string {
     '\n',
   );
   t = t.replace(/<[^>]+>/g, '').replace(/[<>]/g, '');
-  t = t
-    .replace(/&nbsp;/gi, ' ')
-    .replace(/&quot;/gi, '"')
-    .replace(/&#39;/gi, "'")
-    .replace(/&lt;/gi, '<')
-    .replace(/&gt;/gi, '>')
-    .replace(/&amp;/gi, '&');
+  t = decodeHtmlEntities(t);
   t = t.replace(new RegExp(marker, 'g'), ' ');
   t = t.replace(/[\t\f\v ]+/g, ' ');
   t = t.replace(
@@ -346,25 +341,6 @@ function wrapWithParagraphs(rawText: string): string {
   return htmlResult;
 }
 
-function decodeHTMLEntities(str: string) {
-  const entities = {
-    '&amp;': '&',
-    '&lt;': '<',
-    '&gt;': '>',
-    '&quot;': '"',
-    '&#39;': "'",
-    '&#x2F;': '/',
-    '&#x60;': '`',
-    '&#x3D;': '=',
-    '&nbsp;': ' ',
-  };
-
-  return str.replace(
-    new RegExp(Object.keys(entities).join('|'), 'g'),
-    match => entities[match as keyof typeof entities],
-  );
-}
-
 class STVChapterError extends Error {
   public errorCode: number;
   public raw: any;
@@ -393,7 +369,7 @@ class SangTacVietPlugin implements Plugin.PluginBase {
   get site() {
     return DOMAINS[this.selectedDomain] || SITE;
   }
-  version = '1.0.14';
+  version = '1.0.15';
   webStorageUtilized = true;
 
   pluginSettings: Plugin.PluginSettings = {
@@ -690,7 +666,7 @@ class SangTacVietPlugin implements Plugin.PluginBase {
       .filter(g => g)
       .join(',')}`;
 
-    novel.summary = decodeHTMLEntities(novel.summary || '');
+    novel.summary = decodeHtmlEntities(novel.summary || '');
 
     return novel;
   }
