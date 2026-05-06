@@ -518,7 +518,7 @@ class AnimeVietsubPlugin implements Plugin.PluginBase {
     const attrs: string[] = ['id="avs-player-container"'];
     if (opts.m3u8) attrs.push(`data-m3u8="${esc(opts.m3u8)}"`);
     if (opts.sources)
-      attrs.push(`data-sources='${JSON.stringify(opts.sources)}'`);
+      attrs.push(`data-sources="${esc(JSON.stringify(opts.sources))}"`);
     if (opts.iframe) attrs.push(`data-iframe="${esc(opts.iframe)}"`);
     if (opts.hash) attrs.push(`data-hash="${esc(opts.hash)}"`);
     if (opts.id) attrs.push(`data-id="${esc(opts.id)}"`);
