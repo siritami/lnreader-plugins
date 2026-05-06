@@ -4,8 +4,8 @@
  * Runs inside the WebView/browser context after parseChapter returns HTML.
  *
  * Priority:
- *   1. data-m3u8  → direct HLS.js playback
- *   2. data-embed → embed iframe fallback
+ *   1. data-embed → embed iframe (most reliable)
+ *   2. data-m3u8  → direct HLS.js playback (fallback)
  */
 (function () {
   'use strict';
@@ -16,19 +16,23 @@
   var inner = document.getElementById('nguonc-player-inner');
   if (!inner) return;
 
-  // ─── Priority 1: direct m3u8 URL ──────────────────────────────
+  // ─── Priority 1: embed iframe (most reliable) ────────────────
+  var embed = container.getAttribute('data-embed');
+  if (embed) {
+    console.log('[NguonC] Embedding iframe:', embed.substring(0, 80));
+    inner.innerHTML =
+      '<iframe src="' +
+      escapeAttr(embed) +
+      '" style="width:100%;height:100%;border:none;" ' +
+      'allowfullscreen allow="autoplay; fullscreen; encrypted-media"></iframe>';
+    return;
+  }
+
+  // ─── Priority 2: direct m3u8 URL (fallback) ─────────────────
   var m3u8 = container.getAttribute('data-m3u8');
   if (m3u8) {
     console.log('[NguonC] Playing m3u8:', m3u8.substring(0, 80) + '…');
     buildVideoPlayer(inner, [{ file: m3u8, type: 'hls' }]);
-    return;
-  }
-
-  // ─── Priority 2: embed iframe ─────────────────────────────────
-  var embed = container.getAttribute('data-embed');
-  if (embed) {
-    console.log('[NguonC] Embedding iframe:', embed.substring(0, 80));
-    showEmbed(inner, embed);
     return;
   }
 
@@ -46,14 +50,6 @@
 
   function escapeAttr(s) {
     return s.replace(/&/g, '&amp;').replace(/"/g, '&quot;');
-  }
-
-  function showEmbed(target, url) {
-    target.innerHTML =
-      '<iframe src="' +
-      escapeAttr(url) +
-      '" style="width:100%;height:100%;border:none;" ' +
-      'allowfullscreen allow="autoplay; fullscreen; encrypted-media"></iframe>';
   }
 
   // ─── Video player builder ────────────────────────────────────
@@ -90,9 +86,6 @@
     if (hlsSources.length > 0) {
       loadHlsJs(function () {
         if (typeof Hls !== 'undefined' && Hls.isSupported()) {
-          var networkRetries = 0;
-          var MAX_RETRIES = 2;
-
           var hls = new Hls({
             maxBufferLength: 30,
             maxMaxBufferLength: 60,
@@ -108,23 +101,13 @@
           hls.on(Hls.Events.ERROR, function (event, data) {
             console.error('[NguonC HLS] error:', data.type, data.details);
             if (data.fatal) {
-              if (
-                data.type === Hls.ErrorTypes.NETWORK_ERROR &&
-                networkRetries < MAX_RETRIES
-              ) {
-                networkRetries++;
-                console.log(
-                  '[NguonC HLS] network error, retry ' +
-                    networkRetries +
-                    '/' +
-                    MAX_RETRIES,
-                );
+              if (data.type === Hls.ErrorTypes.NETWORK_ERROR) {
+                console.log('[NguonC HLS] network error, retrying…');
                 hls.startLoad();
               } else if (data.type === Hls.ErrorTypes.MEDIA_ERROR) {
                 console.log('[NguonC HLS] media error, recovering…');
                 hls.recoverMediaError();
               } else {
-                console.log('[NguonC HLS] fatal error, falling back…');
                 hls.destroy();
                 fallbackToEmbed(target);
               }
@@ -141,7 +124,7 @@
           target.innerHTML = '';
           target.appendChild(video);
         } else {
-          showError('Trình duyệt không hỗ trợ phát HLS.');
+          fallbackToEmbed(target);
         }
       });
     } else {
@@ -155,7 +138,11 @@
     var embedUrl = container.getAttribute('data-embed');
     if (embedUrl) {
       console.log('[NguonC] Falling back to embed iframe');
-      showEmbed(target, embedUrl);
+      target.innerHTML =
+        '<iframe src="' +
+        escapeAttr(embedUrl) +
+        '" style="width:100%;height:100%;border:none;" ' +
+        'allowfullscreen allow="autoplay; fullscreen; encrypted-media"></iframe>';
     } else {
       showError('Lỗi phát video.');
     }
