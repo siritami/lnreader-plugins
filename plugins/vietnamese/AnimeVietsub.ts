@@ -154,7 +154,6 @@ class AnimeVietsubPlugin implements Plugin.PluginBase {
     const $ = loadCheerio(html);
     const seen = new Set<string>();
 
-    // Standard list: .MovieList .TPostMv
     $('.TPostMv').each((_, el) => {
       const $el = $(el);
       const $a = $el.find('article a').first();
@@ -177,7 +176,6 @@ class AnimeVietsubPlugin implements Plugin.PluginBase {
       }
     });
 
-    // Ranking list: .row-display .e-item
     if (novels.length === 0) {
       $('.e-item, .row-display').each((_, el) => {
         const $el = $(el);
@@ -207,7 +205,6 @@ class AnimeVietsubPlugin implements Plugin.PluginBase {
     isRanking: boolean,
   ): string {
     if (isRanking) {
-      // Ranking pages do not paginate — only return base for page 1
       return SITE + base;
     }
     if (page <= 1) return SITE + base;
