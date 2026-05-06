@@ -2,8 +2,9 @@ This is a fork of the original repository, containing only my custom plugins and
 
 ### Included sources:
 
+#### Novel
+
 - [Akaytruyen](https://akaytruyen.com)
-- [BaoMoi](https://baomoi.com)
 - [DocTruyenLN](https://quykiep.com)
 - [Hako Novel](https://ln.hako.vn)[^1]
 - [JukaNovel](https://jukaza.site)[^1]
@@ -18,6 +19,14 @@ This is a fork of the original repository, containing only my custom plugins and
 - [Valvrareteam](https://valvrareteam.net)
 - [WanwanSekai](https://wanwansekai.com)
 - [ZumiNovel](https://zuminovel.com)[^1]
+
+#### Streaming
+
+- [AnimeVietsub](https://animevietsub.bz)[^1]
+
+#### News
+
+- [BaoMoi](https://baomoi.com)
 
 [^1]: This plugin is incompatible with the original LNReader as it utilizes new APIs introduced in [LNReader-Extended](https://github.com/Yuneko-dev/lnreader-extended)
 

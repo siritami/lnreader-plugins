@@ -8,7 +8,7 @@ import { NovelStatus } from '@libs/novelStatus';
 const SITE = 'https://animevietsub.bz';
 
 class AnimeVietsubPlugin implements Plugin.PluginBase {
-  id = 'animevietsub.bz';
+  id = 'animevietsub';
   name = 'AnimeVietsub';
   icon = 'src/vi/animevietsub/icon.png';
   site = SITE;
