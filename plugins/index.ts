@@ -16,6 +16,7 @@ import p_13 from '@plugins/vietnamese/valvrareteam';
 import p_14 from '@plugins/vietnamese/wanwansekai';
 import p_15 from '@plugins/vietnamese/ZumiNovel';
 import p_16 from '@plugins/vietnamese/TomatoMTL';
+import p_17 from '@plugins/vietnamese/NguonC';
 
 const PLUGINS: Plugin.PluginBase[] = [
   p_0,
@@ -35,5 +36,6 @@ const PLUGINS: Plugin.PluginBase[] = [
   p_14,
   p_15,
   p_16,
+  p_17,
 ];
 export default PLUGINS;
