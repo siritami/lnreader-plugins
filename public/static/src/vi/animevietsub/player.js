@@ -289,7 +289,7 @@
       return;
     }
     var script = document.createElement('script');
-    script.src = 'https://cdn.jsdelivr.net/npm/hls.js@latest/dist/hls.min.js';
+    script.src = 'https://cdn.jsdelivr.net/npm/hls.js@1.6.16/dist/hls.min.js';
     script.onload = function () {
       console.log('[AVS] HLS.js loaded');
       callback();
