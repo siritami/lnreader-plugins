@@ -14,6 +14,8 @@ class AnimeVietsubPlugin implements Plugin.PluginBase {
   site = SITE;
   version = '1.0.0';
 
+  customJS = 'src/vi/animevietsub/player.js';
+
   imageRequestInit: Plugin.ImageRequestInit = {
     headers: {
       Referer: SITE + '/',
@@ -382,6 +384,8 @@ class AnimeVietsubPlugin implements Plugin.PluginBase {
   }
 
   // ---------- parseChapter ----------
+  // Extracts data-hash/data-id from episode page.
+  // Actual video loading is handled by customJS (player.js) in WebView context.
 
   async parseChapter(chapterPath: string): Promise<string> {
     const url = SITE + chapterPath;
@@ -394,7 +398,6 @@ class AnimeVietsubPlugin implements Plugin.PluginBase {
       `a.btn-episode.episode-link[href$="${cleanPath}"], a.btn-episode.episode-link[href*="${cleanPath}"]`,
     ).first();
     if ($link.length === 0) {
-      // Fallback: active episode in the AnimeVsub server group
       $link = $('#list-server .server-group')
         .filter((_, el) =>
           /AnimeVsub/i.test($(el).find('.server-name').text()),
@@ -405,98 +408,37 @@ class AnimeVietsubPlugin implements Plugin.PluginBase {
     if ($link.length === 0) {
       $link = $('a.btn-episode.episode-link.active').first();
     }
-    if ($link.length === 0) {
-      return '<p>Không tìm thấy thông tin tập phim. Vui lòng mở trực tiếp trên trang web.</p>';
-    }
 
     const dataHash = $link.attr('data-hash') || '';
     const dataId = $link.attr('data-id') || '';
 
     if (!dataHash) {
-      return '<p>Không tìm thấy mã tập phim (data-hash).</p>';
+      // Fallback: embed the episode page directly in an iframe
+      return [
+        '<div style="position:relative;width:100%;padding-bottom:56.25%;background:#000;">',
+        '  <iframe',
+        `    src="${url}"`,
+        '    style="position:absolute;top:0;left:0;width:100%;height:100%;border:none;"',
+        '    allowfullscreen allow="autoplay; fullscreen"></iframe>',
+        '</div>',
+      ].join('\n');
     }
 
-    const body = new URLSearchParams();
-    body.append('link', dataHash);
-    if (dataId) body.append('id', dataId);
-
-    const res = await fetchApi(`${SITE}/ajax/player`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
-        'X-Requested-With': 'XMLHttpRequest',
-        Accept: 'application/json, text/javascript, */*; q=0.01',
-        Referer: url,
-      },
-      body: body.toString(),
-    });
-
-    let json: {
-      success?: number;
-      playTech?: string;
-      link?: string | any[];
-      title?: string;
-    } | null = null;
-    try {
-      json = await res.json();
-    } catch (e) {
-      const text = await res.text().catch(() => '');
-      console.warn('AnimeVietsub: non-JSON player response', text.slice(0, 200));
-    }
-
-    if (!json || !json.success) {
-      return '<p>Không lấy được link phát. Vui lòng thử lại sau.</p>';
-    }
-
-    const title =
-      json.title ||
-      $link.attr('title') ||
-      `Tập ${$link.text().trim()}`;
-
-    let playerHtml = '';
-    if (json.playTech === 'iframe' && typeof json.link === 'string') {
-      playerHtml = `<iframe src="${json.link}" width="100%" height="100%" frameborder="0" scrolling="no" allowfullscreen allow="autoplay; fullscreen"></iframe>`;
-    } else if (
-      (json.playTech === 'api' ||
-        json.playTech === 'all' ||
-        json.playTech === 'embed') &&
-      Array.isArray(json.link)
-    ) {
-      // List of source files (m3u8/mp4) — render <video> with <source>s
-      const sources = json.link as Array<{
-        file?: string;
-        type?: string;
-        label?: string;
-      }>;
-      const sourceTags = sources
-        .map(s => {
-          const file = (s.file || '').replace(/^&http/, 'http');
-          if (!file) return '';
-          const type =
-            s.type === 'hls' || /\.m3u8(\?|$)/i.test(file)
-              ? 'application/x-mpegURL'
-              : s.type
-                ? `video/${s.type}`
-                : 'video/mp4';
-          return `<source src="${file}" type="${type}" />`;
-        })
-        .filter(Boolean)
-        .join('');
-      playerHtml = `<video controls width="100%" height="100%" playsinline>${sourceTags}Trình duyệt của bạn không hỗ trợ thẻ video.</video>`;
-    } else if (json.playTech === 'embed' && typeof json.link === 'string') {
-      playerHtml = `<video controls width="100%" height="100%" playsinline><source src="${json.link}" /></video>`;
-    } else if (typeof json.link === 'string') {
-      playerHtml = `<iframe src="${json.link}" width="100%" height="100%" frameborder="0" scrolling="no" allowfullscreen allow="autoplay; fullscreen"></iframe>`;
-    } else {
-      return '<p>Định dạng phát không được hỗ trợ.</p>';
-    }
-
-    // Wrap player in a 16:9 responsive container without any extra text body.
-    return `<div style="position:relative;width:100%;padding-bottom:56.25%;background:#000;">
-  <div style="position:absolute;top:0;left:0;width:100%;height:100%;">
-    ${playerHtml}
-  </div>
-</div>`;
+    // Return a container with data attributes.
+    // customJS (player.js) will read these, call /ajax/player from the
+    // WebView context (which has cookies/session), and build the player.
+    return [
+      '<div id="avs-player-container"',
+      `  data-hash="${dataHash}"`,
+      `  data-id="${dataId}"`,
+      `  data-referer="${url}"`,
+      `  data-site="${SITE}"`,
+      '  style="position:relative;width:100%;padding-bottom:56.25%;background:#000;">',
+      '  <div id="avs-player-inner" style="position:absolute;top:0;left:0;width:100%;height:100%;display:flex;align-items:center;justify-content:center;">',
+      '    <p style="color:#fff;font-family:sans-serif;">Đang tải video...</p>',
+      '  </div>',
+      '</div>',
+    ].join('\n');
   }
 }
 
