@@ -5,8 +5,8 @@ import { defaultCover } from '@libs/defaultCover';
 import { NovelStatus } from '@libs/novelStatus';
 import { encodeHtmlEntities } from '@libs/utils';
 
-const API_BASE = 'https://phim.nguonc.com/api';
 const SITE = 'https://phim.nguonc.com';
+const API_BASE = SITE + '/api';
 
 class NguonCPlugin implements Plugin.PluginBase {
   id = 'nguonc';
@@ -192,7 +192,6 @@ class NguonCPlugin implements Plugin.PluginBase {
       author: movie.director || '',
     };
 
-    // Extract genres from category
     const genres: string[] = [];
     if (movie.category) {
       for (const key of Object.keys(movie.category)) {
@@ -206,7 +205,6 @@ class NguonCPlugin implements Plugin.PluginBase {
     }
     if (genres.length) novel.genres = genres.join(', ');
 
-    // Status
     const currentEp = movie.current_episode || '';
     if (/full/i.test(currentEp)) {
       novel.status = NovelStatus.Completed;
@@ -225,7 +223,6 @@ class NguonCPlugin implements Plugin.PluginBase {
       novel.status = isAiring ? NovelStatus.Ongoing : NovelStatus.Unknown;
     }
 
-    // Chapters from episodes (use first server)
     const chapters: Plugin.ChapterItem[] = [];
     if (movie.episodes && movie.episodes.length > 0) {
       const server = movie.episodes[0];
