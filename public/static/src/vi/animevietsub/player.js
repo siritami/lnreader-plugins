@@ -194,13 +194,39 @@
     if (hlsSources.length > 0) {
       loadHlsJs(function () {
         if (typeof Hls !== 'undefined' && Hls.isSupported()) {
-          var hls = new Hls({
+          // Custom fragment loader: strips 127-byte PNG prefix from each segment
+          // (AnimeVietsub disguises TS segments with a PNG header)
+          var AvsFragLoader = function (config) {
+            var inner = new Hls.DefaultConfig.loader(config);
+            Object.defineProperties(this, {
+              stats: { get: function () { return inner.stats; } },
+              context: { get: function () { return inner.context; } },
+            });
+            this.abort = function () { inner.abort(); };
+            this.destroy = function () { inner.destroy(); };
+            this.load = function (ctx, cfg, cbs) {
+              var origSuccess = cbs.onSuccess;
+              var modCbs = Object.assign({}, cbs, {
+                onSuccess: function (resp, stats, ctx2, net) {
+                  if (resp.data && resp.data.byteLength > 127) {
+                    resp.data = resp.data.slice(127);
+                  }
+                  origSuccess(resp, stats, ctx2, net);
+                },
+              });
+              inner.load(ctx, cfg, modCbs);
+            };
+          };
+
+          var hlsCfg = {
             maxBufferLength: 30,
             maxMaxBufferLength: 60,
             xhrSetup: function (xhr) {
               xhr.withCredentials = false;
             },
-          });
+            fLoader: AvsFragLoader,
+          };
+          var hls = new Hls(hlsCfg);
           hls.loadSource(hlsSources[0].file);
           hls.attachMedia(video);
           hls.on(Hls.Events.MANIFEST_PARSED, function () {

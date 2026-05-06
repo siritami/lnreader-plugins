@@ -426,7 +426,7 @@ class AnimeVietsubPlugin implements Plugin.PluginBase {
               const base =
                 pd.link.match(/^(https?:\/\/[^/]+)/)?.[1] ||
                 'https://storage.googleapiscdn.com';
-              const m3u8 = `${base}/playlist/${videoId}/playlist.m3u8?token=${token}`;
+              const m3u8 = `${base}/playlist/${videoId}/playlist.m3u8?token=${encodeURIComponent(token)}&plain=1`;
               return this.buildPlayerHtml({
                 m3u8,
                 referer: pd.link,
