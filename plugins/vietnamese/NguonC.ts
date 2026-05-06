@@ -261,6 +261,7 @@ class NguonCPlugin implements Plugin.PluginBase {
           for (const ep of server.items || []) {
             if (ep.slug === epSlug) {
               return this.buildPlayerHtml({
+                m3u8: ep.m3u8 || '',
                 embed: ep.embed || '',
               });
             }
@@ -277,11 +278,13 @@ class NguonCPlugin implements Plugin.PluginBase {
   // ---------- buildPlayerHtml ----------
 
   private buildPlayerHtml(opts: {
+    m3u8?: string;
     embed?: string;
   }): string {
     const esc = (s: string) => encodeHtmlEntities(s);
 
     const attrs: string[] = ['id="nguonc-player-container"'];
+    if (opts.m3u8) attrs.push(`data-m3u8="${esc(opts.m3u8)}"`);
     if (opts.embed) attrs.push(`data-embed="${esc(opts.embed)}"`);
 
     return [
