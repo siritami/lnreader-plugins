@@ -13,7 +13,7 @@ class AnimeVietsubPlugin implements Plugin.PluginBase {
   name = 'AnimeVietsub';
   icon = 'src/vi/animevietsub/icon.png';
   site = SITE;
-  version = '1.0.0';
+  version = '1.0.1';
 
   customJS = 'src/vi/animevietsub/player.js';
 
@@ -429,6 +429,7 @@ class AnimeVietsubPlugin implements Plugin.PluginBase {
               });
             }
           } catch (_) {
+            //
           }
         }
 
@@ -466,6 +467,7 @@ class AnimeVietsubPlugin implements Plugin.PluginBase {
           return this.buildPlayerHtml({ iframe: pd.link });
         }
       } catch (_) {
+        //
       }
     }
 
@@ -506,7 +508,7 @@ class AnimeVietsubPlugin implements Plugin.PluginBase {
   // ── Helper: build the HTML container for customJS ──
   private buildPlayerHtml(opts: {
     m3u8?: string;
-    sources?: Array<{ file: string; type: string; label: string }>;
+    sources?: { file: string; type: string; label: string }[];
     iframe?: string;
     hash?: string;
     id?: string;
