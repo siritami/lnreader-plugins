@@ -1,9 +1,10 @@
-import { fetchApi, fetchText } from '@libs/fetch';
+import { fetchText } from '@libs/fetch';
 import { Plugin } from '@/types/plugin';
 import { Filters, FilterTypes } from '@libs/filterInputs';
 import { load as loadCheerio } from 'cheerio';
 import { defaultCover } from '@libs/defaultCover';
 import { NovelStatus } from '@libs/novelStatus';
+import { encodeHtmlEntities } from '@libs/utils';
 
 const SITE = 'https://animevietsub.bz';
 
@@ -512,17 +513,12 @@ class AnimeVietsubPlugin implements Plugin.PluginBase {
     referer?: string;
     site?: string;
   }): string {
-    const esc = (s: string) =>
-      s
-        .replace(/&/g, '&amp;')
-        .replace(/"/g, '&quot;')
-        .replace(/'/g, '&#39;')
-        .replace(/</g, '&lt;');
+    const esc = (s: string) => encodeHtmlEntities(s);
 
     const attrs: string[] = ['id="avs-player-container"'];
     if (opts.m3u8) attrs.push(`data-m3u8="${esc(opts.m3u8)}"`);
     if (opts.sources)
-      attrs.push(`data-sources='${JSON.stringify(opts.sources)}'`);
+      attrs.push(`data-sources="${esc(JSON.stringify(opts.sources))}"`);
     if (opts.iframe) attrs.push(`data-iframe="${esc(opts.iframe)}"`);
     if (opts.hash) attrs.push(`data-hash="${esc(opts.hash)}"`);
     if (opts.id) attrs.push(`data-id="${esc(opts.id)}"`);

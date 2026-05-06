@@ -5,95 +5,24 @@ import { defaultCover } from '@libs/defaultCover';
 import { FilterTypes, Filters } from '@libs/filterInputs';
 import { storage } from '@libs/storage';
 
-const supportedLanguages: Record<string, string> = {
-  af: 'Afrikaans',
-  sq: 'Albanian',
-  ar: 'Arabic',
-  be: 'Belarusian',
-  bn: 'Bengali',
-  bg: 'Bulgarian',
-  ca: 'Catalan',
-  zh: 'Chinese',
-  'zh-CN': 'Chinese (Simplified)',
-  'zh-TW': 'Chinese (Traditional)',
-  hr: 'Croatian',
-  cs: 'Czech',
-  da: 'Danish',
-  nl: 'Dutch',
-  en: 'English',
-  eo: 'Esperanto',
-  et: 'Estonian',
-  fi: 'Finnish',
-  fr: 'French',
-  gl: 'Galician',
-  ka: 'Georgian',
-  de: 'German',
-  el: 'Greek',
-  gu: 'Gujarati',
-  ht: 'Haitian Creole',
-  he: 'Hebrew',
-  hi: 'Hindi',
-  hu: 'Hungarian',
-  is: 'Icelandic',
-  id: 'Indonesian',
-  ga: 'Irish',
-  it: 'Italian',
-  ja: 'Japanese',
-  kn: 'Kannada',
-  ko: 'Korean',
-  lv: 'Latvian',
-  lt: 'Lithuanian',
-  mk: 'Macedonian',
-  mr: 'Marathi',
-  ms: 'Malay',
-  mt: 'Maltese',
-  no: 'Norwegian',
-  fa: 'Persian',
-  pl: 'Polish',
-  pt: 'Portuguese',
-  ro: 'Romanian',
-  ru: 'Russian',
-  sr: 'Serbian',
-  sk: 'Slovak',
-  sl: 'Slovenian',
-  es: 'Spanish',
-  sw: 'Swahili',
-  sv: 'Swedish',
-  tl: 'Tagalog',
-  ta: 'Tamil',
-  te: 'Telugu',
-  th: 'Thai',
-  tr: 'Turkish',
-  uk: 'Ukrainian',
-  ur: 'Urdu',
-  vi: 'Vietnamese',
-  cy: 'Welsh',
-};
-
-const pluginSettingTranslate: Plugin.SelectSetting = {
-  label: 'Language',
-  type: 'Select',
-  options: Object.keys(supportedLanguages).map(key => ({
-    value: key,
-    label: supportedLanguages[key],
-  })),
-  value: 'en',
-};
-
 class PixivNovelPlugin implements Plugin.PagePlugin {
   id = 'pixiv.novel';
   name = 'Pixiv Novel';
   icon = 'src/jp/pixivnovel/icon.png';
   site = 'https://www.pixiv.net';
-  version = '1.0.9';
+  version = '1.0.7';
 
   pluginSettings: Plugin.PluginSettings = {
     pixiv_translate: {
       value: false,
-      label: 'Translate Titles & Summaries (Google Translate)',
+      label: 'Translate Titles & Summaries (Google Translate) - EN Default',
       type: 'Switch',
     },
-    pixiv_translateLang: pluginSettingTranslate,
+    pixiv_translateLang: {
+      value: 'en',
+      label: 'Language (e.g: en, vi, th, ...)',
+      type: 'Text',
+    },
   };
 
   get settingPixivTranslate() {
