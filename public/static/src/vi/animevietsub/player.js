@@ -200,7 +200,9 @@
         if (!hasSeekedInitial && video.duration > 0 && window.reader && window.reader.chapter) {
           var initialProgress = window.reader.chapter.progress || 0;
           if (initialProgress > 0 && initialProgress < 100) {
-            video.currentTime = (initialProgress / 100) * video.duration;
+            video.currentTime = Math.floor(
+              (initialProgress / 100) * video.duration,
+            );
           }
           hasSeekedInitial = true;
         }
