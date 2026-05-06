@@ -15,8 +15,6 @@ class NguonCPlugin implements Plugin.PluginBase {
   site = SITE;
   version = '1.0.0';
 
-  customJS = 'src/vi/nguonc/player.js';
-
   filters = {
     category: {
       type: FilterTypes.Picker,
@@ -282,19 +280,18 @@ class NguonCPlugin implements Plugin.PluginBase {
     embed?: string;
   }): string {
     const esc = (s: string) => encodeHtmlEntities(s);
+    const embedUrl = opts.embed ? esc(opts.embed) : '';
 
-    const attrs: string[] = ['id="nguonc-player-container"'];
-    if (opts.m3u8) attrs.push(`data-m3u8="${esc(opts.m3u8)}"`);
-    if (opts.embed) attrs.push(`data-embed="${esc(opts.embed)}"`);
+    if (embedUrl) {
+      return [
+        '<div style="position:relative;width:100%;padding-bottom:56.25%;background:#000;">',
+        `  <iframe src="${embedUrl}" style="position:absolute;top:0;left:0;width:100%;height:100%;border:none;"`,
+        '    allowfullscreen allow="autoplay; fullscreen; encrypted-media"></iframe>',
+        '</div>',
+      ].join('\n');
+    }
 
-    return [
-      `<div ${attrs.join(' ')}`,
-      '  style="position:relative;width:100%;padding-bottom:56.25%;background:#000;">',
-      '  <div id="nguonc-player-inner" style="position:absolute;top:0;left:0;width:100%;height:100%;display:flex;align-items:center;justify-content:center;">',
-      '    <p style="color:#fff;font-family:sans-serif;">Đang tải video...</p>',
-      '  </div>',
-      '</div>',
-    ].join('\n');
+    return '<p style="color:#ff4444;font-family:sans-serif;text-align:center;padding:16px;">Không tìm thấy nguồn phát.</p>';
   }
 
   resolveUrl(path: string, isNovel?: boolean): string {
