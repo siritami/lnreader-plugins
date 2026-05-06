@@ -208,7 +208,6 @@ class AnimeVietsubPlugin implements Plugin.PluginBase {
       return SITE + base;
     }
     if (page <= 1) return SITE + base;
-    // Append trang-N.html
     if (base.endsWith('/')) return SITE + base + `trang-${page}.html`;
     if (base.endsWith('.html'))
       return SITE + base.replace(/\.html$/, `/trang-${page}.html`);
@@ -300,7 +299,6 @@ class AnimeVietsubPlugin implements Plugin.PluginBase {
     });
     if (genres.length) novel.genres = genres.join(', ');
 
-    // Director/Studio as author
     $('.InfoList li').each((_, li) => {
       const label = $(li).find('strong').text().trim();
       if (/Đạo diễn/i.test(label)) {
@@ -430,7 +428,6 @@ class AnimeVietsubPlugin implements Plugin.PluginBase {
               });
             }
           } catch (_) {
-            /* player page fetch failed – fall through */
           }
         }
 
@@ -468,7 +465,6 @@ class AnimeVietsubPlugin implements Plugin.PluginBase {
           return this.buildPlayerHtml({ iframe: pd.link });
         }
       } catch (_) {
-        /* JSON parse failed – fall through */
       }
     }
 
