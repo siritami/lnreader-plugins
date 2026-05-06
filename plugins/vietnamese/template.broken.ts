@@ -1,12 +1,13 @@
 // @ts-nocheck
 
-import { fetchApi, fetchProto, fetchText, fetchFile } from '@libs/fetch';
+import { fetchApi, fetchProto, fetchText } from '@libs/fetch';
 import { Plugin } from '@/types/plugin';
 import { Filters } from '@libs/filterInputs';
 import { load as loadCheerio } from 'cheerio';
 import { defaultCover } from '@libs/defaultCover';
 import { NovelStatus } from '@libs/novelStatus';
 import { storage, localStorage, sessionStorage } from '@libs/storage';
+import { utf8ToBytes, bytesToUtf8, Buffer } from '@libs/utils';
 
 // Thêm ".broken" vào tên file để tránh ext này được build
 class TemplatePlugin implements Plugin.PluginBase {
@@ -62,7 +63,6 @@ class TemplatePlugin implements Plugin.PluginBase {
     // Sử dụng hàm fetchApi giống như fetch Web API thông thường.
     // Ngoài ra thư viện có định nghĩa sẵn một số hàm tiện ích khác như:
     // - fetchText: trả về response dưới dạng text (sử dụng TextDecoder để decode, mặc định utf-8)
-    // - fetchFile: trả về response dưới dạng base64 string (sử dụng Buffer để chuyển đổi)
     // - fetchProto: trả về response dưới dạng object đã được decode, chỉ định kiểu bằng TS.
     novels.push({
       name: `Novel${pageNo}`, // Tên truyện

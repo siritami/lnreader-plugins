@@ -12,7 +12,7 @@ class BaoMoiPlugin implements Plugin.PluginBase {
   name = 'Báo Mới';
   icon = 'src/vi/baomoi/icon.png';
   site = 'https://baomoi.com';
-  version = '1.0.6';
+  version = '1.0.7';
   filters: Filters = {
     page: {
       label: 'Tìm theo trang',
@@ -284,7 +284,7 @@ class BaoMoiPlugin implements Plugin.PluginBase {
         },
       ];
       novel.content =
-        `<h1>${data.title}</h1>\n` +
+        `<h2>${data.title}</h2>\n` +
         data.bodys
           .map((item: any) => {
             switch (item.type) {

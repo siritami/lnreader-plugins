@@ -1,12 +1,13 @@
 // @ts-nocheck
 
-import { fetchApi, fetchProto, fetchText, fetchFile } from '@libs/fetch';
+import { fetchApi, fetchProto, fetchText } from '@libs/fetch';
 import { Plugin } from '@/types/plugin';
 import { Filters } from '@libs/filterInputs';
 import { load as loadCheerio } from 'cheerio';
 import { defaultCover } from '@libs/defaultCover';
 import { NovelStatus } from '@libs/novelStatus';
 import { storage, localStorage, sessionStorage } from '@libs/storage';
+import { utf8ToBytes, bytesToUtf8, Buffer } from '@libs/utils';
 
 // Phần đầu của TemplatePlugin giống như tệp template.ts, có thể xem ở đó...
 // Thêm ".broken" vào tên file để tránh ext này được build

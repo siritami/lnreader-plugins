@@ -4,94 +4,11 @@ import { Plugin } from '@/types/plugin';
 import { NovelStatus } from '@libs/novelStatus';
 import { FilterTypes, Filters } from '@libs/filterInputs';
 import { storage } from '@libs/storage';
-
-const BASE64_ALPHABET =
-  'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
-
-const decodeBase64ToBytes = (encoded: string): number[] => {
-  const normalized = encoded
-    .replace(/-/g, '+')
-    .replace(/_/g, '/')
-    .replace(/\s+/g, '');
-  const padded =
-    normalized.length % 4 === 0
-      ? normalized
-      : normalized + '='.repeat(4 - (normalized.length % 4));
-  const bytes: number[] = [];
-
-  for (let i = 0; i < padded.length; i += 4) {
-    const c1 = BASE64_ALPHABET.indexOf(padded.charAt(i));
-    const c2 = BASE64_ALPHABET.indexOf(padded.charAt(i + 1));
-    const c3Char = padded.charAt(i + 2);
-    const c4Char = padded.charAt(i + 3);
-    const c3 = c3Char === '=' ? 0 : BASE64_ALPHABET.indexOf(c3Char);
-    const c4 = c4Char === '=' ? 0 : BASE64_ALPHABET.indexOf(c4Char);
-
-    if (
-      c1 < 0 ||
-      c2 < 0 ||
-      (c3Char !== '=' && c3 < 0) ||
-      (c4Char !== '=' && c4 < 0)
-    ) {
-      continue;
-    }
-
-    const bitStream = (c1 << 18) | (c2 << 12) | (c3 << 6) | c4;
-    bytes.push((bitStream >> 16) & 255);
-    if (c3Char !== '=') {
-      bytes.push((bitStream >> 8) & 255);
-    }
-    if (c4Char !== '=') {
-      bytes.push(bitStream & 255);
-    }
-  }
-
-  return bytes;
-};
-
-const utf8BytesToString = (bytes: number[]): string => {
-  let out = '';
-  let i = 0;
-
-  while (i < bytes.length) {
-    const c = bytes[i++];
-
-    if (c < 128) {
-      out += String.fromCharCode(c);
-    } else if (c < 224) {
-      out += String.fromCharCode(((c & 31) << 6) | (bytes[i++] & 63));
-    } else if (c < 240) {
-      out += String.fromCharCode(
-        ((c & 15) << 12) | ((bytes[i++] & 63) << 6) | (bytes[i++] & 63),
-      );
-    } else {
-      let codePoint =
-        ((c & 7) << 18) |
-        ((bytes[i++] & 63) << 12) |
-        ((bytes[i++] & 63) << 6) |
-        (bytes[i++] & 63);
-      codePoint -= 65536;
-      out += String.fromCharCode(
-        55296 + (codePoint >> 10),
-        56320 + (codePoint & 1023),
-      );
-    }
-  }
-
-  return out;
-};
-
-function isValidUrl(string: string): boolean {
-  try {
-    new URL(string);
-    return true;
-  } catch (err) {
-    return false;
-  }
-}
+import { bytesToUtf8, Buffer } from '@libs/utils';
+import { isUrlAbsolute } from '@libs/isAbsoluteUrl';
 
 function urlToPath(url: string): string {
-  if (!isValidUrl(url)) {
+  if (!isUrlAbsolute(url)) {
     return url;
   } else {
     const parsed = new URL(url);
@@ -99,20 +16,17 @@ function urlToPath(url: string): string {
   }
 }
 
-const decodeBase64Utf8 = (encoded: string) =>
-  utf8BytesToString(decodeBase64ToBytes(encoded));
-
 const decodeXorChunk = (encoded: string, key: string): string => {
-  const input = decodeBase64ToBytes(encoded);
+  const input = Buffer.from(encoded, 'base64');
   if (!key) {
-    return utf8BytesToString(input);
+    return bytesToUtf8(input);
   }
 
   const output: number[] = [];
   for (let i = 0; i < input.length; i++) {
     output.push(input[i] ^ key.charCodeAt(i % key.length));
   }
-  return utf8BytesToString(output);
+  return bytesToUtf8(new Uint8Array(output));
 };
 
 const parseProtectedChunks = (raw: string): string[] => {
@@ -158,9 +72,12 @@ const decodeProtectedContent = (
     if (mode === 'xor_shuffle') {
       content += decodeXorChunk(payload, key);
     } else if (mode === 'base64_reverse') {
-      content += decodeBase64Utf8(payload.split('').reverse().join(''));
+      content += Buffer.from(
+        payload.split('').reverse().join(''),
+        'base64',
+      ).toString('utf-8');
     } else {
-      content += decodeBase64Utf8(payload);
+      content += Buffer.from(payload, 'base64').toString('utf-8');
     }
   }
 
@@ -192,7 +109,7 @@ class HakoPlugin implements Plugin.PluginBase {
   id = 'ln.hako.vn';
   name = 'Hako Novel';
   icon = 'src/vi/hakolightnovel/icon.png';
-  version = '1.1.43';
+  version = '1.2.1';
 
   pluginSettings: Plugin.PluginSettings = {
     usingDocln: {
@@ -203,7 +120,7 @@ class HakoPlugin implements Plugin.PluginBase {
     showAllChapters: {
       value: false,
       label:
-        'Hiển thị tất cả chương, không chia theo Volume. Tương thích với LNReader gốc.',
+        'Hiển thị tất cả chương, không chia theo Volume. Chương có dạng [{volume_name}]: {chapter_name}',
       type: 'Switch',
     },
     showChapterComments: {
@@ -213,8 +130,7 @@ class HakoPlugin implements Plugin.PluginBase {
     },
     showTitleInfo: {
       value: false,
-      label:
-        'Hiển thị tên Volume, Chapter và thông tin truyện (giống như Hako)',
+      label: 'Hiển thị tên Volume, Chapter và thông tin truyện ở đầu chương',
       type: 'Switch',
     },
   };
