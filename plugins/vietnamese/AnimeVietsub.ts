@@ -5,6 +5,7 @@ import { load as loadCheerio } from 'cheerio';
 import { defaultCover } from '@libs/defaultCover';
 import { NovelStatus } from '@libs/novelStatus';
 import { encodeHtmlEntities } from '@libs/utils';
+import { storage } from '@libs/storage';
 
 const SITE = 'https://animevietsub.bz';
 
@@ -13,9 +14,21 @@ class AnimeVietsubPlugin implements Plugin.PluginBase {
   name = 'AnimeVietsub';
   icon = 'src/vi/animevietsub/icon.png';
   site = SITE;
-  version = '1.0.4';
+  version = '1.0.5';
 
   customJS = 'src/vi/animevietsub/player.js';
+
+  pluginSettings: Plugin.PluginSettings = {
+    disableEmbed: {
+      value: true,
+      label: 'Tắt embed (chỉ phát trực tiếp HLS, không dùng iframe/fallback)',
+      type: 'Switch',
+    },
+  };
+
+  get disableEmbed() {
+    return storage.get('disableEmbed') as boolean;
+  }
 
   imageRequestInit: Plugin.ImageRequestInit = {
     headers: {
@@ -613,12 +626,25 @@ class AnimeVietsubPlugin implements Plugin.PluginBase {
           (pd.playTech === 'api' || pd.playTech === 'all') &&
           Array.isArray(pd.link)
         ) {
-          const sources = pd.link.map((s: any) => ({
-            file: (s.file || '').replace(/^&http/, 'http'),
-            type: s.type || '',
-            label: s.label || '',
-          }));
-          return this.buildPlayerHtml({ sources });
+          // If disableEmbed: only pick m3u8 sources
+          if (this.disableEmbed) {
+            const hlsSource = pd.link.find(
+              (s: any) =>
+                s.type === 'hls' || /\.m3u8(\?|$)/i.test(s.file || ''),
+            );
+            if (hlsSource) {
+              return this.buildPlayerHtml({
+                m3u8: (hlsSource.file || '').replace(/^&http/, 'http'),
+              });
+            }
+          } else {
+            const sources = pd.link.map((s: any) => ({
+              file: (s.file || '').replace(/^&http/, 'http'),
+              type: s.type || '',
+              label: s.label || '',
+            }));
+            return this.buildPlayerHtml({ sources });
+          }
         }
 
         // Case C: api / all with single string link
@@ -630,20 +656,29 @@ class AnimeVietsubPlugin implements Plugin.PluginBase {
           if (/\.m3u8(\?|$)/i.test(link)) {
             return this.buildPlayerHtml({ m3u8: link, referer: url });
           }
-          if (/\.(mp4|webm)(\?|$)/i.test(link)) {
+          if (!this.disableEmbed && /\.(mp4|webm)(\?|$)/i.test(link)) {
             return this.buildPlayerHtml({
               sources: [{ file: link, type: 'mp4', label: '' }],
             });
           }
         }
 
-        // Case D: iframe to non-googleapiscdn player
-        if (pd.playTech === 'iframe' && typeof pd.link === 'string') {
+        // Case D: iframe to non-googleapiscdn player (only when embed allowed)
+        if (
+          !this.disableEmbed &&
+          pd.playTech === 'iframe' &&
+          typeof pd.link === 'string'
+        ) {
           return this.buildPlayerHtml({ iframe: pd.link });
         }
       } catch (_) {
         //
       }
+    }
+
+    // When disableEmbed is on, don't fall back to hash/iframe
+    if (this.disableEmbed) {
+      throw new Error('Không tìm thấy nguồn m3u8 cho tập phim này.');
     }
 
     // ── 2. Fallback: extract data-hash/data-id for AJAX via customJS ──
