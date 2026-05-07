@@ -10,7 +10,7 @@ class LNKuroPlugin implements Plugin.PluginBase {
   name = 'LNKuro';
   icon = 'src/vi/lnkuro/icon.png';
   site = 'https://lnkuro.top';
-  version = '1.0.1';
+  version = '1.0.2';
   filters = {
     genre: {
       label: 'Thể loại',
@@ -180,6 +180,11 @@ class LNKuroPlugin implements Plugin.PluginBase {
     });
 
     novel.chapters = chapters;
+
+    if (novel.chapters.length === 0) {
+      throw new Error('Không tìm thấy chương nào hoặc truyện yêu cầu đăng nhập');
+    }
+
     console.log(novel);
     return novel;
   }
