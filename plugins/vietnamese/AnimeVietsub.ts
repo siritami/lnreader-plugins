@@ -13,7 +13,7 @@ class AnimeVietsubPlugin implements Plugin.PluginBase {
   name = 'AnimeVietsub';
   icon = 'src/vi/animevietsub/icon.png';
   site = SITE;
-  version = '1.0.5';
+  version = '1.0.4';
 
   customJS = 'src/vi/animevietsub/player.js';
 
@@ -559,79 +559,150 @@ class AnimeVietsubPlugin implements Plugin.PluginBase {
   }
 
   // ---------- parseChapter ----------
-  // Fetch episode page → extract window.PLAYER_DATA → build m3u8 URL
+  // Strategy:
+  //   1. Fetch episode page → extract inline window.PLAYER_DATA
+  //   2. If playTech=iframe (storage.googleapiscdn.com player):
+  //      fetch the player page → extract avsToken & id → build m3u8 URL
+  //   3. If playTech=api/all with sources → pass sources to customJS
+  //   4. Fallback: extract data-hash/data-id for AJAX approach in customJS
 
   async parseChapter(chapterPath: string): Promise<string> {
     const url = SITE + chapterPath;
     const html = await fetchText(url);
 
+    // ── 1. Try extracting window.PLAYER_DATA from inline scripts ──
     const pdMatch = html.match(
       /window\.PLAYER_DATA\s*=\s*(\{[\s\S]*?\})\s*;?\s*<\/script>/,
     );
-    if (!pdMatch) {
-      throw new Error('Không tìm thấy dữ liệu PLAYER_DATA trên trang.');
+    if (pdMatch) {
+      try {
+        const rawJson = pdMatch[1].replace(/\\\//g, '/');
+        const pd = JSON.parse(rawJson);
+
+        // Case A: iframe player at storage.googleapiscdn.com
+        if (
+          pd.playTech === 'iframe' &&
+          typeof pd.link === 'string' &&
+          pd.link.includes('googleapiscdn.com')
+        ) {
+          try {
+            const playerHtml = await fetchText(pd.link, {
+              headers: { Referer: SITE + '/' },
+            });
+            const idM = playerHtml.match(/const\s+id\s*=\s*"([0-9a-f]+)"/);
+            const tokM = playerHtml.match(/const\s+avsToken\s*=\s*"([^"]+)"/);
+            if (idM && tokM) {
+              const videoId = idM[1];
+              const token = tokM[1];
+              const base =
+                pd.link.match(/^(https?:\/\/[^/]+)/)?.[1] ||
+                'https://storage.googleapiscdn.com';
+              const m3u8 = `${base}/playlist/${videoId}/playlist.m3u8?token=${encodeURIComponent(token)}&plain=1`;
+              return this.buildPlayerHtml({
+                m3u8,
+                referer: pd.link,
+              });
+            }
+          } catch (_) {
+            //
+          }
+        }
+
+        // Case B: api / all with sources array
+        if (
+          (pd.playTech === 'api' || pd.playTech === 'all') &&
+          Array.isArray(pd.link)
+        ) {
+          const sources = pd.link.map((s: any) => ({
+            file: (s.file || '').replace(/^&http/, 'http'),
+            type: s.type || '',
+            label: s.label || '',
+          }));
+          return this.buildPlayerHtml({ sources });
+        }
+
+        // Case C: api / all with single string link
+        if (
+          (pd.playTech === 'api' || pd.playTech === 'all') &&
+          typeof pd.link === 'string'
+        ) {
+          const link = pd.link.replace(/^&http/, 'http');
+          if (/\.m3u8(\?|$)/i.test(link)) {
+            return this.buildPlayerHtml({ m3u8: link, referer: url });
+          }
+          if (/\.(mp4|webm)(\?|$)/i.test(link)) {
+            return this.buildPlayerHtml({
+              sources: [{ file: link, type: 'mp4', label: '' }],
+            });
+          }
+        }
+
+        // Case D: iframe to non-googleapiscdn player
+        if (pd.playTech === 'iframe' && typeof pd.link === 'string') {
+          return this.buildPlayerHtml({ iframe: pd.link });
+        }
+      } catch (_) {
+        //
+      }
     }
 
-    const rawJson = pdMatch[1].replace(/\\\//g, '/');
-    const pd = JSON.parse(rawJson);
+    // ── 2. Fallback: extract data-hash/data-id for AJAX via customJS ──
+    const $ = loadCheerio(html);
+    this.checkCommonBlocked($);
+    const cleanPath = chapterPath.split('?')[0].split('#')[0];
+    let $link = $(
+      `a.btn-episode.episode-link[href$="${cleanPath}"], a.btn-episode.episode-link[href*="${cleanPath}"]`,
+    ).first();
+    if ($link.length === 0) {
+      $link = $('#list-server .server-group')
+        .filter((_, el) => /AnimeVsub/i.test($(el).find('.server-name').text()))
+        .find('a.btn-episode.active')
+        .first();
+    }
+    if ($link.length === 0) {
+      $link = $('a.btn-episode.episode-link.active').first();
+    }
 
-    // iframe player at storage.googleapiscdn.com → extract token → build m3u8
-    if (
-      pd.playTech === 'iframe' &&
-      typeof pd.link === 'string' &&
-      pd.link.includes('googleapiscdn.com')
-    ) {
-      const playerHtml = await fetchText(pd.link, {
-        headers: { Referer: SITE + '/' },
+    const dataHash = $link.attr('data-hash') || '';
+    const dataId = $link.attr('data-id') || '';
+
+    if (dataHash) {
+      return this.buildPlayerHtml({
+        hash: dataHash,
+        id: dataId,
+        referer: url,
+        site: SITE,
       });
-      const idM = playerHtml.match(/const\s+id\s*=\s*"([0-9a-f]+)"/);
-      const tokM = playerHtml.match(/const\s+avsToken\s*=\s*"([^"]+)"/);
-      if (!idM || !tokM) {
-        throw new Error('Không trích xuất được token từ player.');
-      }
-      const videoId = idM[1];
-      const token = tokM[1];
-      const base =
-        pd.link.match(/^(https?:\/\/[^/]+)/)?.[1] ||
-        'https://storage.googleapiscdn.com';
-      const m3u8 = `${base}/playlist/${videoId}/playlist.m3u8?token=${encodeURIComponent(token)}&plain=1`;
-      return this.buildPlayerHtml(m3u8);
     }
 
-    // api/all with m3u8 link
-    if (
-      (pd.playTech === 'api' || pd.playTech === 'all') &&
-      typeof pd.link === 'string'
-    ) {
-      const link = pd.link.replace(/^&http/, 'http');
-      if (/\.m3u8(\?|$)/i.test(link)) {
-        return this.buildPlayerHtml(link);
-      }
-    }
-
-    // api/all with sources array → find first m3u8
-    if (
-      (pd.playTech === 'api' || pd.playTech === 'all') &&
-      Array.isArray(pd.link)
-    ) {
-      const hlsSource = pd.link.find(
-        (s: any) => s.type === 'hls' || /\.m3u8(\?|$)/i.test(s.file || ''),
-      );
-      if (hlsSource) {
-        return this.buildPlayerHtml(
-          (hlsSource.file || '').replace(/^&http/, 'http'),
-        );
-      }
-    }
-
-    throw new Error('Không tìm thấy nguồn m3u8 cho tập phim này.');
+    // ── 3. Last resort: embed the episode page in an iframe ──
+    return this.buildPlayerHtml({ iframe: url });
   }
 
   // ── Helper: build the HTML container for customJS ──
-  private buildPlayerHtml(m3u8: string): string {
+  private buildPlayerHtml(opts: {
+    m3u8?: string;
+    sources?: { file: string; type: string; label: string }[];
+    iframe?: string;
+    hash?: string;
+    id?: string;
+    referer?: string;
+    site?: string;
+  }): string {
     const esc = (s: string) => encodeHtmlEntities(s);
+
+    const attrs: string[] = ['id="avs-player-container"'];
+    if (opts.m3u8) attrs.push(`data-m3u8="${esc(opts.m3u8)}"`);
+    if (opts.sources)
+      attrs.push(`data-sources="${esc(JSON.stringify(opts.sources))}"`);
+    if (opts.iframe) attrs.push(`data-iframe="${esc(opts.iframe)}"`);
+    if (opts.hash) attrs.push(`data-hash="${esc(opts.hash)}"`);
+    if (opts.id) attrs.push(`data-id="${esc(opts.id)}"`);
+    if (opts.referer) attrs.push(`data-referer="${esc(opts.referer)}"`);
+    if (opts.site) attrs.push(`data-site="${esc(opts.site)}"`);
+
     return [
-      `<div id="avs-player-container" data-m3u8="${esc(m3u8)}"`,
+      `<div ${attrs.join(' ')}`,
       '  style="position:relative;width:100%;padding-bottom:56.25%;background:#000;">',
       '  <div id="avs-player-inner" style="position:absolute;top:0;left:0;width:100%;height:100%;display:flex;align-items:center;justify-content:center;">',
       '    <p style="color:#fff;font-family:sans-serif;">Đang tải video...</p>',
