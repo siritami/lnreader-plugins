@@ -13,7 +13,7 @@ class AnimeVietsubPlugin implements Plugin.PluginBase {
   name = 'AnimeVietsub';
   icon = 'src/vi/animevietsub/icon.png';
   site = SITE;
-  version = '1.0.3';
+  version = '1.0.4';
 
   customJS = 'src/vi/animevietsub/player.js';
 
@@ -339,9 +339,28 @@ class AnimeVietsubPlugin implements Plugin.PluginBase {
     }
   }
 
+  private checkCommonBlocked($: ReturnType<typeof loadCheerio>): void {
+    if ($('.verification-status, #challenge-error-text').length > 0) {
+      throw new Error(
+        'Đã bị chặn bởi Cloudflare JS Challenge. Mở trang web trong WebView để xác minh.',
+      );
+    }
+    if ($('.verification-section, .captcha-placeholder').length > 0) {
+      throw new Error(
+        'Đã bị chặn bởi Cloudflare Turnstile. Mở trang web trong WebView để xác minh.',
+      );
+    }
+    if ($('.map-title, .map-notice-caution, #verify-form').length > 0) {
+      throw new Error(
+        'Bạn đang sử dụng VPN hoặc Proxy. Mở trang web trong WebView, trả lời câu hỏi xác minh rồi thử lại.',
+      );
+    }
+  }
+
   private parseListHtml(html: string): Plugin.NovelItem[] {
     const novels: Plugin.NovelItem[] = [];
     const $ = loadCheerio(html);
+    this.checkCommonBlocked($);
     const seen = new Set<string>();
 
     $('.TPostMv').each((_, el) => {
@@ -439,7 +458,7 @@ class AnimeVietsubPlugin implements Plugin.PluginBase {
     const url = SITE + novelPath;
     const html = await fetchText(url);
     const $ = loadCheerio(html);
-
+    this.checkCommonBlocked($);
     const novel: Plugin.SourceNovel = {
       path: novelPath,
       name:
@@ -507,6 +526,7 @@ class AnimeVietsubPlugin implements Plugin.PluginBase {
 
   private parseEpisodeList(html: string): Plugin.ChapterItem[] {
     const $ = loadCheerio(html);
+    this.checkCommonBlocked($);
     const chapters: Plugin.ChapterItem[] = [];
 
     // Find the AnimeVsub server group
@@ -628,6 +648,7 @@ class AnimeVietsubPlugin implements Plugin.PluginBase {
 
     // ── 2. Fallback: extract data-hash/data-id for AJAX via customJS ──
     const $ = loadCheerio(html);
+    this.checkCommonBlocked($);
     const cleanPath = chapterPath.split('?')[0].split('#')[0];
     let $link = $(
       `a.btn-episode.episode-link[href$="${cleanPath}"], a.btn-episode.episode-link[href*="${cleanPath}"]`,
