@@ -19,16 +19,15 @@ class AnimeVietsubPlugin implements Plugin.PluginBase {
   customJS = 'src/vi/animevietsub/player.js';
 
   pluginSettings: Plugin.PluginSettings = {
-    disableEmbed: {
-      value: true,
-      label: 'Tắt embed (chỉ phát trực tiếp HLS, không dùng iframe/fallback)',
+    enableEmbed: {
+      value: false,
+      label: 'Bật embed',
       type: 'Switch',
     },
   };
 
-  get disableEmbed() {
-    const val = storage.get('disableEmbed');
-    return val === undefined || val === null ? true : (val as boolean);
+  get enableEmbed() {
+    return storage.get('enableEmbed') as boolean;
   }
 
   imageRequestInit: Plugin.ImageRequestInit = {
@@ -627,8 +626,8 @@ class AnimeVietsubPlugin implements Plugin.PluginBase {
           (pd.playTech === 'api' || pd.playTech === 'all') &&
           Array.isArray(pd.link)
         ) {
-          // If disableEmbed: only pick m3u8 sources
-          if (this.disableEmbed) {
+          // If embed disabled: only pick m3u8 sources
+          if (!this.enableEmbed) {
             const hlsSource = pd.link.find(
               (s: any) =>
                 s.type === 'hls' || /\.m3u8(\?|$)/i.test(s.file || ''),
@@ -657,7 +656,7 @@ class AnimeVietsubPlugin implements Plugin.PluginBase {
           if (/\.m3u8(\?|$)/i.test(link)) {
             return this.buildPlayerHtml({ m3u8: link, referer: url });
           }
-          if (!this.disableEmbed && /\.(mp4|webm)(\?|$)/i.test(link)) {
+          if (this.enableEmbed && /\.(mp4|webm)(\?|$)/i.test(link)) {
             return this.buildPlayerHtml({
               sources: [{ file: link, type: 'mp4', label: '' }],
             });
@@ -666,7 +665,7 @@ class AnimeVietsubPlugin implements Plugin.PluginBase {
 
         // Case D: iframe to non-googleapiscdn player (only when embed allowed)
         if (
-          !this.disableEmbed &&
+          this.enableEmbed &&
           pd.playTech === 'iframe' &&
           typeof pd.link === 'string'
         ) {
@@ -677,8 +676,8 @@ class AnimeVietsubPlugin implements Plugin.PluginBase {
       }
     }
 
-    // When disableEmbed is on, don't fall back to hash/iframe
-    if (this.disableEmbed) {
+    // When embed is off, don't fall back to hash/iframe
+    if (!this.enableEmbed) {
       throw new Error('Không tìm thấy nguồn m3u8 cho tập phim này.');
     }
 
