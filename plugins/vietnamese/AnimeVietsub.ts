@@ -13,7 +13,7 @@ class AnimeVietsubPlugin implements Plugin.PluginBase {
   name = 'AnimeVietsub';
   icon = 'src/vi/animevietsub/icon.png';
   site = SITE;
-  version = '1.0.2';
+  version = '1.0.3';
 
   customJS = 'src/vi/animevietsub/player.js';
 
@@ -26,93 +26,218 @@ class AnimeVietsubPlugin implements Plugin.PluginBase {
   filters = {
     category: {
       type: FilterTypes.Picker,
-      label: 'Dạng Anime',
-      value: '/anime-moi/',
+      label: 'Thể loại',
+      value: 'all',
       options: [
-        { label: 'Anime Mới', value: '/anime-moi/' },
-        { label: 'TV/Series', value: '/anime-bo/' },
-        { label: 'Movie/OVA', value: '/anime-le/' },
-        { label: 'Hoạt Hình Trung Quốc', value: '/hoat-hinh-trung-quoc/' },
-        { label: 'Anime Sắp Chiếu', value: '/anime-sap-chieu/' },
-        { label: 'Anime Đang Chiếu', value: '/danh-sach/list-dang-chieu/' },
-        { label: 'Anime Trọn Bộ', value: '/danh-sach/list-tron-bo/' },
-      ],
-    },
-    ranking: {
-      type: FilterTypes.Picker,
-      label: 'Top Anime (ưu tiên cao nhất)',
-      value: '',
-      options: [
-        { label: 'Không dùng', value: '' },
-        { label: 'Tổng hợp', value: '/bang-xep-hang.html' },
-        { label: 'Theo Ngày', value: '/bang-xep-hang/day.html' },
-        { label: 'Yêu Thích', value: '/bang-xep-hang/voted.html' },
-        { label: 'Theo Tháng', value: '/bang-xep-hang/month.html' },
-        { label: 'Theo Mùa', value: '/bang-xep-hang/season.html' },
-        { label: 'Theo Năm', value: '/bang-xep-hang/year.html' },
+        { label: 'Tất cả', value: 'all' },
+        { label: 'Anime lẻ (Movie/OVA)', value: 'list-le' },
+        { label: 'Anime bộ (TV-Series)', value: 'list-bo' },
+        { label: 'Anime Trọn Bộ', value: 'list-tron-bo' },
+        { label: 'Anime Đang Chiếu', value: 'list-dang-chieu' },
+        { label: 'Anime Sắp Chiếu', value: 'list-sap-chieu' },
       ],
     },
     genre: {
-      type: FilterTypes.Picker,
+      type: FilterTypes.CheckboxGroup,
       label: 'Thể loại',
-      value: '',
+      value: [],
       options: [
-        { label: 'Tất cả', value: '' },
-        { label: 'Action', value: 'hanh-dong' },
-        { label: 'Adventure', value: 'phieu-luu' },
-        { label: 'Boys Love', value: 'dong-tinh-nam' },
-        { label: 'Cartoon', value: 'cartoon' },
-        { label: 'Cổ Trang', value: 'co-trang' },
-        { label: 'Comedy', value: 'hai-huoc' },
-        { label: 'Dementia', value: 'dien-loan' },
-        { label: 'Demons', value: 'demons' },
-        { label: 'Drama', value: 'drama' },
-        { label: 'Ecchi', value: 'ecchi' },
-        { label: 'Fantasy', value: 'phep-thuat' },
-        { label: 'Game', value: 'tro-choi' },
-        { label: 'Harem', value: 'harem' },
-        { label: 'Historical', value: 'lich-su' },
-        { label: 'Horror', value: 'kinh-di' },
-        { label: 'Josei', value: 'josei' },
-        { label: 'Kids', value: 'tre-em' },
-        { label: 'Live Action', value: 'live-action' },
-        { label: 'Magic', value: 'ma-thuat' },
-        { label: 'Martial Arts', value: 'martial-arts' },
-        { label: 'Mecha', value: 'mecha' },
-        { label: 'Military', value: 'quan-doi' },
-        { label: 'Music', value: 'am-nhac' },
-        { label: 'Mystery', value: 'mystery' },
-        { label: 'Parody', value: 'parody' },
-        { label: 'Police', value: 'police' },
-        { label: 'Psychological', value: 'psychological' },
-        { label: 'Romance', value: 'tinh-cam' },
-        { label: 'Samurai', value: 'samurai' },
-        { label: 'School', value: 'truong-hoc' },
-        { label: 'Sci-Fi', value: 'sci-fi' },
-        { label: 'Seinen', value: 'seinen' },
-        { label: 'Shoujo', value: 'shoujo' },
-        { label: 'Shoujo Ai', value: 'shoujo-ai' },
-        { label: 'Shounen', value: 'shounen' },
-        { label: 'Shounen Ai', value: 'shounen-ai' },
-        { label: 'Slice of Life', value: 'doi-thuong' },
-        { label: 'Space', value: 'space' },
-        { label: 'Sports', value: 'the-thao' },
-        { label: 'Super Power', value: 'super-power' },
-        { label: 'Supernatural', value: 'sieu-nhien' },
-        { label: 'Suspense', value: 'hoi-hop' },
-        { label: 'Thriller', value: 'thriller' },
-        { label: 'Tokusatsu', value: 'tokusatsu' },
-        { label: 'Vampire', value: 'vampire' },
-        { label: 'Yaoi', value: 'yaoi' },
-        { label: 'Yuri', value: 'yuri' },
+        {
+          label: 'Action',
+          value: '1',
+        },
+        {
+          label: 'Adventure',
+          value: '2',
+        },
+        {
+          label: 'Boys Love',
+          value: '46',
+        },
+        {
+          label: 'Cartoon',
+          value: '44',
+        },
+        {
+          label: 'Cổ Trang',
+          value: '47',
+        },
+        {
+          label: 'Comedy',
+          value: '3',
+        },
+        {
+          label: 'Dementia',
+          value: '4',
+        },
+        {
+          label: 'Demons',
+          value: '5',
+        },
+        {
+          label: 'Drama',
+          value: '6',
+        },
+        {
+          label: 'Ecchi',
+          value: '7',
+        },
+        {
+          label: 'Fantasy',
+          value: '8',
+        },
+        {
+          label: 'Game',
+          value: '9',
+        },
+        {
+          label: 'Harem',
+          value: '10',
+        },
+        {
+          label: 'Historical',
+          value: '11',
+        },
+        {
+          label: 'Horror',
+          value: '12',
+        },
+        {
+          label: 'Josei',
+          value: '13',
+        },
+        {
+          label: 'Kids',
+          value: '14',
+        },
+        {
+          label: 'Live Action',
+          value: '43',
+        },
+        {
+          label: 'Magic',
+          value: '15',
+        },
+        {
+          label: 'Martial Arts',
+          value: '16',
+        },
+        {
+          label: 'Mecha',
+          value: '17',
+        },
+        {
+          label: 'Military',
+          value: '18',
+        },
+        {
+          label: 'Music',
+          value: '19',
+        },
+        {
+          label: 'Mystery',
+          value: '20',
+        },
+        {
+          label: 'Parody',
+          value: '21',
+        },
+        {
+          label: 'Police',
+          value: '22',
+        },
+        {
+          label: 'Psychological',
+          value: '23',
+        },
+        {
+          label: 'Romance',
+          value: '24',
+        },
+        {
+          label: 'Samurai',
+          value: '25',
+        },
+        {
+          label: 'School',
+          value: '26',
+        },
+        {
+          label: 'Sci-Fi',
+          value: '27',
+        },
+        {
+          label: 'Seinen',
+          value: '28',
+        },
+        {
+          label: 'Shoujo',
+          value: '29',
+        },
+        {
+          label: 'Shoujo Ai',
+          value: '30',
+        },
+        {
+          label: 'Shounen',
+          value: '31',
+        },
+        {
+          label: 'Shounen Ai',
+          value: '32',
+        },
+        {
+          label: 'Slice of Life',
+          value: '33',
+        },
+        {
+          label: 'Space',
+          value: '34',
+        },
+        {
+          label: 'Sports',
+          value: '35',
+        },
+        {
+          label: 'Super Power',
+          value: '36',
+        },
+        {
+          label: 'Supernatural',
+          value: '37',
+        },
+        {
+          label: 'Suspense',
+          value: '45',
+        },
+        {
+          label: 'Thriller',
+          value: '38',
+        },
+        {
+          label: 'Tokusatsu',
+          value: '42',
+        },
+        {
+          label: 'Vampire',
+          value: '39',
+        },
+        {
+          label: 'Yaoi',
+          value: '40',
+        },
+        {
+          label: 'Yuri',
+          value: '41',
+        },
       ],
     },
     season: {
       type: FilterTypes.Picker,
       label: 'Season - Mùa',
-      value: '',
+      value: 'all',
       options: [
-        { label: 'Không lọc', value: '' },
+        { label: 'Tất cả', value: 'all' },
         { label: 'Mùa Đông', value: 'winter' },
         { label: 'Mùa Xuân', value: 'spring' },
         { label: 'Mùa Hạ', value: 'summer' },
@@ -121,9 +246,10 @@ class AnimeVietsubPlugin implements Plugin.PluginBase {
     },
     year: {
       type: FilterTypes.Picker,
-      label: 'Season - Năm',
-      value: '2026',
+      label: 'Năm phát hành',
+      value: 'all',
       options: [
+        { label: 'Tất cả', value: 'all' },
         { label: '2026', value: '2026' },
         { label: '2025', value: '2025' },
         { label: '2024', value: '2024' },
@@ -133,6 +259,69 @@ class AnimeVietsubPlugin implements Plugin.PluginBase {
         { label: '2020', value: '2020' },
         { label: '2019', value: '2019' },
         { label: '2018', value: '2018' },
+        { label: '2017', value: '2017' },
+        { label: '2016', value: '2016' },
+        { label: '2015', value: '2015' },
+        { label: '2014', value: '2014' },
+        { label: '2013', value: '2013' },
+        { label: 'Cũ hơn', value: 'older-2013' },
+      ],
+    },
+    ageRating: {
+      type: FilterTypes.Picker,
+      label: 'Phân loại độ tuổi',
+      value: 'all',
+      options: [
+        { label: 'Tất cả', value: 'all' },
+        {
+          label: '13+ - Teens 13 or older (3)',
+          value: '13+ - Teens 13 or older',
+        },
+        { label: 'G - Mọi lứa tuổi (235)', value: 'G - Mọi lứa tuổi' },
+        { label: 'None (689)', value: 'None' },
+        { label: 'PG - Trẻ em (205)', value: 'PG - Trẻ em' },
+        {
+          label: 'PG-13 - Teens 13 tuổi trở lên (3540)',
+          value: 'PG-13 - Teens 13 tuổi trở lên',
+        },
+        {
+          label: 'R - 17+ (bạo lực và tục tĩu) (658)',
+          value: 'R - 17+ (bạo lực và tục tĩu)',
+        },
+        {
+          label: 'R+ - Dành cho 16 tuổi trở lên (380)',
+          value: 'R+ - Dành cho 16 tuổi trở lên',
+        },
+        {
+          label: 'R+ - Dành cho 17 tuổi trở lên (5)',
+          value: 'R+ - Dành cho 17 tuổi trở lên',
+        },
+      ],
+    },
+    country: {
+      type: FilterTypes.Picker,
+      label: 'Quốc gia',
+      value: 'all',
+      options: [
+        { label: 'Tất cả', value: 'all' },
+        { label: 'Nhật Bản', value: 'jp' },
+        { label: 'Trung Quốc', value: 'cn' },
+        { label: 'Mỹ', value: 'us' },
+        { label: 'Hàn Quốc', value: 'kr' },
+        { label: 'Việt Nam', value: 'vietnam' },
+        { label: 'Đài Loan', value: 'tw' },
+      ],
+    },
+    sort: {
+      type: FilterTypes.Picker,
+      label: 'Sắp xếp',
+      value: 'latest',
+      options: [
+        { label: 'Mới nhất', value: 'latest' },
+        { label: 'Tên A-Z', value: 'nameaz' },
+        { label: 'Tên Z-A', value: 'nameza' },
+        { label: 'Xem nhiều nhất', value: 'view' },
+        { label: 'Nhiều lượt bình chọn', value: 'rating' },
       ],
     },
   } satisfies Filters;
@@ -187,9 +376,7 @@ class AnimeVietsubPlugin implements Plugin.PluginBase {
         if (seen.has(path)) return;
         seen.add(path);
         const name =
-          $el.find('h3.title-item').text().trim() ||
-          $a.attr('title') ||
-          '';
+          $el.find('h3.title-item').text().trim() || $a.attr('title') || '';
         const cover = $el.find('img').first().attr('src') || defaultCover;
         if (name) {
           novels.push({ name, path, cover });
@@ -198,21 +385,6 @@ class AnimeVietsubPlugin implements Plugin.PluginBase {
     }
 
     return novels;
-  }
-
-  private buildListUrl(
-    base: string,
-    page: number,
-    isRanking: boolean,
-  ): string {
-    if (isRanking) {
-      return SITE + base;
-    }
-    if (page <= 1) return SITE + base;
-    if (base.endsWith('/')) return SITE + base + `trang-${page}.html`;
-    if (base.endsWith('.html'))
-      return SITE + base.replace(/\.html$/, `/trang-${page}.html`);
-    return SITE + base + `/trang-${page}.html`;
   }
 
   // ---------- popularNovels ----------
@@ -224,32 +396,25 @@ class AnimeVietsubPlugin implements Plugin.PluginBase {
       filters,
     }: Plugin.PopularNovelsOptions<typeof this.filters>,
   ): Promise<Plugin.NovelItem[]> {
-    const ranking = filters?.ranking?.value || '';
-    const season = filters?.season?.value || '';
-    const year = filters?.year?.value || '';
-    const genre = filters?.genre?.value || '';
-    const category = filters?.category?.value || '/anime-moi/';
-
-    let base = '/anime-moi/';
-    let isRanking = false;
-
-    if (showLatestNovels) {
-      base = '/anime-moi/';
-    } else if (ranking) {
-      base = ranking;
-      isRanking = true;
-    } else if (season && year) {
-      base = `/season/${season}/${year}/`;
-    } else if (genre) {
-      base = `/the-loai/${genre}/`;
-    } else {
-      base = category;
+    // Build filters into URL parameters
+    const category = filters.category.value || 'all';
+    const genreList = filters.genre.value.length > 0 ? filters.genre.value.join('-') : 'all';
+    const season = filters.season.value || 'all';
+    const year = filters.year.value || 'all';
+    const studio = 'all'; // Not implemented in filters
+    const age = encodeURIComponent(filters.ageRating.value || 'all');
+    const country = filters.country.value || 'all';
+    const page = pageNo > 1 ? `trang-${pageNo}.html` : '';
+    const url = new URL(`${SITE}/danh-sach/${category}/${genreList}/${season}/${year}/${studio}/${age}/${country}/${page}`);
+    url.searchParams.set('sort', filters.sort.value || 'latest');
+    // Build URL
+    // https://animevietsub.bz/danh-sach/category/genre_list/season/year/studio/age/country?sort=?
+    const html = await fetchText(url.toString());
+    if (html.includes('<title></title><div></div>')) {
+      throw new Error(
+        'Không tải được danh sách Anime. Hãy thử lại sau ít giây nữa.',
+      );
     }
-
-    const url = this.buildListUrl(base, pageNo, isRanking);
-    if (isRanking && pageNo > 1) return [];
-
-    const html = await fetchText(url);
     return this.parseListHtml(html);
   }
 
@@ -354,27 +519,21 @@ class AnimeVietsubPlugin implements Plugin.PluginBase {
     }
 
     const seen = new Set<string>();
-    $group
-      .find('ul.list-episode li.episode a.btn-episode')
-      .each((idx, el) => {
-        const $a = $(el);
-        const href = $a.attr('href') || '';
-        if (!href) return;
-        const path = this.absolutePath(href);
-        if (seen.has(path)) return;
-        seen.add(path);
-        const epLabel =
-          $a.attr('title')?.trim() ||
-          `Tập ${$a.text().trim()}`;
-        const num = parseFloat(
-          $a.text().replace(/[^0-9.]/g, ''),
-        );
-        chapters.push({
-          name: epLabel,
-          path,
-          chapterNumber: Number.isFinite(num) ? num : idx + 1,
-        });
+    $group.find('ul.list-episode li.episode a.btn-episode').each((idx, el) => {
+      const $a = $(el);
+      const href = $a.attr('href') || '';
+      if (!href) return;
+      const path = this.absolutePath(href);
+      if (seen.has(path)) return;
+      seen.add(path);
+      const epLabel = $a.attr('title')?.trim() || `Tập ${$a.text().trim()}`;
+      const num = parseFloat($a.text().replace(/[^0-9.]/g, ''));
+      chapters.push({
+        name: epLabel,
+        path,
+        chapterNumber: Number.isFinite(num) ? num : idx + 1,
       });
+    });
 
     return chapters;
   }
@@ -410,12 +569,8 @@ class AnimeVietsubPlugin implements Plugin.PluginBase {
             const playerHtml = await fetchText(pd.link, {
               headers: { Referer: SITE + '/' },
             });
-            const idM = playerHtml.match(
-              /const\s+id\s*=\s*"([0-9a-f]+)"/,
-            );
-            const tokM = playerHtml.match(
-              /const\s+avsToken\s*=\s*"([^"]+)"/,
-            );
+            const idM = playerHtml.match(/const\s+id\s*=\s*"([0-9a-f]+)"/);
+            const tokM = playerHtml.match(/const\s+avsToken\s*=\s*"([^"]+)"/);
             if (idM && tokM) {
               const videoId = idM[1];
               const token = tokM[1];
@@ -479,9 +634,7 @@ class AnimeVietsubPlugin implements Plugin.PluginBase {
     ).first();
     if ($link.length === 0) {
       $link = $('#list-server .server-group')
-        .filter((_, el) =>
-          /AnimeVsub/i.test($(el).find('.server-name').text()),
-        )
+        .filter((_, el) => /AnimeVsub/i.test($(el).find('.server-name').text()))
         .find('a.btn-episode.active')
         .first();
     }
