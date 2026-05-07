@@ -27,7 +27,8 @@ class AnimeVietsubPlugin implements Plugin.PluginBase {
   };
 
   get disableEmbed() {
-    return storage.get('disableEmbed') as boolean;
+    const val = storage.get('disableEmbed');
+    return val === undefined || val === null ? true : (val as boolean);
   }
 
   imageRequestInit: Plugin.ImageRequestInit = {
