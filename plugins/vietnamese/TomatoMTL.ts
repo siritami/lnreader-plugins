@@ -7,6 +7,7 @@ import { defaultCover } from '@libs/defaultCover';
 import { storage } from '@libs/storage';
 import { Buffer, decodeHtmlEntities, encodeHtmlEntities } from '@libs/utils';
 import { cbc } from '@libs/aes';
+import { isUrlAbsolute } from '@libs/isAbsoluteUrl';
 
 const SITE = 'https://tomatomtl.com';
 const CHAPTERS_PER_VOLUME = 50;
@@ -125,7 +126,7 @@ class TomatoMTLPlugin implements Plugin.PluginBase {
   name = 'TomatoMTL';
   icon = 'src/vi/tomatomtl/icon.png';
   site = SITE;
-  version = '1.0.3';
+  version = '1.0.4';
   webStorageUtilized = true;
 
   pluginSettings: Plugin.PluginSettings = {
@@ -158,10 +159,12 @@ class TomatoMTLPlugin implements Plugin.PluginBase {
   // --- Utils ---
   private normalizeCoverUrl(url: unknown): string {
     if (typeof url !== 'string' || !url) return '';
-    if (this.usingProxyThumbnail) return url;
-    // Strip wsrv.nl proxy wrapper if present, extracting the original URL.
-    const proxyMatch = /[?&]url=(https?:\/\/[^&]+)/.exec(url);
-    return proxyMatch ? decodeURIComponent(proxyMatch[1]) : url;
+    if (!isUrlAbsolute(url)) return '';
+    const urlObj = new URL(url);
+    // Query parameters: url, w, h, fit, output
+    urlObj.searchParams.set('output', 'jpg'); // better safe than webp
+    if (this.usingProxyThumbnail) return urlObj.toString();
+    return urlObj.searchParams.get('url') || urlObj.toString();
   }
 
   // ─── Cookie / session management ───────────────────────────
