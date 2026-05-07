@@ -109,7 +109,7 @@ class HakoPlugin implements Plugin.PluginBase {
   id = 'ln.hako.vn';
   name = 'Hako Novel';
   icon = 'src/vi/hakolightnovel/icon.png';
-  version = '1.2.1';
+  version = '1.2.2';
 
   pluginSettings: Plugin.PluginSettings = {
     usingDocln: {
@@ -575,7 +575,7 @@ class HakoPlugin implements Plugin.PluginBase {
     type: {
       type: FilterTypes.CheckboxGroup,
       label: 'Phân loại',
-      value: [],
+      value: ['truyendich', 'sangtac', 'convert'],
       options: [
         { label: 'Truyện dịch', value: 'truyendich' },
         { label: 'Truyện sáng tác', value: 'sangtac' },
@@ -585,7 +585,7 @@ class HakoPlugin implements Plugin.PluginBase {
     status: {
       type: FilterTypes.CheckboxGroup,
       label: 'Tình trạng',
-      value: [],
+      value: ['dangtienhanh', 'tamngung', 'hoanthanh'],
       options: [
         { label: 'Đang tiến hành', value: 'dangtienhanh' },
         { label: 'Tạm ngưng', value: 'tamngung' },
