@@ -249,7 +249,15 @@
               var modCbs = Object.assign({}, cbs, {
                 onSuccess: function (resp, stats, ctx2, net) {
                   if (resp.data && resp.data.byteLength > 127) {
-                    resp.data = resp.data.slice(127);
+                    var header = new Uint8Array(resp.data, 0, 8);
+                    // PNG signature: 89 50 4E 47 0D 0A 1A 0A
+                    var isPng = header[0] === 0x89 && header[1] === 0x50 &&
+                      header[2] === 0x4E && header[3] === 0x47 &&
+                      header[4] === 0x0D && header[5] === 0x0A &&
+                      header[6] === 0x1A && header[7] === 0x0A;
+                    if (isPng) {
+                      resp.data = resp.data.slice(127);
+                    }
                   }
                   origSuccess(resp, stats, ctx2, net);
                 },
