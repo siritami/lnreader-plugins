@@ -678,7 +678,7 @@ class AnimeVietsubPlugin implements Plugin.PluginBase {
 
     // When embed is off, don't fall back to hash/iframe
     if (!this.enableEmbed) {
-      throw new Error('Không tìm thấy nguồn m3u8 cho tập phim này.');
+      return '<p style="color:#ff4444;font-size:14px;font-family:sans-serif;text-align:center;padding:16px;">Không tìm thấy nguồn m3u8 cho tập phim này. Bật "Bật embed" trong cài đặt plugin để dùng fallback.</p>';
     }
 
     // ── 2. Fallback: extract data-hash/data-id for AJAX via customJS ──
