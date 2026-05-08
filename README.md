@@ -24,6 +24,7 @@ This is a fork of the original repository, containing only my custom plugins and
 
 - [AnimeVietsub](https://animevietsub.bz)[^1]
 - [NguonC](https://phim.nguonc.com)[^1]
+- [HentaiZ](https://hentaiz.hot)[^1]
 
 #### News
 
