@@ -4,7 +4,7 @@ import { Filters, FilterTypes } from '@libs/filterInputs';
 import { defaultCover } from '@libs/defaultCover';
 import { NovelStatus } from '@libs/novelStatus';
 import { decodeHtmlEntities, encodeHtmlEntities } from '@libs/utils';
-import { utf8ToBytes } from '@libs/utils';
+import { utf8ToBytes, Buffer } from '@libs/utils';
 import { storage } from '@libs/storage';
 import { ctr } from '@libs/aes';
 
@@ -12,6 +12,7 @@ const SITE = 'https://hentaiz.hot';
 const STORAGE_URL = 'https://storage.haiten.org';
 const MIMIX_API = 'https://x.mimix.cc/watch/';
 
+// #region SHA256
 // ─── Minimal SHA-256 (pure JS, no crypto dependency) ─────────────
 const SHA256_K = new Uint32Array([
   0x428a2f98, 0x71374491, 0xb5c0fbcf, 0xe9b5dba5,
@@ -83,12 +84,10 @@ function sha256(msg: Uint8Array): Uint8Array {
   return out;
 }
 
+// #endregion
+
 function hexToBytes(hex: string): Uint8Array {
-  const bytes = new Uint8Array(hex.length / 2);
-  for (let i = 0; i < hex.length; i += 2) {
-    bytes[i / 2] = parseInt(hex.substring(i, i + 2), 16);
-  }
-  return bytes;
+  return Buffer.from(hex, 'hex');
 }
 
 async function decryptVideoData(
@@ -511,7 +510,7 @@ class HentaiZPlugin implements Plugin.PluginBase {
   name = 'HentaiZ';
   icon = 'src/vi/hentaiz/icon.png';
   site = SITE;
-  version = '1.0.0';
+  version = '1.0.1';
 
   customJS = 'src/vi/hentaiz/player.js';
 

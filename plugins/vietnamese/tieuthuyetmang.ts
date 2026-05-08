@@ -29,10 +29,6 @@ class TieuThuyetMangPlugin implements Plugin.PluginBase {
     },
   };
 
-  constructor() {
-    this.beforeRequest();
-  }
-
   private beforeRequest() {
     return set(this.site, {
       name: 'site_access_gate',
@@ -241,6 +237,7 @@ class TieuThuyetMangPlugin implements Plugin.PluginBase {
     */
 
   async parseNovel(novelPath: string): Promise<Plugin.SourceNovel> {
+    await this.beforeRequest();
     const response = await fetchApi(new URL(novelPath, this.site).toString());
     if (!response.ok) {
       throw new Error(`Failed to fetch novel page: ${response.status} ${response.statusText}`);
@@ -306,6 +303,7 @@ class TieuThuyetMangPlugin implements Plugin.PluginBase {
   }
 
   async parseChapter(chapterPath: string): Promise<string> {
+    await this.beforeRequest();
     const response = await fetchApi(new URL(chapterPath, this.site).toString());
     const html = await response.text();
     const $ = loadCheerio(html);
