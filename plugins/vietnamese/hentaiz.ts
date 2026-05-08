@@ -1,11 +1,58 @@
-import { fetchText } from '@libs/fetch';
+import { fetchApi } from '@libs/fetch';
 import { Plugin } from '@/types/plugin';
 import { Filters, FilterTypes } from '@libs/filterInputs';
-import { load as loadCheerio } from 'cheerio';
 import { defaultCover } from '@libs/defaultCover';
 import { NovelStatus } from '@libs/novelStatus';
+import { decodeHtmlEntities } from '@libs/utils';
 
 const SITE = 'https://hentaiz.hot';
+const STORAGE_URL = 'https://storage.haiten.org';
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function decodeSvelteData(data: any[]): any {
+  const cache = new Map();
+  function resolve(idx: number): any {
+    if (cache.has(idx)) return cache.get(idx);
+    const val = data[idx];
+    if (val === null || val === undefined) {
+      cache.set(idx, val);
+      return val;
+    }
+    if (typeof val === 'string' || typeof val === 'number' || typeof val === 'boolean') {
+      cache.set(idx, val);
+      return val;
+    }
+    if (Array.isArray(val)) {
+      if (val.length === 2 && val[0] === 'Date') {
+        const d = val[1];
+        cache.set(idx, d);
+        return d;
+      }
+      const arr: any[] = [];
+      cache.set(idx, arr);
+      for (const i of val) {
+        arr.push(resolve(i));
+      }
+      return arr;
+    }
+    const obj: Record<string, any> = {};
+    cache.set(idx, obj);
+    for (const [key, i] of Object.entries(val)) {
+      obj[key] = resolve(i as number);
+    }
+    return obj;
+  }
+  return resolve(0);
+}
+
+async function fetchSvelteData(url: string): Promise<any> {
+  const res = await fetchApi(url);
+  if (!res.ok) return null;
+  const json = await res.json();
+  const pageNode = json?.nodes?.[2];
+  if (!pageNode || pageNode.type === 'error' || !pageNode.data) return null;
+  return decodeSvelteData(pageNode.data);
+}
 
 const genreOptions: { label: string; value: string }[] = [
   { label: '3D', value: '3d' },
@@ -401,36 +448,9 @@ class HentaiZPlugin implements Plugin.PluginBase {
 
   // ---------- helpers ----------
 
-  private parseList(html: string): Plugin.NovelItem[] {
-    const novels: Plugin.NovelItem[] = [];
-    const $ = loadCheerio(html);
-    const seen = new Set<string>();
-
-    $('a[href*="/watch/"]').each((_, el) => {
-      const $a = $(el);
-      const href = $a.attr('href') || '';
-      if (!href || !href.startsWith('/watch/')) return;
-      if (seen.has(href)) return;
-      seen.add(href);
-      const name =
-        $a.find('h3').first().text().trim() ||
-        $a.attr('aria-label')?.replace(/^Xem\s+/, '') ||
-        '';
-      const cover =
-        $a.find('img').first().attr('src') ||
-        $a.find('img').first().attr('data-src') ||
-        defaultCover;
-      if (name) {
-        novels.push({ name, path: href, cover });
-      }
-    });
-
-    return novels;
-  }
-
   private buildBrowseUrl(
     page: number,
-    filters: {
+    filterVals: {
       sort: string;
       animationType: string;
       contentRating: string;
@@ -444,25 +464,44 @@ class HentaiZPlugin implements Plugin.PluginBase {
   ): string {
     const params = new URLSearchParams();
     if (searchTerm) params.set('q', searchTerm);
-    params.set('sort', filters.sort);
+    params.set('sort', filterVals.sort);
     params.set('page', String(page));
     params.set('limit', '24');
-    params.set('animationType', filters.animationType);
-    params.set('contentRating', filters.contentRating);
-    params.set('isTrailer', filters.isTrailer);
-    params.set('year', filters.year);
+    params.set('animationType', filterVals.animationType);
+    params.set('contentRating', filterVals.contentRating);
+    params.set('isTrailer', filterVals.isTrailer);
+    params.set('year', filterVals.year);
 
-    if (filters.genres.length > 0) {
-      params.set('genres', ',' + filters.genres.join(','));
+    if (filterVals.genres.length > 0) {
+      params.set('genres', ',' + filterVals.genres.join(','));
     }
-    if (filters.excludeGenres.length > 0) {
-      params.set('excludeGenres', ',' + filters.excludeGenres.join(','));
+    if (filterVals.excludeGenres.length > 0) {
+      params.set('excludeGenres', ',' + filterVals.excludeGenres.join(','));
     }
-    if (filters.studios && filters.studios !== 'ALL') {
-      params.set('studios', ',' + filters.studios);
+    if (filterVals.studios && filterVals.studios !== 'ALL') {
+      params.set('studios', ',' + filterVals.studios);
     }
 
-    return `${SITE}/browse?${params.toString()}`;
+    return `${SITE}/browse/__data.json?${params.toString()}`;
+  }
+
+  private parseBrowseData(data: any): Plugin.NovelItem[] {
+    if (!data?.episodes) return [];
+    const novels: Plugin.NovelItem[] = [];
+    for (const ep of data.episodes) {
+      if (!ep?.slug || !ep?.title) continue;
+      const cover = ep.backdropImage?.filePath
+        ? STORAGE_URL + ep.backdropImage.filePath
+        : ep.posterImage?.filePath
+          ? STORAGE_URL + ep.posterImage.filePath
+          : defaultCover;
+      novels.push({
+        name: ep.title,
+        path: '/watch/' + ep.slug,
+        cover,
+      });
+    }
+    return novels;
   }
 
   // ---------- popularNovels ----------
@@ -484,8 +523,8 @@ class HentaiZPlugin implements Plugin.PluginBase {
       year: filters?.year?.value || 'ALL',
     });
 
-    const html = await fetchText(url);
-    return this.parseList(html);
+    const data = await fetchSvelteData(url);
+    return this.parseBrowseData(data);
   }
 
   // ---------- searchNovels ----------
@@ -509,95 +548,98 @@ class HentaiZPlugin implements Plugin.PluginBase {
       searchTerm,
     );
 
-    const html = await fetchText(url);
-    return this.parseList(html);
+    const data = await fetchSvelteData(url);
+    return this.parseBrowseData(data);
   }
 
   // ---------- parseNovel ----------
 
   async parseNovel(novelPath: string): Promise<Plugin.SourceNovel> {
-    const url = SITE + novelPath;
-    const html = await fetchText(url);
-    const $ = loadCheerio(html);
+    const slug = novelPath.replace('/watch/', '');
+    const dataUrl = `${SITE}/watch/${slug}/__data.json`;
+    const data = await fetchSvelteData(dataUrl);
 
     const novel: Plugin.SourceNovel = {
       path: novelPath,
       name: '',
     };
 
-    // Extract info from ld+json
-    $('script[type="application/ld+json"]').each((_, el) => {
-      try {
-        const json = JSON.parse($(el).html() || '');
-        if (json['@type'] === 'VideoObject') {
-          novel.name = json.name || '';
-          novel.summary = json.description || '';
-          novel.cover = json.thumbnailUrl || defaultCover;
-          if (json.genre && Array.isArray(json.genre)) {
-            novel.genres = json.genre.join(', ');
-          }
-          if (json.publisher?.name) {
-            novel.author = json.publisher.name;
-          }
-          if (json.contentRating) {
-            novel.artist = json.contentRating;
-          }
-        }
-      } catch (_) {
-        //
-      }
-    });
+    if (!data?.episode) return novel;
 
-    // Fallback name from page title
-    if (!novel.name) {
-      novel.name = $('title').text().replace(/\s*\|.*$/, '').trim();
+    const ep = data.episode;
+    novel.name = ep.title || '';
+    novel.summary = ep.description
+      ? decodeHtmlEntities(
+          (ep.description as string)
+            .replace(/<br\s*\/?>/gi, '\n')
+            .replace(/<[^>]+>/g, ''),
+        )
+      : '';
+
+    if (ep.posterImage?.filePath) {
+      novel.cover = STORAGE_URL + ep.posterImage.filePath;
+    } else if (ep.backdropImage?.filePath) {
+      novel.cover = STORAGE_URL + ep.backdropImage.filePath;
+    } else {
+      novel.cover = defaultCover;
     }
 
-    // Fallback cover from first episode thumbnail
-    if (!novel.cover || novel.cover === defaultCover) {
-      const firstImg = $('a[href*="/watch/"] img').first().attr('src');
-      if (firstImg) novel.cover = firstImg;
+    if (ep.genres && Array.isArray(ep.genres)) {
+      novel.genres = ep.genres
+        .map((g: any) => g?.genre?.name)
+        .filter(Boolean)
+        .join(', ');
+    }
+
+    if (ep.studios && Array.isArray(ep.studios)) {
+      novel.author = ep.studios
+        .map((s: any) => s?.studio?.name)
+        .filter(Boolean)
+        .join(', ');
+    }
+
+    if (ep.contentRating) {
+      novel.artist = ep.contentRating;
     }
 
     novel.status = NovelStatus.Completed;
 
-    // Extract episodes from "Các tập khác" section
+    // Fetch all episodes of the same series by searching for the title
     const chapters: Plugin.ChapterItem[] = [];
-    const episodeLinks: { href: string; text: string }[] = [];
+    const seriesTitle = ep.title || '';
 
-    let foundSection = false;
-    $('h3').each((_, el) => {
-      if ($(el).text().includes('Các tập khác')) {
-        foundSection = true;
-        let parent = $(el).parent();
-        for (let i = 0; i < 10; i++) {
-          const links = parent.find('a[href*="/watch/"]');
-          if (links.length > 0) {
-            links.each((__, linkEl) => {
-              const href = $(linkEl).attr('href') || '';
-              const text = $(linkEl).text().trim();
-              if (href) episodeLinks.push({ href, text });
+    if (seriesTitle) {
+      const searchUrl = this.buildBrowseUrl(1, {
+        sort: 'publishedAt_desc',
+        animationType: 'ALL',
+        contentRating: 'ALL',
+        isTrailer: 'ALL',
+        genres: [],
+        excludeGenres: [],
+        studios: 'ALL',
+        year: 'ALL',
+      }, seriesTitle);
+
+      const browseData = await fetchSvelteData(searchUrl);
+      if (browseData?.episodes) {
+        const seriesEps = browseData.episodes.filter(
+          (e: any) => e?.title === seriesTitle,
+        );
+        seriesEps
+          .sort((a: any, b: any) => (a.episodeNumber || 0) - (b.episodeNumber || 0))
+          .forEach((e: any) => {
+            chapters.push({
+              name: `Tập ${e.episodeNumber || 1}`,
+              path: '/watch/' + e.slug,
+              chapterNumber: e.episodeNumber || 1,
             });
-            break;
-          }
-          parent = parent.parent();
-        }
+          });
       }
-    });
+    }
 
-    if (episodeLinks.length > 0) {
-      episodeLinks.forEach((ep, idx) => {
-        const numMatch = ep.href.match(/-(\d+)$/);
-        const epNum = numMatch ? parseInt(numMatch[1]) : idx + 1;
-        chapters.push({
-          name: `Tập ${epNum}`,
-          path: ep.href,
-          chapterNumber: epNum,
-        });
-      });
-    } else {
-      // Single episode - the current page is the only chapter
-      const numMatch = novelPath.match(/-(\d+)$/);
+    // Fallback: if search found nothing, add current episode
+    if (chapters.length === 0) {
+      const numMatch = slug.match(/-(\d+)$/);
       const epNum = numMatch ? parseInt(numMatch[1]) : 1;
       chapters.push({
         name: `Tập ${epNum}`,
@@ -613,28 +655,11 @@ class HentaiZPlugin implements Plugin.PluginBase {
   // ---------- parseChapter ----------
 
   async parseChapter(chapterPath: string): Promise<string> {
-    const url = SITE + chapterPath;
-    const html = await fetchText(url);
-    const $ = loadCheerio(html);
+    const slug = chapterPath.replace('/watch/', '');
+    const dataUrl = `${SITE}/watch/${slug}/__data.json`;
+    const data = await fetchSvelteData(dataUrl);
 
-    // Extract embedUrl from ld+json
-    let embedUrl = '';
-    $('script[type="application/ld+json"]').each((_, el) => {
-      try {
-        const json = JSON.parse($(el).html() || '');
-        if (json['@type'] === 'VideoObject' && json.embedUrl) {
-          embedUrl = json.embedUrl;
-        }
-      } catch (_) {
-        //
-      }
-    });
-
-    // Fallback: look for iframe in the page
-    if (!embedUrl) {
-      const iframe = $('iframe').first().attr('src');
-      if (iframe) embedUrl = iframe;
-    }
+    const embedUrl = data?.episode?.embedUrl || '';
 
     if (!embedUrl) {
       return '<p style="color:#ff4444;font-size:14px;font-family:sans-serif;text-align:center;padding:16px;">Không tìm thấy nguồn phát video.</p>';
