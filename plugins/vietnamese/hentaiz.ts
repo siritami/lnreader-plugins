@@ -3,7 +3,8 @@ import { Plugin } from '@/types/plugin';
 import { Filters, FilterTypes } from '@libs/filterInputs';
 import { defaultCover } from '@libs/defaultCover';
 import { NovelStatus } from '@libs/novelStatus';
-import { decodeHtmlEntities } from '@libs/utils';
+import { decodeHtmlEntities, encodeHtmlEntities } from '@libs/utils';
+import { storage } from '@libs/storage';
 
 const SITE = 'https://hentaiz.hot';
 const STORAGE_URL = 'https://storage.haiten.org';
@@ -370,13 +371,27 @@ class HentaiZPlugin implements Plugin.PluginBase {
   name = 'HentaiZ';
   icon = 'src/vi/hentaiz/icon.png';
   site = SITE;
-  version = '1.0.0';
+  version = '1.0.1';
+
+  customJS = 'src/vi/hentaiz/player.js';
 
   imageRequestInit: Plugin.ImageRequestInit = {
     headers: {
       Referer: SITE + '/',
     },
   };
+
+  pluginSettings: Plugin.PluginSettings = {
+    enableEmbed: {
+      value: false,
+      label: 'Bật embed',
+      type: 'Switch',
+    },
+  };
+
+  get enableEmbed() {
+    return storage.get('enableEmbed') as boolean;
+  }
 
   filters = {
     sort: {
@@ -665,10 +680,45 @@ class HentaiZPlugin implements Plugin.PluginBase {
       return '<p style="color:#ff4444;font-size:14px;font-family:sans-serif;text-align:center;padding:16px;">Không tìm thấy nguồn phát video.</p>';
     }
 
+    // Embed mode: plain iframe
+    if (this.enableEmbed) {
+      return this.buildPlayerHtml({ iframe: embedUrl });
+    }
+
+    // M3U8 mode: extract video ID for client-side decryption
+    const idMatch = embedUrl.match(/[?&]v=([a-f0-9-]+)/i);
+    const videoId = idMatch ? idMatch[1] : '';
+
+    if (!videoId) {
+      // Cannot extract video ID, fall back to embed
+      return this.buildPlayerHtml({ iframe: embedUrl });
+    }
+
+    return this.buildPlayerHtml({ videoId });
+  }
+
+  private buildPlayerHtml(opts: {
+    iframe?: string;
+    videoId?: string;
+  }): string {
+    const esc = (s: string) => encodeHtmlEntities(s);
+    const attrs: string[] = ['id="htz-player-container"'];
+
+    if (opts.iframe) attrs.push(`data-iframe="${esc(opts.iframe)}"`);
+    if (opts.videoId) attrs.push(`data-video-id="${esc(opts.videoId)}"`);
+
+    const mode = opts.videoId
+      ? 'Đang ở chế độ m3u8'
+      : 'Đang ở chế độ embed';
+
     return [
-      '<div style="position:relative;width:100%;padding-bottom:56.25%;background:#000;">',
-      `  <iframe src="${embedUrl}" style="position:absolute;top:0;left:0;width:100%;height:100%;border:none;" allowfullscreen></iframe>`,
+      `<div ${attrs.join(' ')}`,
+      '  style="position:relative;width:100%;padding-bottom:56.25%;background:#000;">',
+      '  <div id="htz-player-inner" style="position:absolute;top:0;left:0;width:100%;height:100%;display:flex;align-items:center;justify-content:center;">',
+      '    <p style="color:#fff;font-family:sans-serif;">Đang tải video...</p>',
+      '  </div>',
       '</div>',
+      `<p style="color:#888;font-size:12px;font-family:sans-serif;text-align:center;margin:4px 0;">${mode}</p>`,
     ].join('\n');
   }
 }
