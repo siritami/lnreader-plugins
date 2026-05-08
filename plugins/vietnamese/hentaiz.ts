@@ -4,10 +4,140 @@ import { Filters, FilterTypes } from '@libs/filterInputs';
 import { defaultCover } from '@libs/defaultCover';
 import { NovelStatus } from '@libs/novelStatus';
 import { decodeHtmlEntities, encodeHtmlEntities } from '@libs/utils';
+import { utf8ToBytes } from '@libs/utils';
 import { storage } from '@libs/storage';
+import { ctr } from '@noble/ciphers/aes.js';
 
 const SITE = 'https://hentaiz.hot';
 const STORAGE_URL = 'https://storage.haiten.org';
+const MIMIX_API = 'https://x.mimix.cc/watch/';
+
+// ─── Minimal SHA-256 (pure JS, no crypto dependency) ─────────────
+const SHA256_K = new Uint32Array([
+  0x428a2f98, 0x71374491, 0xb5c0fbcf, 0xe9b5dba5,
+  0x3956c25b, 0x59f111f1, 0x923f82a4, 0xab1c5ed5,
+  0xd807aa98, 0x12835b01, 0x243185be, 0x550c7dc3,
+  0x72be5d74, 0x80deb1fe, 0x9bdc06a7, 0xc19bf174,
+  0xe49b69c1, 0xefbe4786, 0x0fc19dc6, 0x240ca1cc,
+  0x2de92c6f, 0x4a7484aa, 0x5cb0a9dc, 0x76f988da,
+  0x983e5152, 0xa831c66d, 0xb00327c8, 0xbf597fc7,
+  0xc6e00bf3, 0xd5a79147, 0x06ca6351, 0x14292967,
+  0x27b70a85, 0x2e1b2138, 0x4d2c6dfc, 0x53380d13,
+  0x650a7354, 0x766a0abb, 0x81c2c92e, 0x92722c85,
+  0xa2bfe8a1, 0xa81a664b, 0xc24b8b70, 0xc76c51a3,
+  0xd192e819, 0xd6990624, 0xf40e3585, 0x106aa070,
+  0x19a4c116, 0x1e376c08, 0x2748774c, 0x34b0bcb5,
+  0x391c0cb3, 0x4ed8aa4a, 0x5b9cca4f, 0x682e6ff3,
+  0x748f82ee, 0x78a5636f, 0x84c87814, 0x8cc70208,
+  0x90befffa, 0xa4506ceb, 0xbef9a3f7, 0xc67178f2,
+]);
+
+function rotr(x: number, n: number): number {
+  return ((x >>> n) | (x << (32 - n))) >>> 0;
+}
+
+function sha256(msg: Uint8Array): Uint8Array {
+  const len = msg.length;
+  const bitLen = len * 8;
+  const padLen = (((len + 8) >>> 6) + 1) << 6;
+  const buf = new Uint8Array(padLen);
+  buf.set(msg);
+  buf[len] = 0x80;
+  const dv = new DataView(buf.buffer);
+  dv.setUint32(padLen - 4, bitLen, false);
+
+  let h0 = 0x6a09e667, h1 = 0xbb67ae85, h2 = 0x3c6ef372, h3 = 0xa54ff53a;
+  let h4 = 0x510e527f, h5 = 0x9b05688c, h6 = 0x1f83d9ab, h7 = 0x5be0cd19;
+  const w = new Uint32Array(64);
+
+  for (let off = 0; off < padLen; off += 64) {
+    for (let j = 0; j < 16; j++) w[j] = dv.getUint32(off + j * 4, false);
+    for (let j = 16; j < 64; j++) {
+      const s0 = (rotr(w[j - 15], 7) ^ rotr(w[j - 15], 18) ^ (w[j - 15] >>> 3)) >>> 0;
+      const s1 = (rotr(w[j - 2], 17) ^ rotr(w[j - 2], 19) ^ (w[j - 2] >>> 10)) >>> 0;
+      w[j] = (w[j - 16] + s0 + w[j - 7] + s1) >>> 0;
+    }
+    let a = h0, b = h1, c = h2, d = h3, e = h4, f = h5, g = h6, h = h7;
+    for (let j = 0; j < 64; j++) {
+      const S1 = (rotr(e, 6) ^ rotr(e, 11) ^ rotr(e, 25)) >>> 0;
+      const ch = ((e & f) ^ (~e & g)) >>> 0;
+      const t1 = (h + S1 + ch + SHA256_K[j] + w[j]) >>> 0;
+      const S0 = (rotr(a, 2) ^ rotr(a, 13) ^ rotr(a, 22)) >>> 0;
+      const maj = ((a & b) ^ (a & c) ^ (b & c)) >>> 0;
+      const t2 = (S0 + maj) >>> 0;
+      h = g; g = f; f = e; e = (d + t1) >>> 0;
+      d = c; c = b; b = a; a = (t1 + t2) >>> 0;
+    }
+    h0 = (h0 + a) >>> 0; h1 = (h1 + b) >>> 0;
+    h2 = (h2 + c) >>> 0; h3 = (h3 + d) >>> 0;
+    h4 = (h4 + e) >>> 0; h5 = (h5 + f) >>> 0;
+    h6 = (h6 + g) >>> 0; h7 = (h7 + h) >>> 0;
+  }
+
+  const out = new Uint8Array(32);
+  const ov = new DataView(out.buffer);
+  ov.setUint32(0, h0, false); ov.setUint32(4, h1, false);
+  ov.setUint32(8, h2, false); ov.setUint32(12, h3, false);
+  ov.setUint32(16, h4, false); ov.setUint32(20, h5, false);
+  ov.setUint32(24, h6, false); ov.setUint32(28, h7, false);
+  return out;
+}
+
+function hexToBytes(hex: string): Uint8Array {
+  const bytes = new Uint8Array(hex.length / 2);
+  for (let i = 0; i < hex.length; i += 2) {
+    bytes[i / 2] = parseInt(hex.substring(i, i + 2), 16);
+  }
+  return bytes;
+}
+
+async function decryptVideoData(
+  videoId: string,
+): Promise<{ m3u8Master: string; m3u8Playlists: string[]; variantFolders: string[]; segDomain: string; id: string } | null> {
+  try {
+    const res = await fetchApi(MIMIX_API + videoId);
+    if (!res.ok) return null;
+    const text = await res.text();
+    const colonIdx = text.indexOf(':');
+    if (colonIdx < 0) return null;
+
+    const iv = hexToBytes(text.substring(0, colonIdx));
+    const ct = hexToBytes(text.substring(colonIdx + 1));
+    const key = sha256(utf8ToBytes(videoId));
+
+    const cipher = ctr(key, iv);
+    const decrypted = cipher.decrypt(ct);
+    const jsonStr = new TextDecoder().decode(decrypted);
+    const data = JSON.parse(jsonStr);
+
+    const m3u8 = data.defaultM3u8;
+    if (!m3u8?.master || !m3u8?.playlists?.length) return null;
+
+    const segDomain =
+      data.segmentDomains?.length > 0
+        ? data.segmentDomains[0]
+        : data.domain || '';
+
+    // Extract variant folder names from master playlist
+    const variantFolders: string[] = [];
+    for (const line of m3u8.master.split('\n')) {
+      const trimmed = line.trim();
+      if (trimmed && !trimmed.startsWith('#') && trimmed.includes('playlist.m3u8')) {
+        variantFolders.push(trimmed.replace('/playlist.m3u8', ''));
+      }
+    }
+
+    return {
+      m3u8Master: m3u8.master,
+      m3u8Playlists: m3u8.playlists,
+      variantFolders,
+      segDomain,
+      id: data.id || videoId,
+    };
+  } catch {
+    return null;
+  }
+}
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function decodeSvelteData(data: any[]): any {
@@ -685,35 +815,69 @@ class HentaiZPlugin implements Plugin.PluginBase {
       return this.buildPlayerHtml({ iframe: embedUrl });
     }
 
-    // M3U8 mode: extract video ID for client-side decryption
+    // M3U8 mode: decrypt video data server-side
     const idMatch = embedUrl.match(/[?&]v=([a-f0-9-]+)/i);
     const videoId = idMatch ? idMatch[1] : '';
 
     if (!videoId) {
-      // Cannot extract video ID, fall back to embed
       return this.buildPlayerHtml({ iframe: embedUrl });
     }
 
-    return this.buildPlayerHtml({ videoId });
+    const videoData = await decryptVideoData(videoId);
+    if (!videoData) {
+      return this.buildPlayerHtml({ iframe: embedUrl });
+    }
+
+    // Build absolute-URL m3u8 playlists and embed as JSON data attribute
+    const rewrittenPlaylists: string[] = [];
+    for (let i = 0; i < videoData.m3u8Playlists.length; i++) {
+      const folder = videoData.variantFolders[i] || videoData.variantFolders[0] || '';
+      const baseUrl = `${videoData.segDomain}/${videoData.id}/${folder}/`;
+      const lines = videoData.m3u8Playlists[i].split('\n');
+      const rewritten = lines.map(line => {
+        const t = line.trim();
+        return t && !t.startsWith('#') ? baseUrl + t : t;
+      }).join('\n');
+      rewrittenPlaylists.push(rewritten);
+    }
+
+    // Rewrite master playlist with placeholder variant indices
+    const masterLines = videoData.m3u8Master.split('\n');
+    let varIdx = 0;
+    const rewrittenMaster = masterLines.map(line => {
+      const t = line.trim();
+      if (t && !t.startsWith('#') && t.includes('playlist.m3u8')) {
+        return `__VARIANT_${varIdx++}__`;
+      }
+      return t;
+    }).join('\n');
+
+    return this.buildPlayerHtml({
+      m3u8Master: rewrittenMaster,
+      m3u8Playlists: rewrittenPlaylists,
+    });
   }
 
   private buildPlayerHtml(opts: {
     iframe?: string;
-    videoId?: string;
+    m3u8Master?: string;
+    m3u8Playlists?: string[];
   }): string {
     const esc = (s: string) => encodeHtmlEntities(s);
     const attrs: string[] = ['id="htz-player-container"'];
 
     if (opts.iframe) attrs.push(`data-iframe="${esc(opts.iframe)}"`);
-    if (opts.videoId) attrs.push(`data-video-id="${esc(opts.videoId)}"`);
+    if (opts.m3u8Master) attrs.push(`data-m3u8-master="${esc(opts.m3u8Master)}"`);
+    if (opts.m3u8Playlists) {
+      attrs.push(`data-m3u8-playlists="${esc(JSON.stringify(opts.m3u8Playlists))}"`);
+    }
 
-    const mode = opts.videoId
+    const mode = opts.m3u8Master
       ? 'Đang ở chế độ m3u8'
       : 'Đang ở chế độ embed';
 
     return [
-      `<div ${attrs.join(' ')}`,
-      '  style="position:relative;width:100%;padding-bottom:56.25%;background:#000;">',
+      `<div ${attrs.join(' ')} style="position:relative;width:100%;padding-bottom:56.25%;background:#000;">`,
       '  <div id="htz-player-inner" style="position:absolute;top:0;left:0;width:100%;height:100%;display:flex;align-items:center;justify-content:center;">',
       '    <p style="color:#fff;font-family:sans-serif;">Đang tải video...</p>',
       '  </div>',
