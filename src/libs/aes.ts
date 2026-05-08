@@ -2,4 +2,4 @@
  * Backward compatibility for 3.0.0 - Re-exports from new location
  * TODO: Remove in 4.0.0
  */
-export { gcm, cbc } from '../lib/aes';
+export { gcm, cbc, ctr } from '../lib/aes';

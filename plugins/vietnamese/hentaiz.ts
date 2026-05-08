@@ -6,7 +6,7 @@ import { NovelStatus } from '@libs/novelStatus';
 import { decodeHtmlEntities, encodeHtmlEntities } from '@libs/utils';
 import { utf8ToBytes } from '@libs/utils';
 import { storage } from '@libs/storage';
-import { ctr } from '@noble/ciphers/aes.js';
+import { ctr } from '@libs/aes';
 
 const SITE = 'https://hentaiz.hot';
 const STORAGE_URL = 'https://storage.haiten.org';
