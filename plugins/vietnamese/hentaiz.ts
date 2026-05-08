@@ -96,10 +96,17 @@ async function decryptVideoData(
 ): Promise<{ m3u8Master: string; m3u8Playlists: string[]; variantFolders: string[]; segDomain: string; id: string } | null> {
   try {
     const res = await fetchApi(MIMIX_API + videoId);
-    if (!res.ok) return null;
-    const text = await res.text();
+    if (!res.ok) {
+      console.error('[HTZ] mimix fetch failed:', res.status);
+      return null;
+    }
+    const rawText = await res.text();
+    const text = rawText.trim();
     const colonIdx = text.indexOf(':');
-    if (colonIdx < 0) return null;
+    if (colonIdx < 0) {
+      console.error('[HTZ] invalid mimix response format');
+      return null;
+    }
 
     const iv = hexToBytes(text.substring(0, colonIdx));
     const ct = hexToBytes(text.substring(colonIdx + 1));
@@ -111,14 +118,16 @@ async function decryptVideoData(
     const data = JSON.parse(jsonStr);
 
     const m3u8 = data.defaultM3u8;
-    if (!m3u8?.master || !m3u8?.playlists?.length) return null;
+    if (!m3u8?.master || !m3u8?.playlists?.length) {
+      console.error('[HTZ] no m3u8 data in decrypted response');
+      return null;
+    }
 
     const segDomain =
       data.segmentDomains?.length > 0
         ? data.segmentDomains[0]
         : data.domain || '';
 
-    // Extract variant folder names from master playlist
     const variantFolders: string[] = [];
     for (const line of m3u8.master.split('\n')) {
       const trimmed = line.trim();
@@ -134,7 +143,8 @@ async function decryptVideoData(
       segDomain,
       id: data.id || videoId,
     };
-  } catch {
+  } catch (e) {
+    console.error('[HTZ] decryptVideoData error:', e);
     return null;
   }
 }
