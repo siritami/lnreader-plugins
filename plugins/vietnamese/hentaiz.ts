@@ -731,13 +731,12 @@ class HentaiZPlugin implements Plugin.PluginBase {
         )
       : '';
 
-    if (ep.posterImage?.filePath) {
-      novel.cover = STORAGE_URL + ep.posterImage.filePath;
-    } else if (ep.backdropImage?.filePath) {
-      novel.cover = STORAGE_URL + ep.backdropImage.filePath;
-    } else {
-      novel.cover = defaultCover;
-    }
+    // Detail endpoint has no images; cover is fetched from browse data below
+    novel.cover = ep.posterImage?.filePath
+      ? STORAGE_URL + ep.posterImage.filePath
+      : ep.backdropImage?.filePath
+        ? STORAGE_URL + ep.backdropImage.filePath
+        : defaultCover;
 
     if (ep.genres && Array.isArray(ep.genres)) {
       novel.genres = ep.genres
@@ -780,6 +779,17 @@ class HentaiZPlugin implements Plugin.PluginBase {
         const seriesEps = browseData.episodes.filter(
           (e: any) => e?.title === seriesTitle,
         );
+
+        // Get cover from browse data (detail endpoint has no images)
+        if (novel.cover === defaultCover && seriesEps.length > 0) {
+          const firstEp = seriesEps[0];
+          if (firstEp.backdropImage?.filePath) {
+            novel.cover = STORAGE_URL + firstEp.backdropImage.filePath;
+          } else if (firstEp.posterImage?.filePath) {
+            novel.cover = STORAGE_URL + firstEp.posterImage.filePath;
+          }
+        }
+
         seriesEps
           .sort((a: any, b: any) => (a.episodeNumber || 0) - (b.episodeNumber || 0))
           .forEach((e: any) => {
