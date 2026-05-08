@@ -4,6 +4,7 @@ import { load as loadCheerio } from 'cheerio';
 import { defaultCover } from '@libs/defaultCover';
 import { NovelStatus } from '@libs/novelStatus';
 import { Filters } from '@libs/filterInputs';
+import { set } from "@libs/cookie";
 
 type TieuThuyetMangStory = {
   slug?: string;
@@ -20,13 +21,27 @@ class TieuThuyetMangPlugin implements Plugin.PluginBase {
   name = 'Tiểu Thuyết Mạng';
   icon = 'src/vi/tieuthuyetmang/icon.png';
   site = 'https://tieuthuyetmang.com';
-  version = '1.0.3';
+  version = '1.0.4';
 
   imageRequestInit: Plugin.ImageRequestInit = {
     headers: {
       Referer: this.site,
     },
   };
+
+  constructor() {
+    this.beforeRequest();
+  }
+
+  private beforeRequest() {
+    return set(this.site, {
+      name: 'site_access_gate',
+      value: '1',
+      path: '/',
+      httpOnly: true,
+      secure: true,
+    });
+  }
 
   private normalizeCoverUrl(rawUrl?: string): string {
     if (!rawUrl) {
@@ -227,6 +242,9 @@ class TieuThuyetMangPlugin implements Plugin.PluginBase {
 
   async parseNovel(novelPath: string): Promise<Plugin.SourceNovel> {
     const response = await fetchApi(new URL(novelPath, this.site).toString());
+    if (!response.ok) {
+      throw new Error(`Failed to fetch novel page: ${response.status} ${response.statusText}`);
+    }
     const html = await response.text();
     const $ = loadCheerio(html);
 
