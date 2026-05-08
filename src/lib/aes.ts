@@ -1,1 +1,12 @@
-export { gcm, cbc, ctr } from '@noble/ciphers/aes.js';
+export {
+  ctr,
+  ecb,
+  cbc,
+  cfb,
+  gcm,
+  gcmsiv,
+  aeskw,
+  aeskwp,
+  cmac,
+  aessiv,
+} from '@noble/ciphers/aes.js';
