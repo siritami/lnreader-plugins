@@ -235,7 +235,6 @@
       loadHlsJs(function () {
         if (typeof Hls !== 'undefined' && Hls.isSupported()) {
           // Custom fragment loader: strips 127-byte PNG prefix from each segment
-          // (AnimeVietsub disguises TS segments with a PNG header)
           var AvsFragLoader = function (config) {
             var inner = new Hls.DefaultConfig.loader(config);
             Object.defineProperties(this, {
