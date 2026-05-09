@@ -5,14 +5,14 @@ import { load as loadCheerio } from 'cheerio';
 import { defaultCover } from '@libs/defaultCover';
 import { NovelStatus } from '@libs/novelStatus';
 import { storage } from '@libs/storage';
-import { Buffer } from '@libs/utils';
+import { Buffer, encodeHtmlEntities } from '@libs/utils';
 
 class JukaNovelPlugin implements Plugin.PluginBase {
   id = 'jukanovel';
   name = 'JukaNovel';
-  icon = 'src/multi/jukanovel/icon.png';
+  icon = 'src/vi/jukanovel/icon.png';
   site = 'https://jukaza.site';
-  version = '1.0.3';
+  version = '1.0.4';
 
   pluginSettings: Plugin.PluginSettings = {
     preferRaw: {
@@ -188,7 +188,7 @@ class JukaNovelPlugin implements Plugin.PluginBase {
         .filter(block => block.trim())
         .map(block => {
           const lines = block.split('\n').filter(l => l.trim());
-          return `<p>${lines.join('<br>')}</p>`;
+          return `<div>${lines.map(l => `<p>${encodeHtmlEntities(l)}</p>`).join('<br>')}</div>`;
         })
         .join('');
     }

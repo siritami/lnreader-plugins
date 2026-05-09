@@ -11,7 +11,7 @@ This is a fork of the original repository, containing only my custom plugins and
 - [LNKuro](https://lnkuro.top)
 - [Luvevaland](https://luvevaland.co)
 - [NocSyosetu](https://noc.syosetu.com)[^1]
-- [PixivNovel](https://pixiv.net)
+- [PixivNovel](https://pixiv.net)[^1]
 - [Sáng Tác Việt](https://sangtacviet.app/)[^1]
 - [tieuthuyetmang](https://tieuthuyetmang.com)
 - [TomatoMTL](https://tomatomtl.com)[^1]

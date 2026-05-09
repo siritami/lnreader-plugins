@@ -5,6 +5,7 @@ import { defaultCover } from '@libs/defaultCover';
 import { NovelStatus } from '@libs/novelStatus';
 import { Filters } from '@libs/filterInputs';
 import { set } from "@libs/cookie";
+import { encodeHtmlEntities } from '@libs/utils';
 
 type TieuThuyetMangStory = {
   slug?: string;
@@ -21,7 +22,7 @@ class TieuThuyetMangPlugin implements Plugin.PluginBase {
   name = 'Tiểu Thuyết Mạng';
   icon = 'src/vi/tieuthuyetmang/icon.png';
   site = 'https://tieuthuyetmang.com';
-  version = '1.0.4';
+  version = '1.0.5';
 
   imageRequestInit: Plugin.ImageRequestInit = {
     headers: {
@@ -316,7 +317,12 @@ class TieuThuyetMangPlugin implements Plugin.PluginBase {
       );
     }
 
-    return `<div>${chapterContent.html()?.trim().split('\n').join('<br>')}<div>`;
+    return `<div>${chapterContent
+      .html()
+      ?.trim()
+      .split('\n')
+      .map(line => `<p>${encodeHtmlEntities(line)}</p>`)
+      .join('<br>')}<div>`;
   }
 
   async searchNovels(

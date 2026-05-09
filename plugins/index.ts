@@ -1,23 +1,23 @@
 import { Plugin } from '@/types/plugin';
 import p_0 from '@plugins/japanese/NocSyosetu';
 import p_1 from '@plugins/japanese/Pixiv';
-import p_2 from '@plugins/multi/jukanovel';
+import p_2 from '@plugins/vietnamese/jukanovel';
 import p_3 from '@plugins/vietnamese/akaytruyen';
 import p_4 from '@plugins/vietnamese/AnimeVietsub';
 import p_5 from '@plugins/vietnamese/BaoMoi';
 import p_6 from '@plugins/vietnamese/doctruyenln';
-import p_7 from '@plugins/vietnamese/LNHako';
-import p_8 from '@plugins/vietnamese/LNKuro';
-import p_9 from '@plugins/vietnamese/luvevaland';
-import p_10 from '@plugins/vietnamese/SangTacViet';
-import p_11 from '@plugins/vietnamese/tieuthuyetmang';
-import p_12 from '@plugins/vietnamese/truyenfull';
-import p_13 from '@plugins/vietnamese/valvrareteam';
-import p_14 from '@plugins/vietnamese/wanwansekai';
-import p_15 from '@plugins/vietnamese/ZumiNovel';
-import p_16 from '@plugins/vietnamese/TomatoMTL';
-import p_17 from '@plugins/vietnamese/NguonC';
-import p_18 from '@plugins/vietnamese/hentaiz';
+import p_7 from '@plugins/vietnamese/hentaiz';
+import p_8 from '@plugins/vietnamese/LNHako';
+import p_9 from '@plugins/vietnamese/LNKuro';
+import p_10 from '@plugins/vietnamese/luvevaland';
+import p_11 from '@plugins/vietnamese/NguonC';
+import p_12 from '@plugins/vietnamese/SangTacViet';
+import p_13 from '@plugins/vietnamese/tieuthuyetmang';
+import p_14 from '@plugins/vietnamese/TomatoMTL';
+import p_15 from '@plugins/vietnamese/truyenfull';
+import p_16 from '@plugins/vietnamese/valvrareteam';
+import p_17 from '@plugins/vietnamese/wanwansekai';
+import p_18 from '@plugins/vietnamese/ZumiNovel';
 
 const PLUGINS: Plugin.PluginBase[] = [
   p_0,
