@@ -77,3 +77,55 @@ npm run dev:start
 
 - Nếu truyện không tải được danh sách, hãy mở **tab Network** trong Developer Tools để xem các request lấy HTML có trả về nội dung kỳ vọng hay bị chặn (Block/CORS/Cloudflare).
 - Nếu Request trả về nội dung đúng (Status 200) nhưng thông tin hiển thị lên trang web lại sai/trống, bạn hãy dùng `console.log` hiển thị các biến lưu kết quả parse (`cheerio`) trước khi `return` để kiểm tra độ chính xác của Selectors CSS mà bạn cung cấp. Quá trình này giúp phát hiện trường hợp phía website đã thay đổi giao diện làm bộ lọc cũ không hoạt động.
+
+## Một số lưu ý khi sử dụng plugin tương thích với [LNReader-Extended](https://github.com/Yuneko-dev/lnreader-extended)
+
+### 1. Sử dụng các thư viện tương thích với ứng dụng
+
+- `@libs/aes`: Đã bổ sung `ctr`, `ecb`, `cbc`, `cfb`, `gcmsiv`, `aeskw`, `aeskwp`, `cmac` và `aessiv`, dựa trên thư viện `@noble/ciphers/aes.js`
+
+- `@libs/utils`: Đã bổ sung các hàm `utf8ToBytes`, `bytesToUtf8`; `Buffer` (polyfill, sử dụng như Buffer của Node.js), `encodeHtmlEntities` và `decodeHtmlEntities` dựa trên thư viện `html-entities`
+
+- `@libs/fetch`: xóa bỏ `fetchFile` (do ứng dụng gốc cũng không có)
+
+- `@libs/cookie`: (Xem typing TypeScript) Một bộ API tương tác với `@preeternal/react-native-cookie-manager` (có giới hạn)
+
+### 2. Các hành vi mới của ứng dụng
+
+#### API dùng để buộc tải lại 1 chapter truyện (bỏ qua cache):
+
+```js
+window.reader.refetch();
+```
+
+hoặc
+
+```js
+window.reader.post({ type: 'refetch' });
+```
+
+#### Làm thế nào để ứng dụng không cache chương hiện tại? (Sẽ hỗ trợ trong bản dựng sắp tới)
+
+- Thêm vào phản hồi của parseChapter một thẻ meta có id no-cache-marker
+
+```html
+<meta id="no-cache-marker"/>
+```
+
+#### Làm thế nào để ứng dụng không tải chương tiếp theo? (Sẽ hỗ trợ trong bản dựng sắp tới)
+
+- Thêm vào phản hồi của parseChapter một thẻ meta có id no-prefetch-marker
+
+```html
+<meta id="no-prefetch-marker"/>
+```
+
+### 3. Captcha và các vấn đề bên lề
+
+- Ưu tiên mở trang Web bằng WebView rồi giải captcha.
+
+- Nếu trang Web chặn WebView, có thể thử đổi User-Agent trong cài đặt.
+
+- Nếu vẫn không được, có thể render Captcha trực tiếp trong màn hình Reader. Tuy nhiên, vì hàm `parseChapter` đã được chuẩn hóa, nên script và các thẻ khác có thể không chạy. Sử dụng customJS để xử lý hành vi.
+
+- Trong Reader, URL (location) mặc định sử dụng sẽ là URL site của plugin (Không phải URL của Chapter)

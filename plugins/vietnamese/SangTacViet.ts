@@ -366,10 +366,12 @@ class SangTacVietPlugin implements Plugin.PluginBase {
   id = 'sangtacviet';
   name = 'Sáng Tác Việt';
   icon = 'src/vi/sangtacviet/icon.png';
+  customJS = 'src/vi/sangtacviet/custom.js';
+
   get site() {
     return DOMAINS[this.selectedDomain] || SITE;
   }
-  version = '1.0.16';
+  version = '1.0.17';
   webStorageUtilized = true;
 
   pluginSettings: Plugin.PluginSettings = {
@@ -845,11 +847,14 @@ class SangTacVietPlugin implements Plugin.PluginBase {
           );
         }
         case '21': {
+          /*
           throw new STVChapterError(
             'Bạn cần xác nhận captcha. Hãy thử lại sau vài giây.',
             21,
             data,
           );
+          */
+         return "<div id='captcha-placeholder'></div><meta id='no-cache-marker'/><meta id='no-prefetch-marker'/>";
         }
         case '1': {
           throw new STVChapterError(
