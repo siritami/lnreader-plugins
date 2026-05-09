@@ -104,7 +104,7 @@ hoặc
 window.reader.post({ type: 'refetch' });
 ```
 
-#### Làm thế nào để ứng dụng không cache chương hiện tại? (Sẽ hỗ trợ trong bản dựng sắp tới)
+#### Làm thế nào để ứng dụng không cache chương hiện tại?
 
 - Thêm vào phản hồi của parseChapter một thẻ meta có id no-cache-marker
 
@@ -112,7 +112,7 @@ window.reader.post({ type: 'refetch' });
 <meta id="no-cache-marker"/>
 ```
 
-#### Làm thế nào để ứng dụng không tải chương tiếp theo? (Sẽ hỗ trợ trong bản dựng sắp tới)
+#### Làm thế nào để ứng dụng không tải chương tiếp theo?
 
 - Thêm vào phản hồi của parseChapter một thẻ meta có id no-prefetch-marker
 
