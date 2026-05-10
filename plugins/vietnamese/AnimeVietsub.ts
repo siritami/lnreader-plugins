@@ -7,14 +7,14 @@ import { NovelStatus } from '@libs/novelStatus';
 import { encodeHtmlEntities } from '@libs/utils';
 import { storage } from '@libs/storage';
 
-const SITE = 'https://animevietsub.bz';
+const SITE = 'https://animevietsub.site';
 
 class AnimeVietsubPlugin implements Plugin.PluginBase {
   id = 'animevietsub';
   name = 'AnimeVietsub';
   icon = 'src/vi/animevietsub/icon.png';
   site = SITE;
-  version = '1.0.5';
+  version = '1.0.6';
 
   customJS = 'src/vi/animevietsub/player.js';
 
