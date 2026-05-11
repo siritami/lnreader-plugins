@@ -14,7 +14,7 @@ class AnimeVietsubPlugin implements Plugin.PluginBase {
   name = 'AnimeVietsub';
   icon = 'src/vi/animevietsub/icon.png';
   site = SITE;
-  version = '1.0.8';
+  version = '1.0.9';
 
   customJS = 'src/vi/animevietsub/player.js';
 
@@ -561,7 +561,7 @@ class AnimeVietsubPlugin implements Plugin.PluginBase {
             name: epLabel,
             path,
             chapterNumber: Number.isFinite(num) ? num : idx + 1,
-            page: name + '\u200b',
+            page: name?.length ? name + '\u200b' : undefined,
           });
         });
     });
@@ -676,7 +676,7 @@ class AnimeVietsubPlugin implements Plugin.PluginBase {
 
     // When embed is off, don't fall back to hash/iframe
     if (!this.enableEmbed) {
-      return '<p style="color:#ff4444;font-size:14px;font-family:sans-serif;text-align:center;padding:16px;">Không tìm thấy nguồn m3u8 cho tập phim này. Bật "Bật embed" trong cài đặt plugin để dùng fallback.</p>';
+      return '<p style="color:#ff4444;font-size:14px;font-family:sans-serif;text-align:center;padding:16px;">Không tìm thấy nguồn m3u8 cho tập phim này. Bật "Bật embed" trong cài đặt plugin để dùng fallback.</p><meta id="no-cache-marker"/><meta id="no-prefetch-marker"/>';
     }
 
     // ── 2. Fallback: extract data-hash/data-id for AJAX via customJS ──
@@ -744,6 +744,7 @@ class AnimeVietsubPlugin implements Plugin.PluginBase {
       '  </div>',
       '</div>',
       `<p style="color:#888;font-size:12px;font-family:sans-serif;text-align:center;margin:4px 0;">${mode}</p>`,
+      '<meta id="no-cache-marker"/><meta id="no-prefetch-marker"/>',
     ].join('\n');
   }
 }

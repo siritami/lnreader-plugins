@@ -510,7 +510,7 @@ class HentaiZPlugin implements Plugin.PluginBase {
   name = 'HentaiZ';
   icon = 'src/vi/hentaiz/icon.png';
   site = SITE;
-  version = '1.0.2';
+  version = '1.0.3';
 
   customJS = 'src/vi/hentaiz/player.js';
 
@@ -826,7 +826,7 @@ class HentaiZPlugin implements Plugin.PluginBase {
     const embedUrl = data?.episode?.embedUrl || '';
 
     if (!embedUrl) {
-      return '<p style="color:#ff4444;font-size:14px;font-family:sans-serif;text-align:center;padding:16px;">Không tìm thấy nguồn phát video.</p>';
+      return '<p style="color:#ff4444;font-size:14px;font-family:sans-serif;text-align:center;padding:16px;">Không tìm thấy nguồn phát video.</p><meta id="no-cache-marker"/><meta id="no-prefetch-marker"/>';
     }
 
     // Embed mode: plain iframe
@@ -902,6 +902,7 @@ class HentaiZPlugin implements Plugin.PluginBase {
       '  </div>',
       '</div>',
       `<p style="color:#888;font-size:12px;font-family:sans-serif;text-align:center;margin:4px 0;">${mode}</p>`,
+      '<meta id="no-cache-marker"/><meta id="no-prefetch-marker"/>',
     ].join('\n');
   }
 }
