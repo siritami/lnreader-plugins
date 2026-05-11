@@ -510,7 +510,7 @@ class HentaiZPlugin implements Plugin.PluginBase {
   name = 'HentaiZ';
   icon = 'src/vi/hentaiz/icon.png';
   site = SITE;
-  version = '1.0.1';
+  version = '1.0.2';
 
   customJS = 'src/vi/hentaiz/player.js';
 

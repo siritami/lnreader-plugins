@@ -87,10 +87,15 @@
     // --- Đồng bộ tiến độ xem với app gốc ---
     var hasSeekedInitial = false;
     var lastSaveTime = 0;
-    
+
     video.addEventListener('loadedmetadata', function () {
       try {
-        if (!hasSeekedInitial && video.duration > 0 && window.reader && window.reader.chapter) {
+        if (
+          !hasSeekedInitial &&
+          video.duration > 0 &&
+          window.reader &&
+          window.reader.chapter
+        ) {
           var initialProgress = window.reader.chapter.progress || 0;
           if (initialProgress > 0 && initialProgress < 100) {
             video.currentTime = Math.floor(
@@ -106,7 +111,11 @@
 
     video.addEventListener('timeupdate', function () {
       try {
-        if (video.duration > 0 && window.reader && typeof window.reader.post === 'function') {
+        if (
+          video.duration > 0 &&
+          window.reader &&
+          typeof window.reader.post === 'function'
+        ) {
           var currentTime = video.currentTime;
           // Cập nhật tiến độ sau mỗi 5 giây
           if (Math.abs(currentTime - lastSaveTime) >= 5) {
@@ -114,9 +123,25 @@
             var progressInt = Math.floor((currentTime / video.duration) * 100);
             window.reader.post({
               type: 'save',
-              data: progressInt
+              data: progressInt,
             });
           }
+        }
+      } catch (e) {
+        // Bỏ qua lỗi
+      }
+    });
+
+    video.addEventListener('ended', function () {
+      try {
+        if (window.reader && typeof window.reader.post === 'function') {
+          // mark as completed
+          window.reader.post({
+            type: 'save',
+            data: 100,
+          });
+          // move to next chapter
+          if (window.reader.nextChapter) window.reader.post({ type: 'next' });
         }
       } catch (e) {
         // Bỏ qua lỗi
