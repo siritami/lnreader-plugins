@@ -77,7 +77,8 @@ function generateSignature(urlPath: string): string {
 }
 
 function generateHash(): string {
-  const chars = '0123456789abcdef';
+  const chars =
+    'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
   let hash = '';
   for (let i = 0; i < 16; i++) {
     hash += chars[Math.floor(Math.random() * chars.length)];
@@ -134,7 +135,7 @@ interface ApiListResponse<T> {
   success: boolean;
 }
 
-class MotTruyenPlugin implements Plugin.PluginBase {
+class MeTruyenCVPlugin implements Plugin.PluginBase {
   id = 'metruyencv';
   name = 'MeTruyenCV';
   icon = 'src/vi/metruyencv/icon.png';
@@ -161,16 +162,20 @@ class MotTruyenPlugin implements Plugin.PluginBase {
   async parseNovel(novelPath: string): Promise<Plugin.SourceNovel> {
     const bookId = novelPath;
 
-    // Fetch chapters to get book info from extra field
-    const chapUrl = `chapters?filter[book_id]=${bookId}&filter[type]=published`;
-    const chapJson = await apiGet(chapUrl);
+    // Fetch book detail and chapter list in parallel
+    const [bookJson, chapJson] = await Promise.all([
+      apiGet(`books/${bookId}`),
+      apiGet(
+        `chapters?filter[book_id]=${bookId}&filter[type]=published`,
+      ),
+    ]);
 
-    if (!chapJson.success) {
+    const book = bookJson?.data || chapJson?.extra?.book;
+    if (!book) {
       throw new Error('Không tìm thấy truyện');
     }
 
-    const book = chapJson.extra?.book;
-    const chaptersData: ChapterItem[] = chapJson.data || [];
+    const chaptersData: ChapterItem[] = chapJson?.data || [];
 
     let status: string = NovelStatus.Unknown;
     if (book?.status_name === 'Hoàn thành') {
@@ -255,4 +260,4 @@ class MotTruyenPlugin implements Plugin.PluginBase {
   } satisfies Filters;
 }
 
-export default new MotTruyenPlugin();
+export default new MeTruyenCVPlugin();
