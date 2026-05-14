@@ -6,7 +6,7 @@ import { NovelStatus } from '@libs/novelStatus';
 class AkayTruyenPlugin implements Plugin.PagePlugin {
   id = 'akaytruyen.com';
   name = 'AkayTruyen';
-  version = '1.0.1';
+  version = '1.0.2';
   icon = 'src/vi/akaytruyen/favicon.png';
   site = 'https://akaytruyen.com';
 
@@ -92,7 +92,7 @@ class AkayTruyenPlugin implements Plugin.PagePlugin {
       author,
       genres: genres.join(','),
       status,
-      summary,
+      summary: summary.trim(),
       path: novelPath,
       totalPages,
       chapters,

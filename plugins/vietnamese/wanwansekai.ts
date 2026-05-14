@@ -9,7 +9,7 @@ class WanwanSekaiPlugin implements Plugin.PluginBase {
   name = 'WanwanSekai';
   icon = 'src/vi/wanwansekai/icon.png';
   site = 'https://wanwansekai.com/';
-  version = '1.0.0';
+  version = '1.0.1';
 
   private allNovels: Plugin.NovelItem[] = [];
 
@@ -86,7 +86,7 @@ class WanwanSekaiPlugin implements Plugin.PluginBase {
         $('.summary_image img').attr('data-srcset')?.split(' ')[0] ||
         $('.summary_image img').attr('src') ||
         defaultCover,
-      summary: $('.description-summary').text().trim(),
+      summary: $('.summary__content').text().trim(),
       author: $('.author-content a')
         .map((i, el) => $(el).text().trim())
         .get()

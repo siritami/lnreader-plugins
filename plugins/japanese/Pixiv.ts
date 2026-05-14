@@ -4,6 +4,7 @@ import { NovelStatus } from '@libs/novelStatus';
 import { defaultCover } from '@libs/defaultCover';
 import { FilterTypes, Filters } from '@libs/filterInputs';
 import { storage } from '@libs/storage';
+import { encodeHtmlEntities } from '@libs/utils';
 
 const supportedLanguages: Record<string, string> = {
   af: 'Afrikaans',
@@ -85,7 +86,7 @@ class PixivNovelPlugin implements Plugin.PagePlugin {
   name = 'Pixiv Novel';
   icon = 'src/jp/pixivnovel/icon.png';
   site = 'https://www.pixiv.net';
-  version = '1.0.9';
+  version = '1.0.10';
 
   pluginSettings: Plugin.PluginSettings = {
     pixiv_translate: {
@@ -437,7 +438,7 @@ class PixivNovelPlugin implements Plugin.PagePlugin {
     return `<div>${content
       .split('\n')
       .filter((line: string) => line.trim().length > 0)
-      .map((line: string) => `<p>${line.trim()}</p>`)
+      .map((line: string) => `<p>${encodeHtmlEntities(line.trim())}</p>`)
       .join('<br/>')}</div>`;
   }
 

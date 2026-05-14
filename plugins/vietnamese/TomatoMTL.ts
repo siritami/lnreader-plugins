@@ -7,6 +7,7 @@ import { defaultCover } from '@libs/defaultCover';
 import { storage } from '@libs/storage';
 import { Buffer, decodeHtmlEntities, encodeHtmlEntities } from '@libs/utils';
 import { cbc } from '@libs/aes';
+import { isUrlAbsolute } from '@libs/isAbsoluteUrl';
 
 const SITE = 'https://tomatomtl.com';
 const CHAPTERS_PER_VOLUME = 50;
@@ -125,7 +126,7 @@ class TomatoMTLPlugin implements Plugin.PluginBase {
   name = 'TomatoMTL';
   icon = 'src/vi/tomatomtl/icon.png';
   site = SITE;
-  version = '1.0.2';
+  version = '1.0.4';
   webStorageUtilized = true;
 
   pluginSettings: Plugin.PluginSettings = {
@@ -135,6 +136,11 @@ class TomatoMTLPlugin implements Plugin.PluginBase {
       type: 'Switch',
     },
     translateLang: pluginSettingTranslate,
+    usingProxyThumbnail: {
+      value: false,
+      label: 'Use proxied thumbnail URLs (may fix missing covers)',
+      type: 'Switch',
+    },
   };
 
   // ─── Setting accessors ──────────────────────────────
@@ -144,6 +150,21 @@ class TomatoMTLPlugin implements Plugin.PluginBase {
 
   get translateLang(): string {
     return storage.get('translateLang') || 'en';
+  }
+
+  get usingProxyThumbnail(): boolean {
+    return storage.get('usingProxyThumbnail');
+  }
+
+  // --- Utils ---
+  private normalizeCoverUrl(url: unknown): string {
+    if (typeof url !== 'string' || !url) return '';
+    if (!isUrlAbsolute(url)) return '';
+    const urlObj = new URL(url);
+    // Query parameters: url, w, h, fit, output
+    urlObj.searchParams.set('output', 'jpg'); // better safe than webp
+    if (this.usingProxyThumbnail) return urlObj.toString();
+    return urlObj.searchParams.get('url') || urlObj.toString();
   }
 
   // ─── Cookie / session management ───────────────────────────
@@ -369,7 +390,9 @@ class TomatoMTLPlugin implements Plugin.PluginBase {
 
     const res = await fetchApi(url, { headers });
     if (!res.ok) {
-      throw new Error('Mở plugin này trong WebView của LNReader để bỏ qua Cloudflare');
+      throw new Error(
+        'Mở plugin này trong WebView của LNReader để bỏ qua Cloudflare',
+      );
     }
     this.absorbSetCookie(res.headers.get('set-cookie'));
 
@@ -383,7 +406,7 @@ class TomatoMTLPlugin implements Plugin.PluginBase {
       .map(book => ({
         name: String(book.book_name || '').trim() || `#${book.book_id}`,
         path: `/book/${book.book_id}`,
-        cover: normalizeCoverUrl(book.thumb_url) || defaultCover,
+        cover: this.normalizeCoverUrl(book.thumb_url) || defaultCover,
       }));
     return this.translateNovelNames(novels);
   }
@@ -440,7 +463,7 @@ class TomatoMTLPlugin implements Plugin.PluginBase {
           novels.push({
             name: String(book.book_name || '').trim() || `#${id}`,
             path: `/book/${id}`,
-            cover: normalizeCoverUrl(book.thumb_url) || defaultCover,
+            cover: this.normalizeCoverUrl(book.thumb_url) || defaultCover,
           });
         }
       }
@@ -472,7 +495,10 @@ class TomatoMTLPlugin implements Plugin.PluginBase {
     let novelName = chineseName || fallbackName || `#${bookId}`;
     try {
       if (!this.translate) throw new Error('Translation disabled');
-      const [translateName] = await this.translateGoogle([novelName], this.translateLang);
+      const [translateName] = await this.translateGoogle(
+        [novelName],
+        this.translateLang,
+      );
       if (translateName) novelName = translateName;
     } catch {
       // Keep original name if translation fails
@@ -491,10 +517,10 @@ class TomatoMTLPlugin implements Plugin.PluginBase {
     );
     const coverEl = $('#book_cover').first();
     novel.cover =
-      normalizeCoverUrl(inlineCover) ||
-      normalizeCoverUrl(coverEl.attr('data-src')) ||
-      normalizeCoverUrl(coverEl.attr('src')) ||
-      normalizeCoverUrl($('meta[property="og:image"]').attr('content')) ||
+      this.normalizeCoverUrl(inlineCover) ||
+      this.normalizeCoverUrl(coverEl.attr('data-src')) ||
+      this.normalizeCoverUrl(coverEl.attr('src')) ||
+      this.normalizeCoverUrl($('meta[property="og:image"]').attr('content')) ||
       defaultCover;
 
     let author = '';
@@ -812,13 +838,6 @@ class TomatoMTLPlugin implements Plugin.PluginBase {
 function extractBookId(path: string): string {
   const m = /\/book\/(\d+)/.exec(path);
   return m ? m[1] : '';
-}
-
-function normalizeCoverUrl(url: unknown): string {
-  if (typeof url !== 'string' || !url) return '';
-  // Strip wsrv.nl proxy wrapper if present, extracting the original URL.
-  const proxyMatch = /[?&]url=(https?:\/\/[^&]+)/.exec(url);
-  return proxyMatch ? decodeURIComponent(proxyMatch[1]) : url;
 }
 
 function base64ToBytes(b64: string): Uint8Array {
