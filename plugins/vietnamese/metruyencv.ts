@@ -10,6 +10,7 @@ const API_BASE = 'https://backend.metruyencv.com/api';
 const APP_ID = 'MeTruyenChu';
 const AES_KEY = 'aa4uCch7CR8KiBdQ';
 
+// API decrypt by Captain
 // #region SHA-1 (minimal pure-JS implementation)
 function sha1(msg: Uint8Array): string {
   const ml = msg.length;
@@ -164,7 +165,6 @@ class MeTruyenCVPlugin implements Plugin.PluginBase {
   async parseNovel(novelPath: string): Promise<Plugin.SourceNovel> {
     const bookId = novelPath;
 
-    // Fetch book detail and chapter list in parallel
     const [bookJson, chapJson] = await Promise.all([
       apiGet(`books/${bookId}`),
       apiGet(
