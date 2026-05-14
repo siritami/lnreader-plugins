@@ -7,14 +7,14 @@ import { NovelStatus } from '@libs/novelStatus';
 import { encodeHtmlEntities } from '@libs/utils';
 import { storage } from '@libs/storage';
 
-const SITE = 'https://animevietsub.bz';
+const SITE = 'https://animevietsub.site';
 
 class AnimeVietsubPlugin implements Plugin.PluginBase {
   id = 'animevietsub';
   name = 'AnimeVietsub';
   icon = 'src/vi/animevietsub/icon.png';
   site = SITE;
-  version = '1.0.5';
+  version = '1.0.9';
 
   customJS = 'src/vi/animevietsub/player.js';
 
@@ -542,30 +542,28 @@ class AnimeVietsubPlugin implements Plugin.PluginBase {
     this.checkCommonBlocked($);
     const chapters: Plugin.ChapterItem[] = [];
 
-    // Find the AnimeVsub server group
-    let $group = $('#list-server .server-group').filter((_, el) => {
-      return /AnimeVsub/i.test($(el).find('.server-name').text());
-    });
-    if ($group.length === 0) {
-      // Fallback: take the first server-group available
-      $group = $('#list-server .server-group').first();
-    }
-
     const seen = new Set<string>();
-    $group.find('ul.list-episode li.episode a.btn-episode').each((idx, el) => {
-      const $a = $(el);
-      const href = $a.attr('href') || '';
-      if (!href) return;
-      const path = this.absolutePath(href);
-      if (seen.has(path)) return;
-      seen.add(path);
-      const epLabel = $a.attr('title')?.trim() || `Tập ${$a.text().trim()}`;
-      const num = parseFloat($a.text().replace(/[^0-9.]/g, ''));
-      chapters.push({
-        name: epLabel,
-        path,
-        chapterNumber: Number.isFinite(num) ? num : idx + 1,
-      });
+    $('#list-server .server-group').each((_, el) => {
+      const $group = $(el);
+      const name = $group.find('.server-name').text().trim();
+      $group
+        .find('ul.list-episode li.episode a.btn-episode')
+        .each((idx, el) => {
+          const $a = $(el);
+          const href = $a.attr('href') || '';
+          if (!href) return;
+          const path = this.absolutePath(href);
+          if (seen.has(path)) return;
+          seen.add(path);
+          const epLabel = $a.attr('title')?.trim() || `Tập ${$a.text().trim()}`;
+          const num = parseFloat($a.text().replace(/[^0-9.]/g, ''));
+          chapters.push({
+            name: epLabel,
+            path,
+            chapterNumber: Number.isFinite(num) ? num : idx + 1,
+            page: name?.length ? name + '\u200b' : undefined,
+          });
+        });
     });
 
     return chapters;
@@ -678,7 +676,7 @@ class AnimeVietsubPlugin implements Plugin.PluginBase {
 
     // When embed is off, don't fall back to hash/iframe
     if (!this.enableEmbed) {
-      return '<p style="color:#ff4444;font-size:14px;font-family:sans-serif;text-align:center;padding:16px;">Không tìm thấy nguồn m3u8 cho tập phim này. Bật "Bật embed" trong cài đặt plugin để dùng fallback.</p>';
+      return '<p style="color:#ff4444;font-size:14px;font-family:sans-serif;text-align:center;padding:16px;">Không tìm thấy nguồn m3u8 cho tập phim này. Bật "Bật embed" trong cài đặt plugin để dùng fallback.</p><meta id="no-cache-marker"/><meta id="no-prefetch-marker"/>';
     }
 
     // ── 2. Fallback: extract data-hash/data-id for AJAX via customJS ──
@@ -746,6 +744,7 @@ class AnimeVietsubPlugin implements Plugin.PluginBase {
       '  </div>',
       '</div>',
       `<p style="color:#888;font-size:12px;font-family:sans-serif;text-align:center;margin:4px 0;">${mode}</p>`,
+      '<meta id="no-cache-marker"/><meta id="no-prefetch-marker"/>',
     ].join('\n');
   }
 }

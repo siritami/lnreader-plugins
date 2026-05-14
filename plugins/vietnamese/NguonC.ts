@@ -13,7 +13,7 @@ class NguonCPlugin implements Plugin.PluginBase {
   name = 'NguonC';
   icon = 'src/vi/nguonc/icon.png';
   site = SITE;
-  version = '1.0.0';
+  version = '1.0.4';
 
   customJS = 'src/vi/nguonc/player.js';
 
@@ -291,6 +291,7 @@ class NguonCPlugin implements Plugin.PluginBase {
       '    <p style="color:#fff;font-family:sans-serif;">Đang tải video...</p>',
       '  </div>',
       '</div>',
+      '<meta id="no-cache-marker"/><meta id="no-prefetch-marker"/>',
     ].join('\n');
   }
 
