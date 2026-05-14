@@ -101,13 +101,11 @@ function decryptContent(content: string, hash: string): string {
 }
 
 async function apiGet(urlPath: string) {
-  const sig = generateSignature(urlPath);
-  const encodedPath = urlPath.replace(/\[/g, '%5B').replace(/\]/g, '%5D');
-  const res = await fetchApi(`${API_BASE}/${encodedPath}`, {
+  const res = await fetchApi(`${API_BASE}/${urlPath}`, {
     headers: {
       Accept: 'application/json',
       'X-App': APP_ID,
-      'X-Signature': sig,
+      'X-Signature': generateSignature(urlPath),
     },
   });
   return res.json();
