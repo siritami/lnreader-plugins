@@ -147,7 +147,9 @@ class MeTruyenCVPlugin implements Plugin.PluginBase {
     { filters }: Plugin.PopularNovelsOptions<typeof this.filters>,
   ): Promise<Plugin.NovelItem[]> {
     const sort = filters?.sort || '-new_chap_at';
-    const urlPath = `books?limit=20&page=${pageNo}&sort=${sort}`;
+    const status = filters?.status || '';
+    let urlPath = `books?limit=20&page=${pageNo}&sort=${sort}`;
+    if (status) urlPath += `&filter[status]=${status}`;
     const json: ApiListResponse<BookItem> = await apiGet(urlPath);
 
     if (!json.success || !json.data) return [];
@@ -252,8 +254,25 @@ class MeTruyenCVPlugin implements Plugin.PluginBase {
       options: [
         { label: 'Mới cập nhật', value: '-new_chap_at' },
         { label: 'Nhiều vote', value: '-vote_count' },
+        { label: 'Nhiều lượt xem', value: '-view_count' },
+        { label: 'Nhiều bookmark', value: '-bookmark_count' },
+        { label: 'Đánh giá cao', value: '-review_score' },
         { label: 'Nhiều đánh giá', value: '-review_count' },
+        { label: 'Nhiều bình luận', value: '-comment_count' },
         { label: 'Nhiều chương', value: '-chapter_count' },
+        { label: 'Nhiều chữ', value: '-word_count' },
+        { label: 'Mới đăng', value: '-published_at' },
+      ],
+      type: FilterTypes.Picker,
+    },
+    status: {
+      label: 'Trạng thái',
+      value: '',
+      options: [
+        { label: 'Tất cả', value: '' },
+        { label: 'Còn tiếp', value: '1' },
+        { label: 'Hoàn thành', value: '2' },
+        { label: 'Tạm dừng', value: '3' },
       ],
       type: FilterTypes.Picker,
     },
