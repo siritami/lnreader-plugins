@@ -153,9 +153,9 @@ class MeTruyenCVPlugin implements Plugin.PluginBase {
     pageNo: number,
     { filters }: Plugin.PopularNovelsOptions<typeof this.filters>,
   ): Promise<Plugin.NovelItem[]> {
-    const sort = filters?.sort || '-updated_at';
-    const kind = filters?.kind || '';
-    const genre = filters?.genre || '';
+    const sort = filters?.sort?.value || '-updated_at';
+    const kind = filters?.kind?.value || '';
+    const genre = filters?.genre?.value || '';
     let urlPath = `books?filter[state]=published&include=creator&limit=20&page=${pageNo}&sort=${sort}`;
     if (kind) urlPath += `&filter[kind]=${kind}`;
     if (genre) urlPath += `&filter[genres.id]=${genre}`;
