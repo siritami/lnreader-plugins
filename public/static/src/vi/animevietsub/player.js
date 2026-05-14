@@ -194,10 +194,15 @@
     // --- Đồng bộ tiến độ xem với app gốc ---
     var hasSeekedInitial = false;
     var lastSaveTime = 0;
-    
+
     video.addEventListener('loadedmetadata', function () {
       try {
-        if (!hasSeekedInitial && video.duration > 0 && window.reader && window.reader.chapter) {
+        if (
+          !hasSeekedInitial &&
+          video.duration > 0 &&
+          window.reader &&
+          window.reader.chapter
+        ) {
           var initialProgress = window.reader.chapter.progress || 0;
           if (initialProgress > 0 && initialProgress < 100) {
             video.currentTime = Math.floor(
@@ -213,7 +218,11 @@
 
     video.addEventListener('timeupdate', function () {
       try {
-        if (video.duration > 0 && window.reader && typeof window.reader.post === 'function') {
+        if (
+          video.duration > 0 &&
+          window.reader &&
+          typeof window.reader.post === 'function'
+        ) {
           var currentTime = video.currentTime;
           // Cập nhật tiến độ sau mỗi 5 giây
           if (Math.abs(currentTime - lastSaveTime) >= 5) {
@@ -221,7 +230,7 @@
             var progressInt = Math.floor((currentTime / video.duration) * 100);
             window.reader.post({
               type: 'save',
-              data: progressInt
+              data: progressInt,
             });
           }
         }
@@ -229,20 +238,50 @@
         // Bỏ qua lỗi
       }
     });
+
+    video.addEventListener('ended', function () {
+      try {
+        if (window.reader && typeof window.reader.post === 'function') {
+          // mark as completed
+          window.reader.post({
+            type: 'save',
+            data: 100,
+          });
+          // move to next chapter
+          if (window.reader.nextChapter) window.reader.post({ type: 'next' });
+        }
+      } catch (e) {
+        // Bỏ qua lỗi
+      }
+    });
+
     // ----------------------------------------
 
     if (hlsSources.length > 0) {
       loadHlsJs(function () {
         if (typeof Hls !== 'undefined' && Hls.isSupported()) {
           // Custom fragment loader: strips 127-byte PNG prefix from each segment
+          // (AnimeVietsub disguises TS segments with a PNG header)
           var AvsFragLoader = function (config) {
             var inner = new Hls.DefaultConfig.loader(config);
             Object.defineProperties(this, {
-              stats: { get: function () { return inner.stats; } },
-              context: { get: function () { return inner.context; } },
+              stats: {
+                get: function () {
+                  return inner.stats;
+                },
+              },
+              context: {
+                get: function () {
+                  return inner.context;
+                },
+              },
             });
-            this.abort = function () { inner.abort(); };
-            this.destroy = function () { inner.destroy(); };
+            this.abort = function () {
+              inner.abort();
+            };
+            this.destroy = function () {
+              inner.destroy();
+            };
             this.load = function (ctx, cfg, cbs) {
               var origSuccess = cbs.onSuccess;
               var modCbs = Object.assign({}, cbs, {
@@ -250,10 +289,15 @@
                   if (resp.data && resp.data.byteLength > 127) {
                     var header = new Uint8Array(resp.data, 0, 8);
                     // PNG signature: 89 50 4E 47 0D 0A 1A 0A
-                    var isPng = header[0] === 0x89 && header[1] === 0x50 &&
-                      header[2] === 0x4E && header[3] === 0x47 &&
-                      header[4] === 0x0D && header[5] === 0x0A &&
-                      header[6] === 0x1A && header[7] === 0x0A;
+                    var isPng =
+                      header[0] === 0x89 &&
+                      header[1] === 0x50 &&
+                      header[2] === 0x4e &&
+                      header[3] === 0x47 &&
+                      header[4] === 0x0d &&
+                      header[5] === 0x0a &&
+                      header[6] === 0x1a &&
+                      header[7] === 0x0a;
                     if (isPng) {
                       resp.data = resp.data.slice(127);
                     }

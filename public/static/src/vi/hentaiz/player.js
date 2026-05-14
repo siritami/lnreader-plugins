@@ -70,10 +70,7 @@
     });
     var masterUrl = URL.createObjectURL(masterBlob);
 
-    console.log(
-      '[HTZ] Master m3u8 ready, variants:',
-      variantBlobUrls.length,
-    );
+    console.log('[HTZ] Master m3u8 ready, variants:', variantBlobUrls.length);
     buildVideoPlayer(inner, masterUrl);
   }
 
@@ -135,9 +132,7 @@
           var currentTime = video.currentTime;
           if (Math.abs(currentTime - lastSaveTime) >= 5) {
             lastSaveTime = currentTime;
-            var progressInt = Math.floor(
-              (currentTime / video.duration) * 100,
-            );
+            var progressInt = Math.floor((currentTime / video.duration) * 100);
             window.reader.post({
               type: 'save',
               data: progressInt,
@@ -148,6 +143,23 @@
         // Bỏ qua lỗi
       }
     });
+
+    video.addEventListener('ended', function () {
+      try {
+        if (window.reader && typeof window.reader.post === 'function') {
+          // mark as completed
+          window.reader.post({
+            type: 'save',
+            data: 100,
+          });
+          // move to next chapter
+          if (window.reader.nextChapter) window.reader.post({ type: 'next' });
+        }
+      } catch (e) {
+        // Bỏ qua lỗi
+      }
+    });
+
     // ----------------------------------------
 
     loadHlsJs(function () {
@@ -162,10 +174,7 @@
         hls.loadSource(m3u8Url);
         hls.attachMedia(video);
         hls.on(Hls.Events.MANIFEST_PARSED, function () {
-          console.log(
-            '[HTZ] HLS manifest parsed, levels:',
-            hls.levels.length,
-          );
+          console.log('[HTZ] HLS manifest parsed, levels:', hls.levels.length);
           video.play().catch(function () {});
         });
         hls.on(Hls.Events.ERROR, function (event, data) {
