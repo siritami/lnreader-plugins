@@ -10,7 +10,7 @@ import p_7 from '@plugins/vietnamese/jukanovel';
 import p_8 from '@plugins/vietnamese/LNHako';
 import p_9 from '@plugins/vietnamese/LNKuro';
 import p_10 from '@plugins/vietnamese/luvevaland';
-import p_11 from '@plugins/vietnamese/mottruyen';
+import p_11 from '@plugins/vietnamese/metruyencv';
 import p_12 from '@plugins/vietnamese/NguonC';
 import p_13 from '@plugins/vietnamese/SangTacViet';
 import p_14 from '@plugins/vietnamese/tieuthuyetmang';
