@@ -101,11 +101,13 @@ function decryptContent(content: string, hash: string): string {
 }
 
 async function apiGet(urlPath: string) {
-  const res = await fetchApi(`${API_BASE}/${urlPath}`, {
+  const sig = generateSignature(urlPath);
+  const encodedPath = urlPath.replace(/\[/g, '%5B').replace(/\]/g, '%5D');
+  const res = await fetchApi(`${API_BASE}/${encodedPath}`, {
     headers: {
       Accept: 'application/json',
       'X-App': APP_ID,
-      'X-Signature': generateSignature(urlPath),
+      'X-Signature': sig,
     },
   });
   return res.json();
@@ -246,7 +248,8 @@ class MeTruyenCVPlugin implements Plugin.PluginBase {
     pageNo: number,
   ): Promise<Plugin.NovelItem[]> {
     const keyword = encodeURIComponent(searchTerm.trim());
-    const urlPath = `books?limit=20&page=${pageNo}&filter[keyword]=${keyword}`;
+    if (!keyword) return [];
+    const urlPath = `books?limit=20&page=${pageNo}&filter[keyword]=${keyword}&include=creator`;
     const json: ApiListResponse<BookItem> = await apiGet(urlPath);
 
     if (!json.success || !json.data) return [];
