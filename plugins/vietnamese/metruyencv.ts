@@ -111,7 +111,7 @@ async function apiGet(urlPath: string) {
   return res.json();
 }
 
-interface BookItem {
+type BookItem = {
   id: number;
   name: string;
   slug: string;
@@ -124,17 +124,17 @@ interface BookItem {
   kind: number;
   creator?: { name: string };
   author?: { name: string; local_name?: string };
-  genres?: Array<{ id: number; name: string }>;
-}
+  genres?: { id: number; name: string }[];
+};
 
-interface ChapterItem {
+type ChapterItem = {
   id: number;
   name: string;
   index: number;
   published_at: string;
 }
 
-interface ApiListResponse<T> {
+type ApiListResponse<T> = {
   data: T[];
   pagination: { current: number; last: number; total: number };
   success: boolean;
@@ -145,7 +145,7 @@ class MeTruyenCVPlugin implements Plugin.PluginBase {
   name = 'MeTruyenCV';
   icon = 'src/vi/metruyencv/icon.png';
   site = 'https://metruyencv.com';
-  version = '1.0.0';
+  version = '1.0.1';
 
   async popularNovels(
     pageNo: number,

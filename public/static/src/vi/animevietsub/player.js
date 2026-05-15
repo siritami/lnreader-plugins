@@ -1,3 +1,5 @@
+/* eslint-disable */
+
 /**
  * AnimeVietsub - WebView Video Player (customJS)
  *

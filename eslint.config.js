@@ -95,6 +95,8 @@ const globalsHermes = [
   'FormData',
   'Headers',
   'Intl',
+  'TextDecoder',
+  'TextEncoder', // ?
   'URL',
   'URLSearchParams',
   'WebSocket',
@@ -137,7 +139,7 @@ export default tseslint.config(
     ],
   },
   {
-    files: ['./plugins/*/*.ts', './plugins/multisrc/*/template.ts'],
+    files: ['plugins/*/*.ts', 'plugins/multisrc/*/template.ts'],
     rules: {
       'no-unused-vars': 'off',
       '@typescript-eslint/no-unused-vars': 'warn',
@@ -151,8 +153,29 @@ export default tseslint.config(
         {
           patterns: [
             {
-              group: ['@/lib/fetch*'],
-              message: 'Use @libs/fetch instead of @/lib/fetch',
+              group: [
+                '*',
+                '**/*',
+                '!@libs/',
+                '!@/',
+                '!@/types/',
+                '!htmlparser2',
+                '!cheerio',
+                '!dayjs',
+                '!urlencode',
+                '!@libs/novelStatus',
+                '!@libs/fetch',
+                '!@libs/isAbsoluteUrl',
+                '!@libs/filterInputs',
+                '!@libs/defaultCover',
+                '!@libs/aes',
+                '!@libs/utils',
+                '!@libs/cookie',
+                '!@libs/storage',
+                '!@/types/plugin',
+              ],
+              message:
+                'Importing external modules is restricted here. Use only the approved dependencies.',
             },
           ],
         },
@@ -166,7 +189,7 @@ export default tseslint.config(
   },
   {
     files: ['**/*.{ts,tsx,mts,cts,js}'],
-    ignores: ['./plugins/*/*.ts', './plugins/multisrc/*/template.ts'],
+    ignores: ['plugins/*/*.ts', 'plugins/multisrc/*/template.ts'],
     rules: {
       'no-unused-vars': 'off',
       '@typescript-eslint/no-unused-vars': 'warn',

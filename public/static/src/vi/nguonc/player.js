@@ -1,3 +1,5 @@
+/* eslint-disable */
+
 /**
  * NguonC - WebView Video Player (customJS)
  *

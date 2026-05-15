@@ -1,3 +1,5 @@
+/* eslint-disable */
+
 const version = require('../../package.json').version;
 const dist = `plugins/v${version}`;
 const fs = require('fs');

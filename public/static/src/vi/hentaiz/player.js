@@ -1,3 +1,5 @@
+/* eslint-disable */
+
 /**
  * HentaiZ - WebView Video Player (customJS)
  *
@@ -49,8 +51,9 @@
   function playM3u8(master, variantPlaylists) {
     // Create blob URLs for each variant playlist
     var variantBlobUrls = [];
-    for (var v = 0; v < variantPlaylists.length; v++) {
-      var blob = new Blob([variantPlaylists[v]], {
+
+    for (const variantBlobUrl of variantPlaylists) {
+      const blob = new Blob([variantBlobUrl], {
         type: 'application/vnd.apple.mpegurl',
       });
       variantBlobUrls.push(URL.createObjectURL(blob));
