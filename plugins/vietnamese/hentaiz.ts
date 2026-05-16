@@ -20,9 +20,7 @@ function hexToBytes(hex: string): Uint8Array {
   return Buffer.from(hex, 'hex');
 }
 
-async function decryptVideoData(
-  videoId: string,
-): Promise<{
+async function decryptVideoData(videoId: string): Promise<{
   m3u8Master: string;
   m3u8Playlists: string[];
   variantFolders: string[];
