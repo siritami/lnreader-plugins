@@ -4,7 +4,6 @@ import { Plugin } from '@/types/plugin';
 import { NovelStatus } from '@libs/novelStatus';
 import { FilterTypes, Filters } from '@libs/filterInputs';
 import { defaultCover } from '@libs/defaultCover';
-import { storage } from '@libs/storage';
 
 const API_BASE = 'https://truyencv.io/wp-json';
 
@@ -64,6 +63,8 @@ class TruyenCV implements Plugin.PagePlugin {
   site = 'https://truyencv.io';
   version = '1.0.0';
 
+  private mangaIdCache = new Map<string, string>();
+
   async popularNovels(
     pageNo: number,
     { filters }: Plugin.PopularNovelsOptions<typeof this.filters>,
@@ -115,7 +116,7 @@ class TruyenCV implements Plugin.PagePlugin {
       };
     }
 
-    storage.set(slug, manga.id.toString());
+    this.mangaIdCache.set(slug, manga.id.toString());
 
     const chapRes = await fetchApi(
       `${API_BASE}/initmanga/v1/chapters?manga_id=${manga.id}&paged=1`,
@@ -172,7 +173,7 @@ class TruyenCV implements Plugin.PagePlugin {
 
   async parsePage(novelPath: string, page: string): Promise<Plugin.SourcePage> {
     const slug = novelPath.replace(/^\/truyen\//, '').replace(/\/$/, '');
-    let mangaId = storage.get(slug);
+    let mangaId = this.mangaIdCache.get(slug);
 
     if (!mangaId) {
       const res = await fetchApi(
@@ -180,7 +181,7 @@ class TruyenCV implements Plugin.PagePlugin {
       );
       const data = await res.json();
       mangaId = data[0]?.id?.toString();
-      if (mangaId) storage.set(slug, mangaId);
+      if (mangaId) this.mangaIdCache.set(slug, mangaId);
     }
 
     if (!mangaId) return { chapters: [] };
