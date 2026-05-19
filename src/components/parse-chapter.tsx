@@ -13,7 +13,6 @@ import {
   TooltipTrigger,
 } from '@/components/ui/tooltip';
 import { useAppStore } from '@/store';
-import { usePluginCustomAssets } from '@/hooks/usePluginCustomAssets';
 
 export default function ParseChapterSection() {
   const plugin = useAppStore(state => state.plugin);
@@ -30,13 +29,33 @@ export default function ParseChapterSection() {
   const [fetchError, setFetchError] = useState('');
   const [showRawHtml, setShowRawHtml] = useState(false);
 
-  const { customCSSLoaded, customJSLoaded, customCSSError, customJSError } =
-    usePluginCustomAssets(plugin, chapterText);
+  const [customCSSLoaded, setCustomCSSLoaded] = useState(false);
+  const [customCSSError, setCustomCSSError] = useState(false);
+  const [customJSLoaded, setCustomJSLoaded] = useState(false);
+  const [customJSError, setCustomJSError] = useState(false);
+
+  useEffect(() => {
+    const handleMessage = (event: MessageEvent) => {
+      if (event.data?.type === 'asset-loaded') {
+        if (event.data.asset === 'css') setCustomCSSLoaded(true);
+        if (event.data.asset === 'js') setCustomJSLoaded(true);
+      } else if (event.data?.type === 'asset-error') {
+        if (event.data.asset === 'css') setCustomCSSError(true);
+        if (event.data.asset === 'js') setCustomJSError(true);
+      }
+    };
+    window.addEventListener('message', handleMessage);
+    return () => window.removeEventListener('message', handleMessage);
+  }, []);
 
   const fetchChapterByPath = async (path: string) => {
     if (plugin && path.trim()) {
       setLoading(true);
       setFetchError('');
+      setCustomCSSLoaded(false);
+      setCustomCSSError(false);
+      setCustomJSLoaded(false);
+      setCustomJSError(false);
       try {
         const result = await plugin.parseChapter(path);
         setChapterText(result);
@@ -254,11 +273,43 @@ export default function ParseChapterSection() {
                     {chapterText}
                   </pre>
                 ) : (
-                  <div
-                    className="prose prose-sm dark:prose-invert max-w-none text-foreground"
-                    dangerouslySetInnerHTML={{
-                      __html: chapterText,
-                    }}
+                  <iframe
+                    title="Chapter Content Preview"
+                    srcDoc={`
+                      <!DOCTYPE html>
+                      <html>
+                        <head>
+                          <meta charset="utf-8">
+                          <meta name="viewport" content="width=device-width, initial-scale=1">
+                          <style>
+                            body { 
+                              font-family: system-ui, -apple-system, sans-serif;
+                              color: ${document.documentElement.classList.contains('dark') ? '#e5e7eb' : '#1f2937'};
+                              margin: 0;
+                              padding: 0;
+                              line-height: 1.6;
+                            }
+                            img, video, iframe { max-width: 100%; height: auto; }
+                            a { color: #3b82f6; }
+                          </style>
+                          ${
+                            plugin?.customCSS
+                              ? `<link rel="stylesheet" href="/public/static/${plugin.customCSS}" onload="window.parent.postMessage({ type: 'asset-loaded', asset: 'css' }, '*')" onerror="window.parent.postMessage({ type: 'asset-error', asset: 'css' }, '*')">`
+                              : ''
+                          }
+                        </head>
+                        <body>
+                          ${chapterText}
+                          ${
+                            plugin?.customJS
+                              ? `<script src="/public/static/${plugin.customJS}" onload="window.parent.postMessage({ type: 'asset-loaded', asset: 'js' }, '*')" onerror="window.parent.postMessage({ type: 'asset-error', asset: 'js' }, '*')"></script>`
+                              : ''
+                          }
+                        </body>
+                      </html>
+                    `}
+                    className="w-full min-h-[500px] border-none bg-transparent"
+                    sandbox="allow-scripts allow-same-origin allow-popups"
                   />
                 )}
               </div>
