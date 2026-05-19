@@ -55,28 +55,54 @@ export default PLUGINS;
 
 ## Hướng dẫn Debug (Gỡ lỗi)
 
-Trong quá trình phát triển Plugin, chắc chắn bạn sẽ cần kiểm tra xem code của mình có hoạt động đúng hay không. Môi trường phát triển của Repository này đã tích hợp sẵn một giao diện Web (Web UI) để mô phỏng hoạt động của ứng dụng LNReader ngay trên trình duyệt.
+Trong quá trình phát triển Plugin, bạn sẽ cần kiểm tra xem code của mình có hoạt động đúng hay không. Repository này cung cấp 3 phương pháp chính để gỡ lỗi, từ nhẹ nhất đến giống thực tế nhất:
 
-### 1. Khởi chạy môi trường test cục bộ (Local Web Interface)
+### 1. WebUI Playground (Khởi chạy trên trình duyệt web)
 
-Mở terminal và chạy lệnh sau:
+Đây là môi trường mô phỏng nhanh nhất, sử dụng trực tiếp trình duyệt (Chrome, Edge...) của bạn. Thích hợp để test logic parse, lọc HTML nhanh chóng.
+
+Mở terminal ở thư mục gốc và chạy:
 ```bash
 npm run dev:start
 ```
 
-- Lệnh này sẽ tự động biên dịch toàn bộ các files và khởi chạy một Web Server mô phỏng.
-- Bạn có thể truy cập vào địa chỉ được hiển thị trên console (thường là `http://localhost:5173` hoặc `http://localhost:3000`).
-- Giao diện này cho phép bạn tương tác trực tiếp: duyệt danh sách truyện mới, tìm kiếm, xem danh sách chương truyện và nội dung trang đọc giống như một người dùng đang sử dụng LNReader.
+- Lệnh này sẽ tự động biên dịch và khởi chạy một Web Server. Truy cập vào `http://localhost:3000`.
+- Bạn có thể thao tác: duyệt truyện, tìm kiếm, đọc chương.
+- Gỡ lỗi: Ấn phím **F12** để mở Developer Tools, xem tab `Console` cho các lệnh `console.log()` hoặc `Network` để xem các request bị chặn.
+- **Hạn chế:** Bị giới hạn bởi CORS của trình duyệt và không có cấu trúc Cookie đồng bộ mạnh mẽ như ứng dụng thật.
 
-### 2. Sử dụng `console.log`
+### 2. Electron Playground (Môi trường Desktop)
 
-- Vì code của bạn đang chạy thông qua trình duyệt ở giao diện Web, bạn hoàn toàn có thể sử dụng `console.log`, `console.warn`, hoặc `console.error` ngay bên trong các hàm xử lý của Plugin (`popularNovels`, `parseNovel`, `parseChapter`,...).
-- **Cách xem:** Mô phỏng các thao tác tương ứng trên Web UI (ví dụ ấn vào xem truyện), ấn phím **F12** để mở Developer Tools của trình duyệt (Chrome, Edge...), chuyển sang tab `Console` và theo dõi quá trình in kết quả.
+**Khuyên dùng!** Đây là môi trường mạnh mẽ mô phỏng chính xác React Native app (hỗ trợ lưu trữ persistent cookie, sandbox, fetch qua NodeJS). Giúp bạn dễ dàng test các trang web chặn Cloudflare/DDOS phức tạp.
 
-### 3. Debug lỗi kẹt tại Fetch API hoặc Parse HTML
+Mở terminal ở thư mục gốc, di chuyển vào thư mục `electron` và khởi động Electron:
+```bash
+cd electron
+npm run dev
+```
 
-- Nếu truyện không tải được danh sách, hãy mở **tab Network** trong Developer Tools để xem các request lấy HTML có trả về nội dung kỳ vọng hay bị chặn (Block/CORS/Cloudflare).
-- Nếu Request trả về nội dung đúng (Status 200) nhưng thông tin hiển thị lên trang web lại sai/trống, bạn hãy dùng `console.log` hiển thị các biến lưu kết quả parse (`cheerio`) trước khi `return` để kiểm tra độ chính xác của Selectors CSS mà bạn cung cấp. Quá trình này giúp phát hiện trường hợp phía website đã thay đổi giao diện làm bộ lọc cũ không hoạt động.
+- Ứng dụng Desktop sẽ mở ra. Bạn có thể duyệt truyện và parse chapter tương tự WebUI nhưng ổn định hơn.
+- Cung cấp tính năng **Spawn New Tab** (`Ctrl+T` hoặc `Cmd+T`) giả lập một WebView của LNReader. Tại đây, bạn có thể tự tay giải Captcha/Cloudflare, các cookie bảo mật sẽ được tự động đồng bộ xuống cho các request `fetch` của plugin.
+- Gỡ lỗi: DevTools (Nếu gỡ lỗi WebView, ấn icon Debug ở cuối thanh địa chỉ)
+
+### 3. serve:dev (Kiểm thử trực tiếp trên ứng dụng LNReader)
+
+Dành cho bước kiểm tra cuối cùng trước khi hoàn thiện. Phương pháp này biên dịch plugin và tạo ra một local server. Bạn sẽ add link của local server này vào app LNReader trên điện thoại để test thực tế.
+
+Chuẩn bị nội dung cho file `.env`
+```
+USER_CONTENT_BASE=http://<IP-của-máy-tính>:3000
+```
+
+Mở terminal ở thư mục gốc và chạy:
+```bash
+npm run serve:dev
+```
+
+- Một server local sẽ chạy (cổng 3000). Copy địa chỉ IP LAN của máy tính.
+- Mở ứng dụng LNReader trên điện thoại (đảm bảo điện thoại và máy tính dùng chung mạng Wifi).
+- Vào **Cài đặt -> Repositories**, thêm URL `http://<IP-của-máy-tính>:3000/.dist/plugins.min.json` và cập nhật.
+- Gỡ lỗi: Cài đặt và sử dụng plugin của bạn trên app thực. Nó cho phép test chính xác nhất hành vi của Custom JS/CSS trong Reader, tuy nhiên không có DevTools (console) để xem log nếu không dùng debug Application
 
 ## Một số lưu ý khi sử dụng plugin tương thích với [LNReader-Extended](https://github.com/Yuneko-dev/lnreader-extended)
 
@@ -128,4 +154,4 @@ window.reader.post({ type: 'refetch' });
 
 - Nếu vẫn không được, có thể render Captcha trực tiếp trong màn hình Reader. Tuy nhiên, vì hàm `parseChapter` đã được chuẩn hóa, nên script và các thẻ khác có thể không chạy. Sử dụng customJS để xử lý hành vi.
 
-- Trong Reader, URL (location) mặc định sử dụng sẽ là URL site của plugin (Không phải URL của Chapter)
+- Trong Reader, URL (location) mặc định sử dụng sẽ là URL site của plugin (Không phải URL của Chapter). Trong Playground, nó là localhost URL.
