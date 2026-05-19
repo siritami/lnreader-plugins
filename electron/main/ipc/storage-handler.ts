@@ -24,7 +24,7 @@ function scheduleSave() {
     saveTimer = null;
     fs.promises
       .writeFile(STORAGE_FILE, JSON.stringify(data, null, 2))
-      .catch(() => {});
+      .catch(() => null);
   }, 100);
 }
 

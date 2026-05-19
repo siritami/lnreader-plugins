@@ -136,6 +136,7 @@ export default tseslint.config(
       'docs',
       'proxy_server.js',
       'plugins/*/*\\[*\\]*.ts', // Files with square brackets in their names
+      'electron',
     ],
   },
   {
