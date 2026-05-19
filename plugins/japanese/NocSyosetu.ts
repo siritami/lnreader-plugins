@@ -87,12 +87,7 @@ class NocSyosetu implements Plugin.PagePlugin {
   name = 'NocSyosetu';
   icon = 'src/jp/nocsyosetu/icon.png';
   site = 'https://noc.syosetu.com/';
-  version = '1.1.13';
-  headers = {
-    'User-Agent':
-      'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-    'Referer': 'https://noc.syosetu.com/',
-  };
+  version = '1.1.14';
 
   pluginSettings: Plugin.PluginSettings = {
     nocsyosetu_translate: {
@@ -382,7 +377,7 @@ class NocSyosetu implements Plugin.PagePlugin {
 
     await this.preFetch(url);
 
-    const body = await fetchText(url, { headers: this.headers });
+    const body = await fetchText(url);
 
     const $ = loadCheerio(body);
 
@@ -462,7 +457,7 @@ class NocSyosetu implements Plugin.PagePlugin {
   ): Promise<Plugin.SourceNovel & { totalPages: number }> {
     await this.preFetch(novelUrl);
 
-    const body = await fetchText(novelUrl, { headers: this.headers });
+    const body = await fetchText(novelUrl);
 
     this.checkCacheR18(body);
 
@@ -554,7 +549,7 @@ class NocSyosetu implements Plugin.PagePlugin {
 
     await this.preFetch(url.toString());
 
-    const body = await fetchText(url.toString(), { headers: this.headers });
+    const body = await fetchText(url.toString());
     const $ = loadCheerio(body);
 
     return {
@@ -565,7 +560,7 @@ class NocSyosetu implements Plugin.PagePlugin {
   async parseChapter(chapterPath: string): Promise<string> {
     await this.preFetch(chapterPath);
 
-    const body = await fetchText(chapterPath, { headers: this.headers });
+    const body = await fetchText(chapterPath);
 
     const cheerioQuery = loadCheerio(body);
     this.checkCacheR18(body);
@@ -601,7 +596,7 @@ class NocSyosetu implements Plugin.PagePlugin {
 
     await this.preFetch(url);
 
-    const body = await fetchText(url, { headers: this.headers });
+    const body = await fetchText(url);
 
     const cheerioQuery = loadCheerio(body);
 
