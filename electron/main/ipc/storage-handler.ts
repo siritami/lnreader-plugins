@@ -22,7 +22,9 @@ function scheduleSave() {
   if (saveTimer) return;
   saveTimer = setTimeout(() => {
     saveTimer = null;
-    fs.promises.writeFile(STORAGE_FILE, JSON.stringify(data, null, 2)).catch(() => {});
+    fs.promises
+      .writeFile(STORAGE_FILE, JSON.stringify(data, null, 2))
+      .catch(() => {});
   }, 100);
 }
 

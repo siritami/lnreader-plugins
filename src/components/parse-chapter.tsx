@@ -29,10 +29,33 @@ export default function ParseChapterSection() {
   const [fetchError, setFetchError] = useState('');
   const [showRawHtml, setShowRawHtml] = useState(false);
 
+  const [customCSSLoaded, setCustomCSSLoaded] = useState(false);
+  const [customCSSError, setCustomCSSError] = useState(false);
+  const [customJSLoaded, setCustomJSLoaded] = useState(false);
+  const [customJSError, setCustomJSError] = useState(false);
+
+  useEffect(() => {
+    const handleMessage = (event: MessageEvent) => {
+      if (event.data?.type === 'asset-loaded') {
+        if (event.data.asset === 'css') setCustomCSSLoaded(true);
+        if (event.data.asset === 'js') setCustomJSLoaded(true);
+      } else if (event.data?.type === 'asset-error') {
+        if (event.data.asset === 'css') setCustomCSSError(true);
+        if (event.data.asset === 'js') setCustomJSError(true);
+      }
+    };
+    window.addEventListener('message', handleMessage);
+    return () => window.removeEventListener('message', handleMessage);
+  }, []);
+
   const fetchChapterByPath = async (path: string) => {
     if (plugin && path.trim()) {
       setLoading(true);
       setFetchError('');
+      setCustomCSSLoaded(false);
+      setCustomCSSError(false);
+      setCustomJSLoaded(false);
+      setCustomJSError(false);
       try {
         const result = await plugin.parseChapter(path);
         setChapterText(result);
@@ -269,11 +292,19 @@ export default function ParseChapterSection() {
                             img, video, iframe { max-width: 100%; height: auto; }
                             a { color: #3b82f6; }
                           </style>
-                          ${plugin?.customCSS ? `<link rel="stylesheet" href="/public/static/${plugin.customCSS}">` : ''}
+                          ${
+                            plugin?.customCSS
+                              ? `<link rel="stylesheet" href="/public/static/${plugin.customCSS}" onload="window.parent.postMessage({ type: 'asset-loaded', asset: 'css' }, '*')" onerror="window.parent.postMessage({ type: 'asset-error', asset: 'css' }, '*')">`
+                              : ''
+                          }
                         </head>
                         <body>
                           ${chapterText}
-                          ${plugin?.customJS ? `<script src="/public/static/${plugin.customJS}"></script>` : ''}
+                          ${
+                            plugin?.customJS
+                              ? `<script src="/public/static/${plugin.customJS}" onload="window.parent.postMessage({ type: 'asset-loaded', asset: 'js' }, '*')" onerror="window.parent.postMessage({ type: 'asset-error', asset: 'js' }, '*')"></script>`
+                              : ''
+                          }
                         </body>
                       </html>
                     `}
@@ -285,9 +316,47 @@ export default function ParseChapterSection() {
             </div>
 
             <div className="flex items-center justify-between pt-4 border-t border-border">
-              <p className="text-sm text-muted-foreground">
-                Content loaded successfully
-              </p>
+              <div className="flex items-center gap-2 flex-wrap">
+                <p className="text-sm text-muted-foreground">
+                  Content loaded successfully
+                </p>
+                {plugin?.customCSS && (
+                  <span
+                    className={`text-xs px-2 py-1 rounded flex items-center gap-1 ${
+                      customCSSLoaded
+                        ? 'bg-green-500/10 text-green-600 dark:text-green-400 border border-green-500/20'
+                        : customCSSError
+                          ? 'bg-red-500/10 text-red-600 dark:text-red-400 border border-red-500/20'
+                          : 'bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20'
+                    }`}
+                  >
+                    CSS:{' '}
+                    {customCSSLoaded
+                      ? '✓ Applied'
+                      : customCSSError
+                        ? '✗ Failed'
+                        : '⋯ Loading'}
+                  </span>
+                )}
+                {plugin?.customJS && (
+                  <span
+                    className={`text-xs px-2 py-1 rounded flex items-center gap-1 ${
+                      customJSLoaded
+                        ? 'bg-green-500/10 text-green-600 dark:text-green-400 border border-green-500/20'
+                        : customJSError
+                          ? 'bg-red-500/10 text-red-600 dark:text-red-400 border border-red-500/20'
+                          : 'bg-purple-500/10 text-purple-600 dark:text-purple-400 border border-purple-500/20'
+                    }`}
+                  >
+                    JS:{' '}
+                    {customJSLoaded
+                      ? '✓ Applied'
+                      : customJSError
+                        ? '✗ Failed'
+                        : '⋯ Loading'}
+                  </span>
+                )}
+              </div>
               <Button
                 variant="outline"
                 size="sm"

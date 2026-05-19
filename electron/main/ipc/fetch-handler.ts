@@ -21,7 +21,8 @@ ipcMain.handle('fetch:request', async (_e, url: string, init?: any) => {
     }
   } else {
     for (const [k, v] of Object.entries(incomingHeaders)) {
-      if (k.toLowerCase() !== 'cookie' && v != null) headerEntries[k] = String(v);
+      if (k.toLowerCase() !== 'cookie' && v != null)
+        headerEntries[k] = String(v);
     }
   }
 
@@ -78,13 +79,20 @@ ipcMain.handle('fetch:request', async (_e, url: string, init?: any) => {
     });
 
     for (const [k, v] of Object.entries(headerEntries)) {
-      try { request.setHeader(k, v); } catch { /* skip invalid headers */ }
+      try {
+        request.setHeader(k, v);
+      } catch {
+        /* skip invalid headers */
+      }
     }
     if (cookieString) {
       request.setHeader('Cookie', cookieString);
     }
 
-    if (init?.body && (init.body instanceof Uint8Array || Buffer.isBuffer(init.body))) {
+    if (
+      init?.body &&
+      (init.body instanceof Uint8Array || Buffer.isBuffer(init.body))
+    ) {
       if (!headerEntries['Content-Type']) {
         request.setHeader('Content-Type', 'application/octet-stream');
       }
@@ -93,10 +101,12 @@ ipcMain.handle('fetch:request', async (_e, url: string, init?: any) => {
     // Timeout to prevent hanging requests from leaking memory
     const timer = setTimeout(() => {
       request.abort();
-      reject(new Error(`Request timed out after ${REQUEST_TIMEOUT_MS}ms: ${url}`));
+      reject(
+        new Error(`Request timed out after ${REQUEST_TIMEOUT_MS}ms: ${url}`),
+      );
     }, REQUEST_TIMEOUT_MS);
 
-    request.on('response', (response) => {
+    request.on('response', response => {
       const chunks: Buffer[] = [];
       response.on('data', (chunk: Buffer) => chunks.push(chunk));
       response.on('end', () => {
@@ -104,7 +114,7 @@ ipcMain.handle('fetch:request', async (_e, url: string, init?: any) => {
 
         const flatHeaders: Record<string, string> = {};
         for (const [k, v] of Object.entries(response.headers)) {
-          flatHeaders[k] = Array.isArray(v) ? v[v.length - 1] : (v ?? '');
+          flatHeaders[k] = Array.isArray(v) ? v[v.length - 1] : v ?? '';
         }
 
         // Persist response Set-Cookie into the session jar
@@ -124,13 +134,13 @@ ipcMain.handle('fetch:request', async (_e, url: string, init?: any) => {
           finalUrl: url,
         });
       });
-      response.on('error', (err) => {
+      response.on('error', err => {
         clearTimeout(timer);
         reject(err);
       });
     });
 
-    request.on('error', (err) => {
+    request.on('error', err => {
       clearTimeout(timer);
       reject(err);
     });
@@ -156,8 +166,11 @@ ipcMain.handle('fetch:request', async (_e, url: string, init?: any) => {
 });
 
 /** Parse a raw Set-Cookie header into Electron's CookiesSetDetails. */
-function parseSetCookie(raw: string, requestUrl: string): Electron.CookiesSetDetails {
-  const parts = raw.split(';').map((s) => s.trim());
+function parseSetCookie(
+  raw: string,
+  requestUrl: string,
+): Electron.CookiesSetDetails {
+  const parts = raw.split(';').map(s => s.trim());
   const [nameVal, ...attrs] = parts;
   const eqIdx = nameVal.indexOf('=');
 
