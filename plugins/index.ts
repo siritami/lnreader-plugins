@@ -21,6 +21,7 @@ import p_18 from '@plugins/vietnamese/truyencv';
 import p_19 from '@plugins/vietnamese/valvrareteam';
 import p_20 from '@plugins/vietnamese/wanwansekai';
 import p_21 from '@plugins/vietnamese/ZumiNovel';
+import p_22 from '@plugins/korean/newtoki';
 
 const PLUGINS: Plugin.PluginBase[] = [
   p_0,
@@ -45,5 +46,6 @@ const PLUGINS: Plugin.PluginBase[] = [
   p_19,
   p_20,
   p_21,
+  p_22,
 ];
 export default PLUGINS;

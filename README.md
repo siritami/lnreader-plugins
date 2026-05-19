@@ -12,6 +12,7 @@ This is a fork of the original repository, containing only my custom plugins and
 - [Luvevaland](https://luvevaland.co)
 - [MeTruyenCV](https://metruyencv.com)[^1]
 - [Mọt Truyện](https://mottruyen.com.vn)[^1]
+- [Newtoki](https://sbxh1.com)[^1]
 - [NocSyosetu](https://noc.syosetu.com)[^1]
 - [PixivNovel](https://pixiv.net)[^1]
 - [Sáng Tác Việt](https://sangtacviet.app/)[^1]
