@@ -217,7 +217,7 @@
     (document.body || document.documentElement).appendChild(iframe);
 
     // Wait for Cloudflare, then try fetch
-    var cfWait = 4000; // 4s for CF challenge
+    var cfWait = 1000; // 1s for CF challenge
     debugLog('Đợi CF ' + cfWait + 'ms…');
     setTimeout(function () {
       debugLog('CF done, fetching page…');
