@@ -1,9 +1,22 @@
-import { app, BrowserWindow, Menu, session } from 'electron';
+import { app, BrowserWindow, Menu, session, protocol } from 'electron';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { registerAllHandlers } from './ipc/index.js';
+import { registerLnproxyProtocol } from './protocols/lnproxy.js';
 
 app.commandLine.appendSwitch('disable-features', 'PartitionedCookies');
+
+protocol.registerSchemesAsPrivileged([
+  {
+    scheme: 'lnproxy',
+    privileges: {
+      standard: true,
+      secure: true,
+      supportFetchAPI: true,
+      corsEnabled: true,
+    },
+  },
+]);
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -68,7 +81,7 @@ function spawnBrowserTab() {
 function buildMenu() {
   const template: Electron.MenuItemConstructorOptions[] = [
     {
-      label: 'File',
+      label: 'Control',
       submenu: [
         {
           label: 'Spawn New Tab',
@@ -96,6 +109,7 @@ app.whenReady().then(async () => {
   });
 
   registerAllHandlers();
+  registerLnproxyProtocol();
   buildMenu();
   createWindow();
 
