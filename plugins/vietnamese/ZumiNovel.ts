@@ -181,10 +181,6 @@ class ZumiNovelPlugin implements Plugin.PluginBase {
 
     if (opts.type) {
       params.set('type', opts.type);
-    } else if (!opts.showRaw) {
-      params.append('type', 'original');
-      params.append('type', 'translated');
-      params.append('type', 'ai_translated');
     }
 
     params.set('includeDescription', 'false');
