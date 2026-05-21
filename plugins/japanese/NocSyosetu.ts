@@ -87,7 +87,7 @@ class NocSyosetu implements Plugin.PagePlugin {
   name = 'NocSyosetu';
   icon = 'src/jp/nocsyosetu/icon.png';
   site = 'https://noc.syosetu.com';
-  version = '1.1.15';
+  version = '1.1.16';
 
   pluginSettings: Plugin.PluginSettings = {
     nocsyosetu_translate: {
@@ -345,42 +345,35 @@ class NocSyosetu implements Plugin.PagePlugin {
     pageNo: number,
     options: Plugin.PopularNovelsOptions<Filters>,
   ): Promise<Plugin.NovelItem[]> {
-    const { filters, showLatestNovels } = options;
+    const { filters } = options;
+    let url = `${this.site}search/search/search.php?order_former=search&p=${pageNo}&word=&order=new&ispickup=1`;
 
-    const urlObject = new URL(`${this.site}/search/search/search.php`);
-    const params = urlObject.searchParams;
-
-    params.set('order_former', 'search');
-    params.set('p', pageNo.toString());
-    params.set('word', '');
-
-    const isCustomFilter =
-      !showLatestNovels &&
+    if (
       filters &&
-      (filters.order?.value !== 'new' ||
-        filters.type?.value ||
-        (filters.scope?.value as any[])?.length ||
-        (filters.tags?.value as any[])?.length ||
-        (filters.tag?.value as any[])?.length);
-
-    if (isCustomFilter) {
-      if (filters.order?.value)
-        params.set('order', filters.order.value as string);
-      if (filters.type?.value) params.set('type', filters.type.value as string);
-
-      ['scope', 'tags', 'tag'].forEach(key => {
-        const arr = filters[key]?.value;
-        if (Array.isArray(arr)) {
-          arr.forEach(val => params.set(val as string, '1'));
-        }
-      });
-    } else {
-      params.set('order', 'new');
-      params.set('ispickup', '1');
-      params.set('type', '');
+      (filters.order.value !== 'new' ||
+        filters.type.value ||
+        (Array.isArray(filters.scope.value) &&
+          filters.scope.value.length > 0) ||
+        (Array.isArray(filters.tags.value) && filters.tags.value.length > 0) ||
+        (Array.isArray(filters.tag.value) && filters.tag.value.length > 0))
+    ) {
+      url = `${this.site}search/search/search.php?order_former=search&p=${pageNo}&word=`;
+      if (filters.order.value) {
+        url += `&order=${filters.order.value}`;
+      }
+      if (filters.type.value) {
+        url += `&type=${filters.type.value}`;
+      }
+      if (Array.isArray(filters.scope?.value)) {
+        filters.scope.value.forEach(s => (url += `&${s}=1`));
+      }
+      if (Array.isArray(filters.tags?.value)) {
+        filters.tags.value.forEach(t => (url += `&${t}=1`));
+      }
+      if (Array.isArray(filters.tag?.value)) {
+        filters.tag.value.forEach(t => (url += `&${t}=1`));
+      }
     }
-
-    const url = urlObject.toString();
 
     await this.checkR18Cookie(url);
 
@@ -408,7 +401,6 @@ class NocSyosetu implements Plugin.PagePlugin {
 
     return pageNovels;
   }
-
   parseChapters($page: any): Plugin.ChapterItem[] {
     const chapters: Plugin.ChapterItem[] = [];
 
@@ -581,11 +573,10 @@ class NocSyosetu implements Plugin.PagePlugin {
 
     const url = `${this.site}/search/search/search.php?order_former=search&word=${encodeURIComponent(
       finalSearchTerm,
-    )}${
-      pageNo !== undefined
+    )}${pageNo !== undefined
         ? `&p=${pageNo <= 1 || pageNo > 100 ? '1' : pageNo}` // check if pagenum is between 1 and 100
         : '' // if isn't don't set ?p
-    }`;
+      }`;
 
     await this.checkR18Cookie(url);
 
