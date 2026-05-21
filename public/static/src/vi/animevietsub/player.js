@@ -24,43 +24,15 @@
   var modeLabel = document.getElementById('avs-mode-label');
   var _debugLog = [];
 
-  // ─── Native fetch bridge (bypasses CORS via React Native) ────────
-  var _nfCallbacks = {};
-  window._nativeFetchResolve = function (id, status, text, headers) {
-    if (_nfCallbacks[id]) {
-      _nfCallbacks[id].resolve({ status: status, text: text, headers: headers || {} });
-      delete _nfCallbacks[id];
-    }
-  };
-  window._nativeFetchReject = function (id, err) {
-    if (_nfCallbacks[id]) {
-      _nfCallbacks[id].reject(new Error(err));
-      delete _nfCallbacks[id];
-    }
-  };
+  // ─── Fetch helper (uses reader.fetch proxy to bypass CORS) ──────
   function nativeFetch(url, headers) {
-    if (!window.ReactNativeWebView) {
-      return fetch(url, { credentials: 'include', headers: headers })
-        .then(function (r) {
-          var h = {};
-          r.headers.forEach(function (v, k) { h[k.toLowerCase()] = v; });
-          return r.text().then(function (t) { return { status: r.status, text: t, headers: h }; });
-        });
-    }
-    return new Promise(function (resolve, reject) {
-      var id = 'nf_' + Date.now() + '_' + Math.random().toString(36).substr(2);
-      _nfCallbacks[id] = { resolve: resolve, reject: reject };
-      window.ReactNativeWebView.postMessage(JSON.stringify({
-        type: 'native-fetch',
-        data: { url: url, requestId: id, headers: headers || {}, responseType: 'text' }
-      }));
-      setTimeout(function () {
-        if (_nfCallbacks[id]) {
-          _nfCallbacks[id].reject(new Error('Timeout'));
-          delete _nfCallbacks[id];
-        }
-      }, 30000);
-    });
+    var fetchFn = (window.reader && window.reader.fetch) || fetch;
+    return fetchFn(url, { credentials: 'include', headers: headers })
+      .then(function (r) {
+        var h = {};
+        r.headers.forEach(function (v, k) { h[k.toLowerCase()] = v; });
+        return r.text().then(function (t) { return { status: r.status, text: t, headers: h }; });
+      });
   }
 
   // ─── Priority 1: direct m3u8 URL (from parseChapter extraction) ──
