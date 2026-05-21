@@ -8,5 +8,6 @@ export {
   Buffer,
   NodeCrypto,
   getUserAgent,
+  solveCloudflare,
 } from '../lib/utils';
 export { encodeHtmlEntities, decodeHtmlEntities } from '../lib/html-entities';

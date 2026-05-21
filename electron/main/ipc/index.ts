@@ -1,3 +1,4 @@
+import './cloudflare-handler';
 import './fetch-handler';
 import './cookie-handler';
 import './storage-handler';

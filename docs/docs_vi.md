@@ -157,3 +157,13 @@ window.reader.fetch(url, init); // Sử dụng tương đương Fetch API
 - Nếu vẫn không được, có thể render Captcha trực tiếp trong màn hình Reader. Tuy nhiên, vì hàm `parseChapter` đã được chuẩn hóa, nên script và các thẻ khác có thể không chạy. Sử dụng customJS để xử lý hành vi.
 
 - Trong Reader, URL (location) mặc định sử dụng sẽ là URL site của plugin (Không phải URL của Chapter). Trong Playground, nó là localhost URL.
+
+> [!WARNING]
+> API mới: `solveCloudflare` (import từ `@libs/utils`) là một API gọi WebView ẩn để bypass các yêu cầu bị Cloudflare chặn. Nhưng đây không phải một API ổn định, nó có thể bị xóa bất kì lúc nào. Luôn kiểm tra kiểu của `solveCloudflare` có phải một function hay không trước khi sử dụng.
+
+```js
+import { solveCloudflare } from '@/lib/utils';
+
+const result1 = await solveCloudflare("https://2captcha.com/demo/cloudflare-turnstile", "turnstile");
+const result2 = await solveCloudflare("https://2captcha.com/demo/cloudflare-turnstile-challenge", "interstitial");
+```

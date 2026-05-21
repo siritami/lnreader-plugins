@@ -2,6 +2,7 @@ import { contextBridge, ipcRenderer } from 'electron';
 
 const ALLOWED_CHANNELS = [
   'fetch:request',
+  'cloudflare:solve',
   'cookie:set',
   'cookie:get',
   'cookie:set-from-response',

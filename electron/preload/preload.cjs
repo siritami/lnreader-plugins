@@ -5,6 +5,7 @@ const { contextBridge, ipcRenderer } = require('electron');
 
 const ALLOWED_CHANNELS = [
   'fetch:request',
+  'cloudflare:solve',
   'cookie:set', 'cookie:get', 'cookie:set-from-response',
   'cookie:flush', 'cookie:remove-session',
   'storage:init', 'storage:set', 'storage:get', 'storage:delete',
