@@ -12,7 +12,7 @@ class AnimeVietsubPlugin implements Plugin.PluginBase {
   name = 'AnimeVietsub';
   icon = 'src/vi/animevietsub/icon.png';
   site = 'https://animevietsub.site';
-  version = '1.0.10';
+  version = '1.0.11';
 
   customJS = 'src/vi/animevietsub/player.js';
 
@@ -591,33 +591,16 @@ class AnimeVietsubPlugin implements Plugin.PluginBase {
         const rawJson = pdMatch[1].replace(/\\\//g, '/');
         const pd = JSON.parse(rawJson);
 
-        // Case A: iframe player at storage.googleapiscdn.com
+        // Case A: iframe player at stream.googleapiscdn.com
+        // The player page is behind Cloudflare managed challenge, so
+        // fetchText cannot reach it. Embed the iframe directly and let
+        // the WebView handle the Cloudflare challenge + JWPlayer boot.
         if (
           pd.playTech === 'iframe' &&
           typeof pd.link === 'string' &&
           pd.link.includes('googleapiscdn.com')
         ) {
-          try {
-            const playerHtml = await fetchText(pd.link, {
-              headers: { Referer: this.site + '/' },
-            });
-            const idM = playerHtml.match(/const\s+id\s*=\s*"([0-9a-f]+)"/);
-            const tokM = playerHtml.match(/const\s+avsToken\s*=\s*"([^"]+)"/);
-            if (idM && tokM) {
-              const videoId = idM[1];
-              const token = tokM[1];
-              const base =
-                pd.link.match(/^(https?:\/\/[^/]+)/)?.[1] ||
-                'https://storage.googleapiscdn.com';
-              const m3u8 = `${base}/playlist/${videoId}/playlist.m3u8?token=${encodeURIComponent(token)}&plain=1`;
-              return this.buildPlayerHtml({
-                m3u8,
-                referer: pd.link,
-              });
-            }
-          } catch (_) {
-            //
-          }
+          return this.buildPlayerHtml({ iframe: pd.link });
         }
 
         // Case B: api / all with sources array
@@ -675,12 +658,10 @@ class AnimeVietsubPlugin implements Plugin.PluginBase {
       }
     }
 
-    // When embed is off, don't fall back to hash/iframe
-    if (!this.enableEmbed) {
-      return '<p style="color:#ff4444;font-size:14px;font-family:sans-serif;text-align:center;padding:16px;">Không tìm thấy nguồn m3u8 cho tập phim này. Bật "Bật embed" trong cài đặt plugin để dùng fallback.</p><meta id="no-cache-marker"/><meta id="no-prefetch-marker"/>';
-    }
-
     // ── 2. Fallback: extract data-hash/data-id for AJAX via customJS ──
+    // The customJS handles the AJAX response: if the server returns an
+    // iframe URL (e.g. googleapiscdn), it uses hidden-iframe token
+    // extraction → direct m3u8 playback. Always allow this path.
     const $ = loadCheerio(html);
     this.checkCommonBlocked($);
     const cleanPath = chapterPath.split('?')[0].split('#')[0];
@@ -710,7 +691,10 @@ class AnimeVietsubPlugin implements Plugin.PluginBase {
     }
 
     // ── 3. Last resort: embed the episode page in an iframe ──
-    return this.buildPlayerHtml({ iframe: url });
+    if (this.enableEmbed) {
+      return this.buildPlayerHtml({ iframe: url });
+    }
+    return '<p style="color:#ff4444;font-size:14px;font-family:sans-serif;text-align:center;padding:16px;">Không tìm thấy nguồn video cho tập phim này.</p><meta id="no-cache-marker"/><meta id="no-prefetch-marker"/>';
   }
 
   // ── Helper: build the HTML container for customJS ──
@@ -734,8 +718,9 @@ class AnimeVietsubPlugin implements Plugin.PluginBase {
     if (opts.id) attrs.push(`data-id="${esc(opts.id)}"`);
     if (opts.referer) attrs.push(`data-referer="${esc(opts.referer)}"`);
     if (opts.site) attrs.push(`data-site="${esc(opts.site)}"`);
+    attrs.push(`data-embed-enabled="${this.enableEmbed ? '1' : '0'}"`);
 
-    const mode = opts.m3u8 ? 'Đang ở chế độ m3u8' : 'Đang ở chế độ embed';
+    const mode = opts.m3u8 ? 'Đang ở chế độ m3u8' : 'Đang tải video…';
 
     return [
       `<div ${attrs.join(' ')}`,
@@ -744,7 +729,7 @@ class AnimeVietsubPlugin implements Plugin.PluginBase {
       '    <p style="color:#fff;font-family:sans-serif;">Đang tải video...</p>',
       '  </div>',
       '</div>',
-      `<p style="color:#888;font-size:12px;font-family:sans-serif;text-align:center;margin:4px 0;">${mode}</p>`,
+      `<p id="avs-mode-label" style="color:#888;font-size:12px;font-family:sans-serif;text-align:center;margin:4px 0;">${mode}</p>`,
       '<meta id="no-cache-marker"/><meta id="no-prefetch-marker"/>',
     ].join('\n');
   }

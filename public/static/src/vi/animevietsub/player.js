@@ -20,6 +20,49 @@
   var inner = document.getElementById('avs-player-inner');
   if (!inner) return;
 
+  var embedEnabled = container.getAttribute('data-embed-enabled') === '1';
+  var modeLabel = document.getElementById('avs-mode-label');
+  var _debugLog = [];
+
+  // ─── Native fetch bridge (bypasses CORS via React Native) ────────
+  var _nfCallbacks = {};
+  window._nativeFetchResolve = function (id, status, text, headers) {
+    if (_nfCallbacks[id]) {
+      _nfCallbacks[id].resolve({ status: status, text: text, headers: headers || {} });
+      delete _nfCallbacks[id];
+    }
+  };
+  window._nativeFetchReject = function (id, err) {
+    if (_nfCallbacks[id]) {
+      _nfCallbacks[id].reject(new Error(err));
+      delete _nfCallbacks[id];
+    }
+  };
+  function nativeFetch(url, headers) {
+    if (!window.ReactNativeWebView) {
+      return fetch(url, { credentials: 'include', headers: headers })
+        .then(function (r) {
+          var h = {};
+          r.headers.forEach(function (v, k) { h[k.toLowerCase()] = v; });
+          return r.text().then(function (t) { return { status: r.status, text: t, headers: h }; });
+        });
+    }
+    return new Promise(function (resolve, reject) {
+      var id = 'nf_' + Date.now() + '_' + Math.random().toString(36).substr(2);
+      _nfCallbacks[id] = { resolve: resolve, reject: reject };
+      window.ReactNativeWebView.postMessage(JSON.stringify({
+        type: 'native-fetch',
+        data: { url: url, requestId: id, headers: headers || {}, responseType: 'text' }
+      }));
+      setTimeout(function () {
+        if (_nfCallbacks[id]) {
+          _nfCallbacks[id].reject(new Error('Timeout'));
+          delete _nfCallbacks[id];
+        }
+      }, 30000);
+    });
+  }
+
   // ─── Priority 1: direct m3u8 URL (from parseChapter extraction) ──
   var m3u8 = container.getAttribute('data-m3u8');
   if (m3u8) {
@@ -44,12 +87,23 @@
   // ─── Priority 3: iframe embed ────────────────────────────────────
   var iframeSrc = container.getAttribute('data-iframe');
   if (iframeSrc) {
+    if (iframeSrc.indexOf('googleapiscdn.com') !== -1) {
+      console.log('[AVS] googleapiscdn detected, trying token extraction…');
+      tryGoogleApisCdn(iframeSrc, inner);
+      return;
+    }
+    if (!embedEnabled) {
+      showError('Nguồn này chỉ hỗ trợ embed. Bật "Bật embed" trong cài đặt plugin.');
+      if (modeLabel) modeLabel.textContent = '';
+      return;
+    }
     console.log('[AVS] Embedding iframe:', iframeSrc.substring(0, 80));
     inner.innerHTML =
       '<iframe src="' +
       escapeAttr(iframeSrc) +
       '" style="width:100%;height:100%;border:none;" ' +
       'allowfullscreen allow="autoplay; fullscreen; encrypted-media"></iframe>';
+    if (modeLabel) modeLabel.textContent = 'Đang ở chế độ embed';
     return;
   }
 
@@ -114,11 +168,22 @@
   function handlePlayerResponse(json) {
     // iframe player
     if (json.playTech === 'iframe' && typeof json.link === 'string') {
+      if (json.link.indexOf('googleapiscdn.com') !== -1) {
+        console.log('[AVS] AJAX returned googleapiscdn, trying token extraction…');
+        tryGoogleApisCdn(json.link, inner);
+        return;
+      }
+      if (!embedEnabled) {
+        showError('Nguồn này chỉ hỗ trợ embed. Bật "Bật embed" trong cài đặt plugin.');
+        if (modeLabel) modeLabel.textContent = '';
+        return;
+      }
       inner.innerHTML =
         '<iframe src="' +
         escapeAttr(json.link) +
         '" style="width:100%;height:100%;border:none;" ' +
         'allowfullscreen allow="autoplay; fullscreen; encrypted-media"></iframe>';
+      if (modeLabel) modeLabel.textContent = 'Đang ở chế độ embed';
       return;
     }
 
@@ -135,12 +200,16 @@
         buildVideoPlayer(inner, [{ file: link, type: 'hls' }]);
       } else if (/\.(mp4|webm)(\?|$)/i.test(link)) {
         buildVideoPlayer(inner, [{ file: link }]);
-      } else {
+      } else if (embedEnabled) {
         inner.innerHTML =
           '<iframe src="' +
           escapeAttr(link) +
           '" style="width:100%;height:100%;border:none;" ' +
           'allowfullscreen allow="autoplay; fullscreen; encrypted-media"></iframe>';
+        if (modeLabel) modeLabel.textContent = 'Đang ở chế độ embed';
+      } else {
+        showError('Nguồn này chỉ hỗ trợ embed. Bật "Bật embed" trong cài đặt plugin.');
+        if (modeLabel) modeLabel.textContent = '';
       }
       return;
     }
@@ -148,14 +217,429 @@
     showError('Định dạng phát không được hỗ trợ.');
   }
 
-  // ─── Utilities ──────────────────────────────────────────────────
-  function showError(msg) {
-    if (inner) {
-      inner.innerHTML =
-        '<p style="color:#ff4444;font-family:sans-serif;text-align:center;padding:16px;">' +
-        msg +
-        '</p>';
+  // ─── googleapiscdn: two-layer m3u8 decryption ─────────────────
+  //
+  // Layer 1: AES-GCM decrypt concatenated _t params → intermediate m3u8
+  // Layer 2: AES-CTR decrypt segment URLs → real CDN URLs
+  //
+  // If any phase fails, fall back to iframe embed.
+  function tryGoogleApisCdn(playerUrl, target) {
+
+    // Create hidden iframe to solve Cloudflare challenge
+    var iframe = document.createElement('iframe');
+    iframe.style.cssText =
+      'position:absolute;width:1px;height:1px;opacity:0;pointer-events:none;';
+    iframe.src = playerUrl;
+    (document.body || document.documentElement).appendChild(iframe);
+
+    // Wait for Cloudflare, then try fetch
+    var cfWait = 4000; // 4s for CF challenge
+    debugLog('Đợi CF ' + cfWait + 'ms…');
+    setTimeout(function () {
+      debugLog('CF done, fetching page…');
+      fetchPlayerPage(playerUrl, target, iframe);
+    }, cfWait);
+  }
+
+  function fetchPlayerPage(playerUrl, target, iframe) {
+    // Use native fetch bridge to bypass CORS
+    // React Native reads cookies from CookieManager (shared with WebView)
+    // so Cloudflare cf_clearance cookie is included automatically
+    nativeFetch(playerUrl, { Referer: playerUrl })
+      .then(function (res) {
+        if (res.status !== 200) throw new Error('HTTP ' + res.status + ' (len=' + (res.text || '').length + ')');
+        var html = res.text;
+        debugLog('Page OK, size=' + html.length);
+        cleanupIframe(iframe);
+
+        // Extract avsToken from inline script
+        var tokenMatch = html.match(
+          /const\s+avsToken\s*=\s*"([^"]+)"/
+        );
+        if (!tokenMatch) {
+          debugLog('No avsToken! First 150: ' + html.substring(0, 150));
+          return;
+        }
+        var avsToken = tokenMatch[1];
+        debugLog('Token: ' + avsToken.substring(0, 30) + '…');
+
+        // Extract video hash from URL
+        var hashMatch = playerUrl.match(/\/player\/([0-9a-f]+)/);
+        if (!hashMatch) {
+          fallbackToEmbed(playerUrl, target);
+          return;
+        }
+        var videoHash = hashMatch[1];
+
+        // Fetch m3u8 with token
+        debugLog('Fetching m3u8…');
+
+        var baseUrl = playerUrl.match(/^(https?:\/\/[^/]+)/)[1];
+        var m3u8Url = baseUrl +
+          '/playlist/' + videoHash +
+          '/playlist.m3u8?token=' + encodeURIComponent(avsToken);
+
+        return nativeFetch(m3u8Url, { Referer: playerUrl }).then(function (m3u8Res) {
+          var m3u8Text = m3u8Res.text;
+          var m3u8Headers = m3u8Res.headers || {};
+          debugLog('m3u8 OK, size=' + m3u8Text.length);
+          processEncryptedM3u8(m3u8Text, m3u8Headers, avsToken, playerUrl, target);
+        });
+      })
+      .catch(function (err) {
+        cleanupIframe(iframe);
+        debugLog('Fetch fail: ' + err.message);
+      });
+  }
+
+  // ─── Crypto helpers (ported from avs-loader.min.js v1.12.16) ──────
+  function b64urlDecode(str) {
+    var s = str.replace(/-/g, '+').replace(/_/g, '/');
+    s += '=='.slice(0, (4 - s.length % 4) % 4);
+    var binary = atob(s);
+    var bytes = new Uint8Array(binary.length);
+    for (var i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+    return bytes;
+  }
+
+  function lcgNext(state) {
+    return (Math.imul(state, 1664525) + 1013904223) >>> 0;
+  }
+
+  function stringUnshuffle(str, seed) {
+    var chars = str.split('');
+    var len = chars.length;
+    var state = (parseInt(seed.substring(0, 8), 16) >>> 0);
+    var swaps = [];
+    for (var i = len - 1; i > 0; i--) {
+      state = lcgNext(state);
+      swaps.push([i, state % (i + 1)]);
     }
+    for (var k = swaps.length - 1; k >= 0; k--) {
+      var a = swaps[k][0], b = swaps[k][1];
+      var tmp = chars[a]; chars[a] = chars[b]; chars[b] = tmp;
+    }
+    return chars.join('');
+  }
+
+  function createPRNG(seed) {
+    var hash = 2166136261;
+    for (var i = 0; i < seed.length; i++) {
+      hash = ((hash ^ (seed.charCodeAt(i) & 255)) >>> 0);
+      hash = (Math.imul(hash, 16777619)) >>> 0;
+    }
+    var state = (hash >>> 0) || 1;
+    return function () {
+      state ^= (state << 13); state >>>= 0;
+      state ^= (state >>> 17); state >>>= 0;
+      state ^= (state << 5);
+      return (state >>>= 0);
+    };
+  }
+
+  function descramble(data, permKey, permSalt) {
+    var input = data instanceof Uint8Array ? data : new Uint8Array(data);
+    var len = input.length;
+    var output = new Uint8Array(len);
+    if (len === 0) return output.buffer;
+    var rng = createPRNG(permKey + '|' + permSalt);
+    var perm = new Uint32Array(len);
+    for (var i = 0; i < len; i++) perm[i] = i;
+    for (var i = len - 1; i > 0; i--) {
+      var j = rng() % (i + 1);
+      var t = perm[i]; perm[i] = perm[j]; perm[j] = t;
+    }
+    var xorState = 0;
+    for (var i = 0; i < len; i++) {
+      if (!(i & 3)) xorState = rng();
+      output[perm[i]] = input[i] ^ ((xorState >>> (8 * (i & 3))) & 255);
+    }
+    return output.buffer;
+  }
+
+  // ─── Two-layer m3u8 decryption ──────────────────────────────────
+  function processEncryptedM3u8(m3u8Text, m3u8Headers, avsToken, playerUrl, target) {
+    debugLog('Decrypting (2-layer)…');
+
+    // Parse JWT → jti
+    var jwtParts = avsToken.split('.');
+    var payload;
+    try {
+      payload = JSON.parse(atob(jwtParts[1]));
+    } catch (e) {
+      debugLog('JWT parse failed');
+      fallbackToEmbed(playerUrl, target);
+      return;
+    }
+    var jti = payload.jti;
+    debugLog('JTI: ' + jti.substring(0, 20) + '…');
+
+    // Extract jtiOdd (every odd-indexed char → 64-char hex string)
+    var jtiOdd = '';
+    for (var k = 0; k < jti.length; k++) {
+      if (k % 2 === 1) jtiOdd += jti[k];
+    }
+
+    // Read session params from m3u8 response headers
+    var cn = m3u8Headers['x-edge-tag'] || '';
+    var sk = m3u8Headers['x-cache-node'] || '';
+    var ts = m3u8Headers['x-request-trace'] || '0';
+    var uid = '';
+    try { uid = decodeURIComponent(m3u8Headers['x-proxy-digest'] || 'anon'); } catch (e) { uid = 'anon'; }
+    debugLog('cn=' + cn.substring(0, 16) + ' sk=' + sk.substring(0, 16) + ' ts=' + ts);
+
+    if (!cn || !sk) {
+      // Try envelope header (base64url-encoded JSON with cn, sk, ts, uid)
+      var envHeader = m3u8Headers['x-avs-envelope'] || m3u8Headers['x-stream-envelope'] || '';
+      if (envHeader) {
+        try {
+          var envJson = JSON.parse(new TextDecoder().decode(b64urlDecode(envHeader)));
+          cn = envJson.cn || cn;
+          sk = envJson.sk || sk;
+          ts = envJson.ts || ts;
+          uid = envJson.uid || uid;
+        } catch (e) { /* envelope parse failed */ }
+      }
+    }
+
+    if (!cn || !sk) {
+      debugLog('No cn/sk → cannot decrypt');
+      fallbackToEmbed(playerUrl, target);
+      return;
+    }
+
+    // ── Layer 1: AES-GCM batch decrypt of _t values ──
+    var lines = m3u8Text.split('\n');
+    var tValues = [];
+    var headerLines = [];
+    for (var i = 0; i < lines.length; i++) {
+      var line = lines[i];
+      if (line.startsWith('#') || line.trim() === '') {
+        if (!line.match(/^#EXTINF:/) && !line.match(/^#EXT-X-ENDLIST/) && !line.match(/^#EXT-X-KEY/)) {
+          headerLines.push(line);
+        }
+      } else {
+        var tm = line.match(/[?&]_t=([^&\s]+)/);
+        if (tm) tValues.push(tm[1]);
+      }
+    }
+
+    debugLog('_t segments: ' + tValues.length);
+
+    if (tValues.length === 0) {
+      debugLog('No _t params in m3u8');
+      fallbackToEmbed(playerUrl, target);
+      return;
+    }
+
+    // Concatenate and unshuffle
+    var concatenated = tValues.join('');
+    var unshuffled = stringUnshuffle(concatenated, sk);
+
+    // Base64url decode to get the encrypted blob
+    var encryptedBlob;
+    try {
+      encryptedBlob = b64urlDecode(unshuffled);
+    } catch (e) {
+      debugLog('b64 decode failed: ' + e.message);
+      fallbackToEmbed(playerUrl, target);
+      return;
+    }
+
+    debugLog('Blob: ' + encryptedBlob.length + ' bytes');
+
+    // Derive AES-GCM key: HMAC-SHA256(key=b64decode(cn), data="uid:ts:sk:0")
+    var cnBytes = b64urlDecode(cn);
+    var hmacDataStr = uid + ':' + ts + ':' + sk + ':0';
+    var hmacData = new TextEncoder().encode(hmacDataStr);
+    var iv = cnBytes.slice(0, 12);
+
+    crypto.subtle.importKey(
+      'raw', cnBytes, { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']
+    ).then(function (hmacKey) {
+      return crypto.subtle.sign('HMAC', hmacKey, hmacData);
+    }).then(function (gcmKeyBuf) {
+      return crypto.subtle.importKey(
+        'raw', gcmKeyBuf, { name: 'AES-GCM' }, false, ['decrypt']
+      );
+    }).then(function (gcmKey) {
+      debugLog('AES-GCM decrypt ' + encryptedBlob.length + 'B…');
+      return crypto.subtle.decrypt(
+        { name: 'AES-GCM', iv: iv }, gcmKey, encryptedBlob
+      );
+    }).then(function (rawResult) {
+      // Apply descrambler (crypto harden is active)
+      var descrambled = descramble(rawResult, sk, ts);
+      var intermediateM3u8 = new TextDecoder().decode(descrambled);
+      debugLog('Intermediate: ' + intermediateM3u8.length + 'ch, first80=' + intermediateM3u8.substring(0, 80));
+
+      if (intermediateM3u8.length < 10) {
+        debugLog('Intermediate too short');
+        fallbackToEmbed(playerUrl, target);
+        return;
+      }
+
+      // ── Layer 2: AES-CTR decrypt segment URLs ──
+      decryptSegmentUrls(intermediateM3u8, headerLines, jtiOdd, playerUrl, target);
+    }).catch(function (err) {
+      debugLog('Layer 1 (GCM) failed: ' + (err && err.message || err));
+      fallbackToEmbed(playerUrl, target);
+    });
+  }
+
+  function decryptSegmentUrls(intermediateM3u8, headerLines, jtiOdd, playerUrl, target) {
+    var lines = intermediateM3u8.split('\n');
+    var segments = [];
+
+    // Parse /hls/{fileId}.ts?e=...&i=...  or absolute URLs with same pattern
+    var hlsRe = /\/hls\/([0-9a-f]{24})\.ts[^#\s]*/;
+    for (var i = 0; i < lines.length; i++) {
+      var line = lines[i].trim();
+      if (line.startsWith('#') || line === '') continue;
+
+      var m = line.match(hlsRe);
+      if (m) {
+        // Extract query params from URL
+        var qIdx = line.indexOf('?');
+        var params = {};
+        if (qIdx !== -1) {
+          line.substring(qIdx + 1).split('&').forEach(function (p) {
+            var eq = p.indexOf('=');
+            if (eq !== -1) params[p.substring(0, eq)] = p.substring(eq + 1);
+          });
+        }
+        segments.push({
+          fileId: m[1],
+          e: params.e || '',
+          i: parseInt(params.i || '0', 10),
+          lineIdx: i
+        });
+      }
+    }
+
+    debugLog('Segments to decrypt: ' + segments.length);
+
+    if (segments.length === 0) {
+      // Intermediate m3u8 might already have direct URLs (no /hls/ pattern)
+      debugLog('No /hls/ segments in intermediate m3u8');
+      fallbackToEmbed(playerUrl, target);
+      return;
+    }
+
+    // Derive AES-CTR key per fileId (usually all same)
+    var hmacKeyBytes = new TextEncoder().encode(jtiOdd);
+    var keyCache = {};
+
+    function deriveCtrKey(fileId) {
+      if (keyCache[fileId]) return Promise.resolve(keyCache[fileId]);
+      var signData = new TextEncoder().encode('url-cipher|' + fileId);
+      return crypto.subtle.importKey(
+        'raw', hmacKeyBytes, { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']
+      ).then(function (k) {
+        return crypto.subtle.sign('HMAC', k, signData);
+      }).then(function (buf) {
+        return crypto.subtle.importKey('raw', buf, { name: 'AES-CTR' }, false, ['decrypt']);
+      }).then(function (ctrKey) {
+        keyCache[fileId] = ctrKey;
+        return ctrKey;
+      });
+    }
+
+    // Decrypt all segments
+    var promises = segments.map(function (seg) {
+      return deriveCtrKey(seg.fileId).then(function (ctrKey) {
+        var encrypted = b64urlDecode(seg.e);
+        var counter = new Uint8Array(16);
+        var idx = seg.i;
+        counter[12] = (idx >>> 24) & 0xff;
+        counter[13] = (idx >>> 16) & 0xff;
+        counter[14] = (idx >>> 8) & 0xff;
+        counter[15] = idx & 0xff;
+        return crypto.subtle.decrypt(
+          { name: 'AES-CTR', counter: counter, length: 64 }, ctrKey, encrypted
+        ).then(function (dec) {
+          return { lineIdx: seg.lineIdx, url: new TextDecoder().decode(dec) };
+        });
+      });
+    });
+
+    Promise.all(promises).then(function (results) {
+      var validCount = 0;
+      var outLines = lines.slice(); // copy intermediate lines
+
+      results.forEach(function (r) {
+        if (r.url.indexOf('http') === 0) {
+          outLines[r.lineIdx] = r.url;
+          validCount++;
+        }
+      });
+
+      debugLog('Decrypted ' + validCount + '/' + results.length + ' URLs');
+      if (validCount === 0) {
+        fallbackToEmbed(playerUrl, target);
+        return;
+      }
+
+      // Build clean m3u8: header lines + decrypted segment lines
+      var cleanLines = [];
+      for (var i = 0; i < headerLines.length; i++) cleanLines.push(headerLines[i]);
+      for (var i = 0; i < outLines.length; i++) {
+        var l = outLines[i];
+        if (!l) continue;
+        if (l.indexOf('#EXT-X-KEY:') === 0 && l.indexOf('urn:avs:shield') !== -1) continue;
+        // Skip /hls/ placeholder lines that weren't decrypted
+        if (l.match(/\/hls\/[0-9a-f]{24}\.ts/)) continue;
+        cleanLines.push(l);
+      }
+
+      var cleanM3u8 = cleanLines.join('\n');
+      var blob = new Blob([cleanM3u8], { type: 'application/vnd.apple.mpegurl' });
+      var blobUrl = URL.createObjectURL(blob);
+
+      if (modeLabel) modeLabel.textContent = 'Đang ở chế độ m3u8';
+      buildVideoPlayer(target, [{ file: blobUrl, type: 'hls' }]);
+    }).catch(function (err) {
+      debugLog('Layer 2 (CTR) failed: ' + (err && err.message || err));
+      fallbackToEmbed(playerUrl, target);
+    });
+  }
+
+  function fallbackToEmbed(playerUrl, target) {
+    if (!embedEnabled) {
+      console.log('[AVS] Embed disabled, showing error');
+      showError('Không thể giải mã video. Bật "Bật embed" trong cài đặt plugin để xem qua iframe.');
+      if (modeLabel) modeLabel.textContent = '';
+      return;
+    }
+    console.log('[AVS] Falling back to iframe embed');
+    target.innerHTML =
+      '<iframe src="' +
+      escapeAttr(playerUrl) +
+      '" style="width:100%;height:100%;border:none;" ' +
+      'allowfullscreen allow="autoplay; fullscreen; encrypted-media"></iframe>';
+    if (modeLabel) modeLabel.textContent = 'Đang ở chế độ embed';
+  }
+
+  function cleanupIframe(iframe) {
+    try { iframe.src = 'about:blank'; } catch (e) {}
+    setTimeout(function () {
+      try { iframe.remove(); } catch (e) {}
+    }, 200);
+  }
+
+  // ─── Utilities ──────────────────────────────────────────────────
+  function debugLog(msg) {
+    _debugLog.push(msg);
+    console.log('[AVS] ' + msg);
+    var el = document.getElementById('avs-debug-log');
+    if (!el && inner) {
+      inner.innerHTML = '<div id="avs-debug-log" style="color:#aaa;font-family:monospace;font-size:11px;padding:8px;white-space:pre-wrap;word-break:break-all;max-height:300px;overflow-y:auto;"></div>';
+      el = document.getElementById('avs-debug-log');
+    }
+    if (el) el.textContent = _debugLog.join('\n');
+  }
+  function showError(msg) {
+    debugLog('ERROR: ' + msg);
   }
 
   function escapeAttr(s) {
