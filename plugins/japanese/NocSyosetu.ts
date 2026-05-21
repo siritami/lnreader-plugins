@@ -87,7 +87,7 @@ class NocSyosetu implements Plugin.PagePlugin {
   name = 'NocSyosetu';
   icon = 'src/jp/nocsyosetu/icon.png';
   site = 'https://noc.syosetu.com';
-  version = '1.1.16';
+  version = '1.1.17';
 
   pluginSettings: Plugin.PluginSettings = {
     nocsyosetu_translate: {
@@ -346,7 +346,7 @@ class NocSyosetu implements Plugin.PagePlugin {
     options: Plugin.PopularNovelsOptions<Filters>,
   ): Promise<Plugin.NovelItem[]> {
     const { filters } = options;
-    let url = `${this.site}search/search/search.php?order_former=search&p=${pageNo}&word=&order=new&ispickup=1`;
+    let url = `${this.site}/search/search/search.php?order_former=search&p=${pageNo}&word=&order=new&ispickup=1`;
 
     if (
       filters &&
@@ -357,7 +357,7 @@ class NocSyosetu implements Plugin.PagePlugin {
         (Array.isArray(filters.tags.value) && filters.tags.value.length > 0) ||
         (Array.isArray(filters.tag.value) && filters.tag.value.length > 0))
     ) {
-      url = `${this.site}search/search/search.php?order_former=search&p=${pageNo}&word=`;
+      url = `${this.site}/search/search/search.php?order_former=search&p=${pageNo}&word=`;
       if (filters.order.value) {
         url += `&order=${filters.order.value}`;
       }
