@@ -1,5 +1,3 @@
-// @ts-nocheck
-
 import { fetchApi, fetchProto, fetchText } from '@libs/fetch';
 import { Plugin } from '@/types/plugin';
 import { Filters } from '@libs/filterInputs';
@@ -8,6 +6,7 @@ import { defaultCover } from '@libs/defaultCover';
 import { NovelStatus } from '@libs/novelStatus';
 import { storage, localStorage, sessionStorage } from '@libs/storage';
 import { utf8ToBytes, bytesToUtf8, Buffer } from '@libs/utils';
+import test from './utils';
 
 // Thêm file "BROKEN" vào folder để tránh ext này được build
 class TemplatePlugin implements Plugin.PluginBase {
@@ -32,9 +31,9 @@ class TemplatePlugin implements Plugin.PluginBase {
   webStorageUtilized?: boolean;
   // Phần này để định nghĩa Plugin Settings.
   // Cần tải lại ứng dụng sau khi thay đổi để cài đặt có hiệu lực.
-  pluginSettings = {
+  pluginSettings: Plugin.PluginSettings = {
     hideLocked: {
-      value: '', // Giá trị khởi tạo
+      value: false, // Giá trị khởi tạo
       label: 'Hide locked chapters', // Nhãn hiển thị trong UI
       type: 'Switch',
     },
@@ -152,6 +151,8 @@ class TemplatePlugin implements Plugin.PluginBase {
     searchTerm: string, // Query
     pageNo: number, // Trang tìm kiếm thứ bao nhiêu (bắt đầu từ 1)
   ): Promise<Plugin.NovelItem[]> {
+    // Thử chạy hàm trong file utils.ts
+    test();
     // Nếu trang tìm kiếm không hỗ trợ phân trang, sử dụng code giống như dưới đây để bỏ qua tham số pageNo này.
     if (pageNo > 1) return [];
     const novels: Plugin.NovelItem[] = [];

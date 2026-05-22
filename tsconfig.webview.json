@@ -12,6 +12,7 @@
   },
   "include": [
     "plugins/**/webview/**/*.ts",
-    "plugins/**/webview/**/*.js"
+    "plugins/**/webview/**/*.js",
+    "./src/webview.d.ts"
   ]
 }

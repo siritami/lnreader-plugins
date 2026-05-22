@@ -27,18 +27,6 @@ const entryPoints = entryPointsFiles
     return !fs.existsSync(path.join('plugins', ep.lang, ep.name, 'BROKEN'));
   });
 
-const createRecursiveProxy = () => {
-  const target = {};
-  const handler = {
-    get(target, prop) {
-      if (prop === 'get') return a => a;
-      if (!target[prop]) target[prop] = createRecursiveProxy();
-      return target[prop];
-    },
-  };
-  return new Proxy(target, handler);
-};
-
 async function build() {
   console.log(`Found ${entryPoints.length} plugins to build.`);
   fs.writeFileSync(
@@ -69,60 +57,6 @@ async function build() {
       },
     ],
   });
-
-  console.log('Building webview scripts...');
-  const proxyRequire = () => createRecursiveProxy();
-
-  for (const ep of entryPoints) {
-    const webviewTs = path.join(
-      'plugins',
-      ep.lang,
-      ep.name,
-      'webview',
-      'index.ts',
-    );
-    const webviewJs = path.join(
-      'plugins',
-      ep.lang,
-      ep.name,
-      'webview',
-      'index.js',
-    );
-
-    let webviewEntry = null;
-    if (fs.existsSync(webviewTs)) webviewEntry = webviewTs;
-    else if (fs.existsSync(webviewJs)) webviewEntry = webviewJs;
-
-    if (webviewEntry) {
-      try {
-        const rawCode = fs.readFileSync(
-          path.join('.js', 'plugins', ep.out + '.js'),
-          'utf-8',
-        );
-        const plugin = Function(
-          'require',
-          'module',
-          `const exports = module.exports = {}; 
-          ${rawCode}; 
-          return exports.default`,
-        )(proxyRequire, {});
-
-        if (plugin.customJS) {
-          console.log(`[Webview] ${ep.name} -> ${plugin.customJS}`);
-          await esbuild.build({
-            entryPoints: [webviewEntry],
-            bundle: true,
-            minify: true,
-            outfile: path.join('public', 'static', plugin.customJS),
-            format: 'iife',
-            target: 'es2020',
-          });
-        }
-      } catch (err) {
-        console.error(`Failed to build webview for ${ep.name}:`, err);
-      }
-    }
-  }
 
   console.log('Plugins built successfully.');
 }

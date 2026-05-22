@@ -1,1 +1,3 @@
-console.log('Hello World');
+import './test';
+
+console.log('Index file', Date.now());

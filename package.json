@@ -10,10 +10,11 @@
     "dev:start": "node ./plugins/multisrc/generate-multisrc-plugins.js && node scripts/generate-plugin-index.js && vite",
     "build:multisrc": "node ./plugins/multisrc/generate-multisrc-plugins.js",
     "build:compile": "npx tsc --project tsconfig.production.json --outDir .tsc-out && node scripts/build-plugins.js",
+    "build:webviews": "node scripts/build-webviews.js",
     "build:manifest": "node ./scripts/build-plugin-manifest.js",
     "build:manifest:dev": "node --env-file=.env ./scripts/build-plugin-manifest.js",
-    "build:icons": "npm run clean:multisrc && npm run build:multisrc && npm run build:compile && npm run build:manifest && node ./scripts/download-plugin-icons.js",
-    "build:full": "npm run clean:multisrc && npm run build:multisrc && npm run build:compile && npm run build:manifest",
+    "build:icons": "npm run clean:multisrc && npm run build:multisrc && npm run build:compile && npm run build:webviews && npm run build:manifest && node ./scripts/download-plugin-icons.js",
+    "build:full": "npm run clean:multisrc && npm run build:multisrc && npm run build:compile && npm run build:webviews && npm run build:manifest",
     "publish:plugins": "chmod +x ./scripts/publish-plugins.sh && ./scripts/publish-plugins.sh",
     "publish:plugins:windows": "powershell ./scripts/publish-plugins.ps1",
     "serve:dev": "npm run build:compile && npm run build:manifest:dev && serve",
@@ -41,6 +42,8 @@
     "@tailwindcss/vite": "^4.1.14",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
+    "esbuild": "^0.28.0",
+    "fast-glob": "^3.3.3",
     "html-entities": "^2.6.0",
     "jszip": "^3.10.1",
     "lucide-react": "^0.546.0",
@@ -48,9 +51,7 @@
     "tailwind-merge": "^3.3.1",
     "tailwindcss": "^4.1.14",
     "terser": "^5.36.0",
-    "typescript": "^5.7.2",
-    "esbuild": "^0.28.0",
-    "fast-glob": "^3.3.3"
+    "typescript": "^5.7.2"
   },
   "devDependencies": {
     "@emotion/react": "^11.13.5",
