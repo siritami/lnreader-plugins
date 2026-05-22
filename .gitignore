@@ -8,7 +8,7 @@ config.json
 plugins/*/*\[*\]*.ts
 
 # generated custom .js files
-public/static/src/**/*.js
+# public/static/src/**/*.js
 
 # ignore dist stuffs
 .js
