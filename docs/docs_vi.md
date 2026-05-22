@@ -20,7 +20,9 @@ npm install
 
 - Tất cả các plugin được đặt trong thư mục `plugins`.
 - Do repository này tập trung hỗ trợ các nền tảng Web Novel tiếng Việt, vui lòng tạo hoặc đặt plugin của bạn bên trong thư mục `plugins/vietnamese`.
-- Bạn cần viết toàn bộ mã nguồn của plugin vào một tệp TypeScript duy nhất (ví dụ: `plugins/vietnamese/LNHako.ts`).
+- ~~Bạn cần viết toàn bộ mã nguồn của plugin vào một tệp TypeScript duy nhất (ví dụ: `plugins/vietnamese/LNHako.ts`)~~ Đã chuyển sang cấu trúc mới, Bạn sẽ tạo 1 thư mục có tên được viết theo dạng PascalCase, không có dấu cách. Entry point TypeScript là `index.ts` (ví dụ: `plugins/vietnamese/LNHako/index.ts`)
+
+- Cấu trúc Plugin mới cho phép bạn viết nhiều tệp để có thể sử dụng (giúp mã nguồn dễ đọc hơn, xem thử triển khai ở plugin `AnimeVietsub`)
 
 ### 2. Các loại Plugin hỗ trợ
 

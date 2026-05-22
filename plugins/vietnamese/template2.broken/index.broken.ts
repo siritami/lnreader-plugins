@@ -9,8 +9,7 @@ import { NovelStatus } from '@libs/novelStatus';
 import { storage, localStorage, sessionStorage } from '@libs/storage';
 import { utf8ToBytes, bytesToUtf8, Buffer } from '@libs/utils';
 
-// Phần đầu của TemplatePlugin giống như tệp template.ts, có thể xem ở đó...
-// Thêm ".broken" vào tên file để tránh ext này được build
+// Phần đầu của TemplatePlugin giống như plugin template.ts, có thể xem ở đó...
 class TemplatePlugin implements Plugin.PagePlugin {
   id = 'template2.id';
   name = 'Template Plugin 2';

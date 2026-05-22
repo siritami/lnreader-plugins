@@ -25,11 +25,12 @@ const generate = async name => {
         continue;
       }
       const pluginsDir = './plugins';
-      const filePath = path.join(
-        pluginsDir,
-        lang.toLowerCase(),
-        filename.replace(/[\s-.]+/g, '') + `[${name}].ts`,
-      );
+      const folderName = filename.replace(/[\s-.]+/g, '') + `[${name}]`;
+      const dirPath = path.join(pluginsDir, lang.toLowerCase(), folderName);
+      if (!fs.existsSync(dirPath)) {
+        fs.mkdirSync(dirPath, { recursive: true });
+      }
+      const filePath = path.join(dirPath, 'index.ts');
       fs.writeFileSync(filePath, pluginScript, { encoding: 'utf-8' });
     }
     return true;

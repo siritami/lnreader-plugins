@@ -9,7 +9,7 @@ import { NovelStatus } from '@libs/novelStatus';
 import { storage, localStorage, sessionStorage } from '@libs/storage';
 import { utf8ToBytes, bytesToUtf8, Buffer } from '@libs/utils';
 
-// Thêm ".broken" vào tên file để tránh ext này được build
+// Thêm ".broken" vào tên file và tên folder để tránh ext này được build
 class TemplatePlugin implements Plugin.PluginBase {
   // Là một ID duy nhất để nhận diện Plugin
   id = 'template.id';

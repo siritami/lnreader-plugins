@@ -1,0 +1,59 @@
+import esbuild from 'esbuild';
+import process from 'process';
+import fastGlob from 'fast-glob';
+const globSync = fastGlob.globSync;
+
+// Find all entry points (index.ts) in plugin folders
+const entryPointsFiles = globSync('plugins/*/*/index.ts', {
+  ignore: ['plugins/multisrc/**', 'plugins/**/*.broken/**'],
+});
+
+const entryPoints = entryPointsFiles.map(ep => {
+  // ep format: plugins/language/pluginName/index.ts
+  // we want output format: language/pluginName (so it outputs to .js/plugins/language/pluginName.js)
+  const parts = ep.split('/');
+  const lang = parts[1];
+  const name = parts[2];
+  return {
+    in: ep,
+    out: `${lang}/${name}`,
+  };
+});
+
+async function build() {
+  console.log(`Found ${entryPoints.length} plugins to build.`);
+
+  await esbuild.build({
+    entryPoints,
+    bundle: true,
+    minify: true,
+    outdir: '.js/plugins',
+    format: 'cjs',
+    target: 'es2020',
+    footer: {
+      js: ';if (module.exports.default) exports.default = module.exports.default;',
+    },
+    plugins: [
+      {
+        name: 'external-non-relative',
+        setup(build) {
+          build.onResolve({ filter: /.*/ }, args => {
+            // Allow entry points
+            if (args.kind === 'entry-point') return;
+            // If it's a relative import, let esbuild bundle it
+            if (args.path.startsWith('.')) return;
+            // Everything else is external (e.g. '@libs/fetch', 'cheerio')
+            return { path: args.path, external: true };
+          });
+        },
+      },
+    ],
+  });
+
+  console.log('Plugins built successfully.');
+}
+
+build().catch(e => {
+  console.error('Build failed', e);
+  process.exit(1);
+});
