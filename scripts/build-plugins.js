@@ -1,4 +1,5 @@
 import esbuild from 'esbuild';
+import fs from 'fs';
 import process from 'process';
 import fastGlob from 'fast-glob';
 const globSync = fastGlob.globSync;
@@ -22,6 +23,7 @@ const entryPoints = entryPointsFiles.map(ep => {
 
 async function build() {
   console.log(`Found ${entryPoints.length} plugins to build.`);
+  fs.writeFileSync('.tsc-out/package.json', JSON.stringify({ type: 'commonjs' }));
 
   await esbuild.build({
     entryPoints,
