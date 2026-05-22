@@ -32,20 +32,8 @@ async function buildWebviews() {
       continue;
     }
 
-    const webviewTs = path.join(
-      'plugins',
-      lang,
-      name,
-      'webview',
-      'index.ts',
-    );
-    const webviewJs = path.join(
-      'plugins',
-      lang,
-      name,
-      'webview',
-      'index.js',
-    );
+    const webviewTs = path.join('plugins', lang, name, 'webview', 'index.ts');
+    const webviewJs = path.join('plugins', lang, name, 'webview', 'index.js');
 
     let webviewEntry = null;
     if (fs.existsSync(webviewTs)) webviewEntry = webviewTs;
