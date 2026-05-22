@@ -23,6 +23,8 @@ npm run clean:multisrc
 npm run build:multisrc
 echo "Compiling TypeScript..."
 npm run build:compile
+echo "Building Webviews..."
+npm run build:webviews
 npm run build:manifest
 
 if (-not (Test-Path .dist) -or -not (Get-ChildItem -Path .dist -Force)) {
