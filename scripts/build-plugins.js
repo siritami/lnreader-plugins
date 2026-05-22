@@ -23,7 +23,10 @@ const entryPoints = entryPointsFiles.map(ep => {
 
 async function build() {
   console.log(`Found ${entryPoints.length} plugins to build.`);
-  fs.writeFileSync('.tsc-out/package.json', JSON.stringify({ type: 'commonjs' }));
+  fs.writeFileSync(
+    '.tsc-out/package.json',
+    JSON.stringify({ type: 'commonjs' }),
+  );
 
   await esbuild.build({
     entryPoints,
