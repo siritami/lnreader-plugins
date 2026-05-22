@@ -12,7 +12,7 @@ class AnimeVietsubPlugin implements Plugin.PluginBase {
   name = 'AnimeVietsub';
   icon = 'src/vi/animevietsub/icon.png';
   site = 'https://animevietsub.site';
-  version = '1.0.11';
+  version = '1.0.12';
 
   customJS = 'src/vi/animevietsub/player.js';
 
@@ -544,9 +544,9 @@ class AnimeVietsubPlugin implements Plugin.PluginBase {
     const chapters: Plugin.ChapterItem[] = [];
 
     const seen = new Set<string>();
-    $('#list-server .server-group').each((_, el) => {
+    $('#list-server .server').each((_, el) => {
       const $group = $(el);
-      const name = $group.find('.server-name').text().trim();
+      const name = $group.find('.server-name').first().text().trim();
       $group
         .find('ul.list-episode li.episode a.btn-episode')
         .each((idx, el) => {
