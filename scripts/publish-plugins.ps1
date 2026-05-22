@@ -22,7 +22,7 @@ rm -r -fo .js
 npm run clean:multisrc
 npm run build:multisrc
 echo "Compiling TypeScript..."
-npx tsc --project tsconfig.production.json
+npm run build:compile
 npm run build:manifest
 
 if (-not (Test-Path .dist) -or -not (Get-ChildItem -Path .dist -Force)) {
