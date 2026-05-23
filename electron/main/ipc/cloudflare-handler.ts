@@ -149,7 +149,7 @@ async function performClickAndVerify<T>(
     for (let i = 0; i < 7; i++) {
       await sleep(1000);
       if (win.isDestroyed()) return null;
-      
+
       const result = await verificationFn();
       if (result !== null) {
         return result;
@@ -190,7 +190,9 @@ export async function solveCloudflare(
           scriptExists = false;
         }
         if (!scriptExists) {
-          console.log(`${logPrefix} Interstitial challenge passed automatically.`);
+          console.log(
+            `${logPrefix} Interstitial challenge passed automatically.`,
+          );
           win.webContents.debugger.detach();
           win.close();
           return true;
@@ -215,11 +217,15 @@ export async function solveCloudflare(
 
     console.log(`${logPrefix} Found iframe at:`, iframeRect);
 
-    const result = await performClickAndVerify<boolean>(win, iframeRect, logPrefix, async () => {
-      let isNavigatingOrSolved = false;
+    const result = await performClickAndVerify<boolean>(
+      win,
+      iframeRect,
+      logPrefix,
+      async () => {
+        let isNavigatingOrSolved = false;
 
-      try {
-        const indicators = await win.webContents.executeJavaScript(`
+        try {
+          const indicators = await win.webContents.executeJavaScript(`
           (() => {
              const hasScript = !!document.querySelector('script[src*="/cdn-cgi/challenge-platform/"]');
              const hasTurnstile = !!document.querySelector('script[src*="challenges.cloudflare.com/turnstile/v0"]') || !!document.querySelector('input[name="cf-turnstile-response"]');
@@ -229,61 +235,78 @@ export async function solveCloudflare(
           })();
         `);
 
-        if (type === 'turnstile') {
-          if (indicators.turnstileValue && indicators.turnstileValue.length > 0) {
-            console.log(`${logPrefix} Turnstile response token found.`);
-            isNavigatingOrSolved = true;
-          } else if (!indicators.hasTurnstile) {
-            console.log(`${logPrefix} Turnstile indicators no longer present.`);
-            isNavigatingOrSolved = true;
-          }
-        } else {
-          if (!indicators.hasScript) {
-            console.log(`${logPrefix} Interstitial challenge passed.`);
-            isNavigatingOrSolved = true;
-          }
-        }
-      } catch (e) {
-        console.log(`${logPrefix} Context destroyed, assuming navigated/solved.`);
-        isNavigatingOrSolved = true;
-      }
-
-      if (!isNavigatingOrSolved && type === 'turnstile') {
-        try {
-          const { root } = await win.webContents.debugger.sendCommand('DOM.getDocument', { depth: -1, pierce: true });
-          let success = false;
-          function traverse(node: any) {
-            if (success) return;
-            if (node.nodeName && node.nodeName.toLowerCase() === 'div' && node.attributes) {
-              const idIdx = node.attributes.indexOf('id');
-              if (idIdx !== -1 && node.attributes[idIdx + 1] === 'success') {
-                success = true;
-                return;
-              }
+          if (type === 'turnstile') {
+            if (
+              indicators.turnstileValue &&
+              indicators.turnstileValue.length > 0
+            ) {
+              console.log(`${logPrefix} Turnstile response token found.`);
+              isNavigatingOrSolved = true;
+            } else if (!indicators.hasTurnstile) {
+              console.log(
+                `${logPrefix} Turnstile indicators no longer present.`,
+              );
+              isNavigatingOrSolved = true;
             }
-            if (node.children) {
-              for (const child of node.children) traverse(child);
+          } else {
+            if (!indicators.hasScript) {
+              console.log(`${logPrefix} Interstitial challenge passed.`);
+              isNavigatingOrSolved = true;
             }
-            if (node.shadowRoots) {
-              for (const shadow of node.shadowRoots) traverse(shadow);
-            }
-          }
-          traverse(root);
-          if (success) {
-            console.log(`${logPrefix} Turnstile success div found inside shadow DOM.`);
-            isNavigatingOrSolved = true;
           }
         } catch (e) {
-          // Ignore CDP errors
+          console.log(
+            `${logPrefix} Context destroyed, assuming navigated/solved.`,
+          );
+          isNavigatingOrSolved = true;
         }
-      }
 
-      if (isNavigatingOrSolved) {
-        await sleep(2000);
-        return true;
-      }
-      return null;
-    });
+        if (!isNavigatingOrSolved && type === 'turnstile') {
+          try {
+            const { root } = await win.webContents.debugger.sendCommand(
+              'DOM.getDocument',
+              { depth: -1, pierce: true },
+            );
+            let success = false;
+            function traverse(node: any) {
+              if (success) return;
+              if (
+                node.nodeName &&
+                node.nodeName.toLowerCase() === 'div' &&
+                node.attributes
+              ) {
+                const idIdx = node.attributes.indexOf('id');
+                if (idIdx !== -1 && node.attributes[idIdx + 1] === 'success') {
+                  success = true;
+                  return;
+                }
+              }
+              if (node.children) {
+                for (const child of node.children) traverse(child);
+              }
+              if (node.shadowRoots) {
+                for (const shadow of node.shadowRoots) traverse(shadow);
+              }
+            }
+            traverse(root);
+            if (success) {
+              console.log(
+                `${logPrefix} Turnstile success div found inside shadow DOM.`,
+              );
+              isNavigatingOrSolved = true;
+            }
+          } catch (e) {
+            // Ignore CDP errors
+          }
+        }
+
+        if (isNavigatingOrSolved) {
+          await sleep(2000);
+          return true;
+        }
+        return null;
+      },
+    );
 
     if (result) {
       console.log(`${logPrefix} Challenge solved successfully.`);
@@ -298,7 +321,9 @@ export async function solveCloudflare(
   } catch (err) {
     console.error(`${logPrefix} Error:`, err);
     if (!win.isDestroyed()) {
-      try { win.webContents.debugger.detach(); } catch (e) {}
+      try {
+        win.webContents.debugger.detach();
+      } catch (e) {}
       win.close();
     }
     return false;
@@ -361,18 +386,25 @@ export async function solveCloudflareTurnstile(
 
     console.log(`${logPrefix} Found iframe at:`, iframeRect);
 
-    const token = await performClickAndVerify<string>(win, iframeRect, logPrefix, async () => {
-      try {
-        const evalRes = await win.webContents.executeJavaScript(`window.turnstileToken`);
-        if (evalRes && typeof evalRes === 'string' && evalRes.length > 0) {
-          console.log(`${logPrefix} Turnstile token retrieved!`);
-          return evalRes;
+    const token = await performClickAndVerify<string>(
+      win,
+      iframeRect,
+      logPrefix,
+      async () => {
+        try {
+          const evalRes = await win.webContents.executeJavaScript(
+            `window.turnstileToken`,
+          );
+          if (evalRes && typeof evalRes === 'string' && evalRes.length > 0) {
+            console.log(`${logPrefix} Turnstile token retrieved!`);
+            return evalRes;
+          }
+        } catch (e) {
+          // ignore
         }
-      } catch (e) {
-        // ignore
-      }
-      return null;
-    });
+        return null;
+      },
+    );
 
     if (!win.isDestroyed()) {
       win.webContents.debugger.detach();
@@ -382,12 +414,18 @@ export async function solveCloudflareTurnstile(
   } catch (err) {
     console.error(`${logPrefix} Error:`, err);
     if (!win.isDestroyed()) {
-      try { win.webContents.debugger.detach(); } catch (e) {}
+      try {
+        win.webContents.debugger.detach();
+      } catch (e) {}
       win.close();
     }
     return '';
   }
 }
 
-ipcMain.handle('cloudflare:solve', (_, url, type) => solveCloudflare(url, type));
-ipcMain.handle('cloudflare:solve-turnstile', (_, url, sitekey) => solveCloudflareTurnstile(url, sitekey));
+ipcMain.handle('cloudflare:solve', (_, url, type) =>
+  solveCloudflare(url, type),
+);
+ipcMain.handle('cloudflare:solve-turnstile', (_, url, sitekey) =>
+  solveCloudflareTurnstile(url, sitekey),
+);

@@ -20,5 +20,5 @@ export const solveCloudflareTurnstile = async (
   url: string,
   sitekey: string,
 ): Promise<string> => {
-  throw new Error("solveCloudflareTurnstile not implemented");
+  throw new Error('solveCloudflareTurnstile not implemented');
 };

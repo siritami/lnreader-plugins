@@ -377,24 +377,36 @@
       var bytes = b64urlDecode(envB64);
       if (bytes.length < 11) return null;
       // Magic: USDK
-      if (bytes[0] !== 85 || bytes[1] !== 83 || bytes[2] !== 68 || bytes[3] !== 75) return null;
+      if (
+        bytes[0] !== 85 ||
+        bytes[1] !== 83 ||
+        bytes[2] !== 68 ||
+        bytes[3] !== 75
+      )
+        return null;
       // Version must be 1
       if (bytes[4] !== 1) return null;
       var payloadLen = (bytes[5] << 8) | bytes[6];
       if (bytes.length < 7 + payloadLen + 4) return null;
       var payload = bytes.subarray(7, 7 + payloadLen);
       var str = '';
-      for (var i = 0; i < payload.length; i++) str += String.fromCharCode(payload[i]);
+      for (var i = 0; i < payload.length; i++)
+        str += String.fromCharCode(payload[i]);
       str = decodeURIComponent(escape(str));
       return JSON.parse(str);
     }
 
-    var cn = '', sk = '', ts = '0', uid = 'anon';
+    var cn = '',
+      sk = '',
+      ts = '0',
+      uid = 'anon';
 
     // Priority 1: envelope (binary USDK format)
     var envHeader =
-      m3u8Headers['x-envelope'] || m3u8Headers['x-avs-envelope'] ||
-      m3u8Headers['x-stream-envelope'] || '';
+      m3u8Headers['x-envelope'] ||
+      m3u8Headers['x-avs-envelope'] ||
+      m3u8Headers['x-stream-envelope'] ||
+      '';
     if (envHeader) {
       try {
         var envJson = parseEnvelope(envHeader);
@@ -468,8 +480,18 @@
     // Unshuffle + HMAC combos (matched to avs-loader v1.12.18)
     // Primary: unshuffle with LCG(parseInt(sk,16)), HMAC = uid:ts:sk:0
     var unshuffleMethods = [
-      { name: 'lcg', fn: function(s) { return stringUnshuffle(s, sk); } },
-      { name: 'noShuffle', fn: function(s) { return s; } },
+      {
+        name: 'lcg',
+        fn: function (s) {
+          return stringUnshuffle(s, sk);
+        },
+      },
+      {
+        name: 'noShuffle',
+        fn: function (s) {
+          return s;
+        },
+      },
     ];
     var hmacFormats = [
       { name: 'harden', data: uid + ':' + ts + ':' + sk + ':0' },
@@ -480,7 +502,10 @@
     var attempts = [];
     for (var ui = 0; ui < unshuffleMethods.length; ui++) {
       for (var hi = 0; hi < hmacFormats.length; hi++) {
-        attempts.push({ unshuffle: unshuffleMethods[ui], hmac: hmacFormats[hi] });
+        attempts.push({
+          unshuffle: unshuffleMethods[ui],
+          hmac: hmacFormats[hi],
+        });
       }
     }
 
@@ -534,14 +559,17 @@
 
           // Prepend header lines from original m3u8 (they aren't encrypted)
           var m3u8Text = headerLines.join('\n') + '\n' + m3u8Body;
-          if (m3u8Text.indexOf('#EXT-X-ENDLIST') === -1) m3u8Text += '\n#EXT-X-ENDLIST';
+          if (m3u8Text.indexOf('#EXT-X-ENDLIST') === -1)
+            m3u8Text += '\n#EXT-X-ENDLIST';
           debugLog('Full m3u8: ' + m3u8Text.length + 'ch');
 
           // Check if segment URLs need Layer 2 AES-CTR decryption
           var hasEncryptedUrls = /\/hls\/[0-9a-f]{24}\.ts\?e=/.test(m3u8Text);
 
           if (hasEncryptedUrls) {
-            debugLog('Layer 2: decrypting ' + m3u8Text.split('\n').length + ' lines');
+            debugLog(
+              'Layer 2: decrypting ' + m3u8Text.split('\n').length + ' lines',
+            );
             decryptSegmentUrls(
               m3u8Text,
               headerLines,
@@ -554,7 +582,9 @@
 
           if (m3u8Text.indexOf('#EXTINF') !== -1) {
             debugLog('Decryption OK! Building blob m3u8 player');
-            var blob = new Blob([m3u8Text], { type: 'application/vnd.apple.mpegurl' });
+            var blob = new Blob([m3u8Text], {
+              type: 'application/vnd.apple.mpegurl',
+            });
             var blobUrl = URL.createObjectURL(blob);
             if (modeLabel) modeLabel.textContent = 'Đang ở chế độ m3u8';
             buildVideoPlayer(target, [{ file: blobUrl, type: 'hls' }]);
@@ -744,7 +774,8 @@
     if (!el) {
       el = document.createElement('div');
       el.id = 'avs-debug-log';
-      el.style.cssText = 'color:#aaa;font-family:monospace;font-size:11px;padding:8px;white-space:pre-wrap;word-break:break-all;max-height:300px;overflow-y:auto;';
+      el.style.cssText =
+        'color:#aaa;font-family:monospace;font-size:11px;padding:8px;white-space:pre-wrap;word-break:break-all;max-height:300px;overflow-y:auto;';
       container.appendChild(el);
     }
     el.textContent = _debugLog.join('\n');
@@ -862,7 +893,11 @@
           var ProxyFragLoader = function (config) {
             this._config = config;
             this.stats = {
-              aborted: false, loaded: 0, retry: 0, total: 0, chunkCount: 0,
+              aborted: false,
+              loaded: 0,
+              retry: 0,
+              total: 0,
+              chunkCount: 0,
               bwEstimate: 0,
               loading: { start: 0, first: 0, end: 0 },
               parsing: { start: 0, end: 0 },
@@ -871,9 +906,14 @@
             this.context = null;
             this._controller = null;
           };
-          ProxyFragLoader.prototype.destroy = function () { this.abort(); };
+          ProxyFragLoader.prototype.destroy = function () {
+            this.abort();
+          };
           ProxyFragLoader.prototype.abort = function () {
-            if (this._controller) { this._controller.abort(); this._controller = null; }
+            if (this._controller) {
+              this._controller.abort();
+              this._controller = null;
+            }
           };
           ProxyFragLoader.prototype.load = function (ctx, cfg, cbs) {
             this.context = ctx;
@@ -893,8 +933,16 @@
                 var data = buf;
                 if (buf.byteLength > 127) {
                   var hdr = new Uint8Array(buf, 0, 8);
-                  if (hdr[0]===0x89 && hdr[1]===0x50 && hdr[2]===0x4e && hdr[3]===0x47 &&
-                      hdr[4]===0x0d && hdr[5]===0x0a && hdr[6]===0x1a && hdr[7]===0x0a) {
+                  if (
+                    hdr[0] === 0x89 &&
+                    hdr[1] === 0x50 &&
+                    hdr[2] === 0x4e &&
+                    hdr[3] === 0x47 &&
+                    hdr[4] === 0x0d &&
+                    hdr[5] === 0x0a &&
+                    hdr[6] === 0x1a &&
+                    hdr[7] === 0x0a
+                  ) {
                     data = buf.slice(127);
                   }
                 }
@@ -904,7 +952,12 @@
                 debugLog('fLoader ERR: ' + err.message);
                 if (err.name === 'AbortError') return;
                 self.stats.loading.end = performance.now();
-                cbs.onError({ code: 0, text: err.message }, ctx, null, self.stats);
+                cbs.onError(
+                  { code: 0, text: err.message },
+                  ctx,
+                  null,
+                  self.stats,
+                );
               });
           };
 

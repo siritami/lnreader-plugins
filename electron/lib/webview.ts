@@ -13,7 +13,11 @@ export const solveCloudflareTurnstile = async (
   sitekey: string,
 ): Promise<string> => {
   if (typeof window !== 'undefined' && window.electronAPI) {
-    return window.electronAPI.invoke('cloudflare:solve-turnstile', url, sitekey);
+    return window.electronAPI.invoke(
+      'cloudflare:solve-turnstile',
+      url,
+      sitekey,
+    );
   }
-  throw new Error("solveCloudflareTurnstile not implemented");
+  throw new Error('solveCloudflareTurnstile not implemented');
 };

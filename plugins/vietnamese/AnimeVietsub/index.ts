@@ -345,10 +345,7 @@ class AnimeVietsubPlugin implements Plugin.PluginBase {
         }
 
         // Case D: iframe to non-googleapiscdn player
-        if (
-          pd.playTech === 'iframe' &&
-          typeof pd.link === 'string'
-        ) {
+        if (pd.playTech === 'iframe' && typeof pd.link === 'string') {
           return this.buildPlayerHtml({ iframe: pd.link, embedOnly: true });
         }
       } catch (_) {
