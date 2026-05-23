@@ -118,72 +118,86 @@ export async function solveCloudflare(
     const clickX = iframeRect.x + Math.floor(iframeRect.width / 2);
     const clickY = iframeRect.y + Math.floor(iframeRect.height / 2);
 
-    await sleep(1000);
-
-    // Simulate mouse move, press, release via CDP
-    try {
-      await win.webContents.debugger.sendCommand('Input.dispatchMouseEvent', {
-        type: 'mouseMoved',
-        x: clickX,
-        y: clickY,
-      });
-      await sleep(50);
-      await win.webContents.debugger.sendCommand('Input.dispatchMouseEvent', {
-        type: 'mousePressed',
-        x: clickX,
-        y: clickY,
-        button: 'left',
-        clickCount: 1,
-      });
-      await sleep(50);
-      await win.webContents.debugger.sendCommand('Input.dispatchMouseEvent', {
-        type: 'mouseReleased',
-        x: clickX,
-        y: clickY,
-        button: 'left',
-        clickCount: 1,
-      });
-      console.log(
-        '[solveCloudflare] CDP Clicked iframe center:',
-        clickX,
-        clickY,
-      );
-    } catch (e) {
-      console.error('[solveCloudflare] CDP Click failed:', e);
-    }
-
     let solved = false;
-    for (let i = 0; i < 15; i++) {
-      await sleep(1000);
 
-      if (type === 'turnstile') {
-        const rect = await getIframeRectViaCDP(win);
-        if (!rect) {
-          solved = true;
-          break;
-        }
+    // Wait for the Cloudflare widget to finish its initial animation/spinner
+    await sleep(4000);
 
-        const responseValue = await win.webContents.executeJavaScript(`
-           (function() {
-              const input = document.querySelector('input[name="cf-turnstile-response"]');
-              return input ? input.value : null;
-           })();
-         `);
+    for (let attempt = 0; attempt < 3; attempt++) {
+      if (attempt > 0) {
+        console.log(`[solveCloudflare] Retrying click (attempt ${attempt + 1})...`);
+        await sleep(2000);
+      }
 
-        if (responseValue && responseValue.length > 0) {
-          solved = true;
-          console.log('[solveCloudflare] Turnstile response token found.');
-          break;
+      // Simulate mouse move, press, release via CDP
+      try {
+        await win.webContents.debugger.sendCommand('Input.dispatchMouseEvent', {
+          type: 'mouseMoved',
+          x: clickX,
+          y: clickY,
+        });
+        await sleep(50);
+        await win.webContents.debugger.sendCommand('Input.dispatchMouseEvent', {
+          type: 'mousePressed',
+          x: clickX,
+          y: clickY,
+          button: 'left',
+          clickCount: 1,
+        });
+        await sleep(50);
+        await win.webContents.debugger.sendCommand('Input.dispatchMouseEvent', {
+          type: 'mouseReleased',
+          x: clickX,
+          y: clickY,
+          button: 'left',
+          clickCount: 1,
+        });
+        console.log(
+          '[solveCloudflare] CDP Clicked iframe center:',
+          clickX,
+          clickY,
+        );
+      } catch (e) {
+        console.error('[solveCloudflare] CDP Click failed:', e);
+      }
+
+      // Wait up to 7 seconds to see if solved
+      for (let i = 0; i < 7; i++) {
+        await sleep(1000);
+
+        if (type === 'turnstile') {
+          const rect = await getIframeRectViaCDP(win);
+          if (!rect) {
+            solved = true;
+            break;
+          }
+
+          const responseValue = await win.webContents.executeJavaScript(`
+             (function() {
+                const input = document.querySelector('input[name="cf-turnstile-response"]');
+                return input ? input.value : null;
+             })();
+           `);
+
+          if (responseValue && responseValue.length > 0) {
+            solved = true;
+            console.log('[solveCloudflare] Turnstile response token found.');
+            break;
+          }
+        } else {
+          const scriptExists = await win.webContents.executeJavaScript(`
+              !!document.querySelector('script[src*="/cdn-cgi/challenge-platform/"]')
+           `);
+          if (!scriptExists) {
+            solved = true;
+            console.log('[solveCloudflare] Interstitial challenge passed.');
+            break;
+          }
         }
-      } else {
-        const scriptExists = await win.webContents.executeJavaScript(`
-            !!document.querySelector('script[src*="/cdn-cgi/challenge-platform/"]')
-         `);
-        if (!scriptExists) {
-          solved = true;
-          console.log('[solveCloudflare] Interstitial challenge passed.');
-          break;
-        }
+      }
+
+      if (solved) {
+        break;
       }
     }
 
