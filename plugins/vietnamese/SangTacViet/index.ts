@@ -8,9 +8,16 @@ import { defaultCover } from '@libs/defaultCover';
 import { storage } from '@libs/storage';
 import { get, set, setFromResponse, removeSessionCookies } from '@libs/cookie';
 import { decodeHtmlEntities } from '@libs/utils';
-import { ABT_HOSTS, looksLikeExternalUrl, detectHostFromUrl } from './external-url';
+import {
+  ABT_HOSTS,
+  looksLikeExternalUrl,
+  detectHostFromUrl,
+} from './external-url';
 import { filters } from './filters';
-import { normalizeChapterHtml, wrapWithParagraphs } from './content-normalization';
+import {
+  normalizeChapterHtml,
+  wrapWithParagraphs,
+} from './content-normalization';
 
 const SITE = 'https://sangtacviet.app';
 
