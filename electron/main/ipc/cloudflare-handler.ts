@@ -297,7 +297,7 @@ export async function solveCloudflare(
     if (!win.isDestroyed()) {
       try {
         win.webContents.debugger.detach();
-      } catch (e) {}
+      } catch (e) { }
       win.close();
     }
     return false;
@@ -306,4 +306,170 @@ export async function solveCloudflare(
 
 ipcMain.handle('cloudflare:solve', (_, url, type) =>
   solveCloudflare(url, type),
+);
+
+export async function solveCloudflareTurnstile(
+  url: string,
+  sitekey: string,
+): Promise<string> {
+  const win = new BrowserWindow({
+    width: 800,
+    height: 600,
+    show: true,
+    webPreferences: {
+      session: customSession,
+      offscreen: false,
+      sandbox: false,
+    },
+  });
+
+  try {
+    const html = `<!DOCTYPE html>
+<html>
+<head>
+  <script src="https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit" async defer></script>
+</head>
+<body style="display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; background: #fff;">
+  <div id="captcha"></div>
+  <script>
+    window.turnstileToken = null;
+    window.onload = function() {
+      turnstile.render('#captcha', {
+        sitekey: '${sitekey}',
+        callback: function(token) {
+          window.turnstileToken = token;
+        }
+      });
+    };
+  </script>
+</body>
+</html>`;
+
+    win.webContents.once('did-finish-load', async () => {
+      try {
+        await win.webContents.executeJavaScript(`
+      document.open();
+      document.write(${JSON.stringify(html)});
+      document.close();
+    `);
+      } catch (err) {
+        console.error('Errr:', err);
+      }
+    });
+
+    await win.loadURL(url);
+
+    win.webContents.debugger.attach('1.3');
+
+    let iframeRect = null;
+    let attempts = 0;
+    while (attempts < 15) {
+      if (win.isDestroyed()) return '';
+      iframeRect = await getIframeRectViaCDP(win);
+      if (iframeRect && iframeRect.width > 5 && iframeRect.height > 5) {
+        break;
+      }
+      iframeRect = null;
+      await sleep(1000);
+      attempts++;
+    }
+
+    if (!iframeRect) {
+      console.log(
+        '[solveCloudflareTurnstile] Cloudflare iframe not found or not visible.',
+      );
+      win.webContents.debugger.detach();
+      win.close();
+      return '';
+    }
+
+    console.log('[solveCloudflareTurnstile] Found iframe at:', iframeRect);
+
+    const clickX = iframeRect.x + Math.floor(iframeRect.width / 2);
+    const clickY = iframeRect.y + Math.floor(iframeRect.height / 2);
+
+    let token = '';
+
+    await sleep(4000);
+
+    for (let attempt = 0; attempt < 3; attempt++) {
+      if (attempt > 0) {
+        console.log(
+          `[solveCloudflareTurnstile] Retrying click (attempt ${attempt + 1})...`,
+        );
+        await sleep(2000);
+      }
+
+      try {
+        await win.webContents.debugger.sendCommand('Input.dispatchMouseEvent', {
+          type: 'mouseMoved',
+          x: clickX,
+          y: clickY,
+        });
+        await sleep(50);
+        await win.webContents.debugger.sendCommand('Input.dispatchMouseEvent', {
+          type: 'mousePressed',
+          x: clickX,
+          y: clickY,
+          button: 'left',
+          clickCount: 1,
+        });
+        await sleep(50);
+        await win.webContents.debugger.sendCommand('Input.dispatchMouseEvent', {
+          type: 'mouseReleased',
+          x: clickX,
+          y: clickY,
+          button: 'left',
+          clickCount: 1,
+        });
+        console.log(
+          '[solveCloudflareTurnstile] CDP Clicked iframe center:',
+          clickX,
+          clickY,
+        );
+      } catch (e) {
+        console.error('[solveCloudflareTurnstile] CDP Click failed:', e);
+      }
+
+      for (let i = 0; i < 7; i++) {
+        await sleep(1000);
+        if (win.isDestroyed()) return token;
+        try {
+          const evalRes = await win.webContents.executeJavaScript(
+            `window.turnstileToken`,
+          );
+          if (evalRes && typeof evalRes === 'string' && evalRes.length > 0) {
+            token = evalRes;
+            console.log(
+              '[solveCloudflareTurnstile] Turnstile token retrieved!',
+            );
+            break;
+          }
+        } catch (e) {
+          // ignore
+        }
+      }
+
+      if (token) break;
+    }
+
+    if (!win.isDestroyed()) {
+      win.webContents.debugger.detach();
+      win.close();
+    }
+    return token;
+  } catch (err) {
+    console.error('[solveCloudflareTurnstile] Error:', err);
+    if (!win.isDestroyed()) {
+      try {
+        win.webContents.debugger.detach();
+      } catch (e) { }
+      win.close();
+    }
+    return '';
+  }
+}
+
+ipcMain.handle('cloudflare:solve-turnstile', (_, url, sitekey) =>
+  solveCloudflareTurnstile(url, sitekey),
 );
