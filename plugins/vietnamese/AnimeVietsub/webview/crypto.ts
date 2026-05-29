@@ -51,7 +51,11 @@ export function createPRNG(seed: string): () => number {
   };
 }
 
-export function descramble(data: Uint8Array | ArrayBuffer, permKey: string, permSalt: string): ArrayBuffer {
+export function descramble(
+  data: Uint8Array | ArrayBuffer,
+  permKey: string,
+  permSalt: string,
+): ArrayBuffer {
   const input = data instanceof Uint8Array ? data : new Uint8Array(data);
   const len = input.length;
   const output = new Uint8Array(len);

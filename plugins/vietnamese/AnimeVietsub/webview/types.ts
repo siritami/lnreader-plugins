@@ -1,3 +1,5 @@
+/* eslint-disable */
+
 export interface PlayerConfig {
   mode: string; // 'm3u8' or 'embed'
   debugEnabled: boolean;
@@ -8,6 +10,7 @@ export interface PlayerConfig {
   ajaxId?: string | null;
   ajaxReferer?: string | null;
   ajaxSite?: string | null;
+  bannerUrl?: string | null;
 }
 
 export interface MediaSource {

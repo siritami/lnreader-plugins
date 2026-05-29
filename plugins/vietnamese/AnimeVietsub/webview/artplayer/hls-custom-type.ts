@@ -33,10 +33,14 @@ export function m3u8CustomType(video: HTMLVideoElement, url: string, art: any) {
 
     ProxyFragLoader.prototype.load = function (ctx: any, cfg: any, cbs: any) {
       this.context = ctx;
+      // eslint-disable-next-line
       const self = this;
       self.stats.loading.start = performance.now();
 
-      const fetchFn = window.reader && window.reader.fetch ? window.reader.fetch.bind(window.reader) : fetch;
+      const fetchFn =
+        window.reader && window.reader.fetch
+          ? window.reader.fetch.bind(window.reader)
+          : fetch;
 
       (async () => {
         try {
@@ -54,9 +58,9 @@ export function m3u8CustomType(video: HTMLVideoElement, url: string, art: any) {
           if (buf.byteLength > 127) {
             const hdr = new Uint8Array(buf, 0, 8);
             if (
-              hdr[0] === 0x89 &&  // P
-              hdr[1] === 0x50 &&  // N
-              hdr[2] === 0x4e &&  // G
+              hdr[0] === 0x89 && // P
+              hdr[1] === 0x50 && // N
+              hdr[2] === 0x4e && // G
               hdr[3] === 0x47 &&
               hdr[4] === 0x0d &&
               hdr[5] === 0x0a &&

@@ -1,3 +1,4 @@
+// eslint-disable-next-line
 /// <reference path="./typings/global.d.ts" />
 /// <reference types="webview" />
 
@@ -5,7 +6,11 @@ import { debugLog, showError, escapeAttr } from './utils';
 import type { MediaSource } from './types';
 import { initArtplayer } from './artplayer';
 
-export function renderIframe(target: HTMLElement, iframeUrl: string, modeLabel: HTMLElement | null) {
+export function renderIframe(
+  target: HTMLElement,
+  iframeUrl: string,
+  modeLabel: HTMLElement | null,
+) {
   debugLog('Embedding iframe: ' + iframeUrl.substring(0, 80));
   target.innerHTML =
     '<iframe src="' +
@@ -15,7 +20,12 @@ export function renderIframe(target: HTMLElement, iframeUrl: string, modeLabel: 
   if (modeLabel) modeLabel.textContent = 'Đang ở chế độ embed';
 }
 
-export async function buildVideoPlayer(target: HTMLElement, sources: MediaSource[], modeLabel: HTMLElement | null) {
+export async function buildVideoPlayer(
+  target: HTMLElement,
+  sources: MediaSource[],
+  modeLabel: HTMLElement | null,
+  bannerUrl?: string,
+) {
   const hlsSources: MediaSource[] = [];
   const otherSources: MediaSource[] = [];
 
@@ -46,7 +56,7 @@ export async function buildVideoPlayer(target: HTMLElement, sources: MediaSource
 
   let initialUrl = '';
   let initialType = '';
-  
+
   if (hlsSources.length > 0) {
     initialUrl = hlsSources[0].file;
     initialType = 'm3u8';
@@ -57,5 +67,5 @@ export async function buildVideoPlayer(target: HTMLElement, sources: MediaSource
     if (modeLabel) modeLabel.textContent = 'Đang ở chế độ mp4';
   }
 
-  initArtplayer(artContainer, initialUrl, initialType);
+  initArtplayer(artContainer, initialUrl, initialType, bannerUrl);
 }

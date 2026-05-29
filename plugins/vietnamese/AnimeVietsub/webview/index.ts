@@ -30,6 +30,7 @@ function parseConfig(container: HTMLElement): PlayerConfig {
     ajaxId: container.getAttribute('data-id'),
     ajaxReferer: container.getAttribute('data-referer'),
     ajaxSite: container.getAttribute('data-site'),
+    bannerUrl: container.getAttribute('data-banner'),
   };
 }
 
@@ -53,7 +54,10 @@ async function resolveMedia(config: PlayerConfig): Promise<ResolvedMedia> {
 
   // 3. Iframe Embed (or GoogleApisCdn Decryption)
   if (config.iframeSrc) {
-    if (config.iframeSrc.indexOf('googleapiscdn.com') !== -1 && config.mode === 'm3u8') {
+    if (
+      config.iframeSrc.indexOf('googleapiscdn.com') !== -1 &&
+      config.mode === 'm3u8'
+    ) {
       debugLog('Resolver: Kích hoạt GoogleApisCdn Decryptor.');
       return await resolveGoogleApisCdn(config.iframeSrc);
     }
@@ -70,9 +74,14 @@ async function resolveMedia(config: PlayerConfig): Promise<ResolvedMedia> {
   throw new Error('Thiếu thông tin cấu hình, không thể xác định nguồn phát.');
 }
 
-function renderMedia(resolved: ResolvedMedia, inner: HTMLElement, modeLabel: HTMLElement | null) {
+function renderMedia(
+  resolved: ResolvedMedia,
+  inner: HTMLElement,
+  modeLabel: HTMLElement | null,
+  bannerUrl?: string,
+) {
   if (resolved.type === 'sources' && resolved.sources) {
-    buildVideoPlayer(inner, resolved.sources, modeLabel);
+    buildVideoPlayer(inner, resolved.sources, modeLabel, bannerUrl);
   } else if (resolved.type === 'iframe' && resolved.iframeUrl) {
     renderIframe(inner, resolved.iframeUrl, modeLabel);
   } else {
@@ -94,7 +103,7 @@ async function initPlayer() {
 
   try {
     const resolvedMedia = await resolveMedia(config);
-    renderMedia(resolvedMedia, inner, modeLabel);
+    renderMedia(resolvedMedia, inner, modeLabel, config.bannerUrl!);
   } catch (error: any) {
     showError(error.message || 'Lỗi không xác định.');
     console.error('[AVS] Pipeline Error:', error);

@@ -2,7 +2,9 @@ import { debugLog } from './utils';
 import { resolveGoogleApisCdn } from './google_cdn';
 import type { ResolvedMedia, PlayerConfig } from './types';
 
-export async function fetchAjaxPlayer(config: PlayerConfig): Promise<ResolvedMedia> {
+export async function fetchAjaxPlayer(
+  config: PlayerConfig,
+): Promise<ResolvedMedia> {
   if (!config.ajaxHash || !config.ajaxSite) {
     throw new Error('Thiếu thông tin tập phim (hash hoặc site).');
   }
@@ -11,7 +13,7 @@ export async function fetchAjaxPlayer(config: PlayerConfig): Promise<ResolvedMed
   if (config.ajaxId) postBody += '&id=' + encodeURIComponent(config.ajaxId);
 
   debugLog('AJAX fallback: calling /ajax/player…');
-  
+
   const res = await fetch(config.ajaxSite + '/ajax/player', {
     method: 'POST',
     headers: {
@@ -24,7 +26,7 @@ export async function fetchAjaxPlayer(config: PlayerConfig): Promise<ResolvedMed
     body: postBody,
     credentials: 'include',
   });
-  
+
   const text = await res.text();
   debugLog('/ajax/player response: ' + text.slice(0, 300));
 
@@ -32,7 +34,9 @@ export async function fetchAjaxPlayer(config: PlayerConfig): Promise<ResolvedMed
   try {
     json = JSON.parse(text);
   } catch (e) {
-    throw new Error('Không thể phân tích phản hồi từ server (không phải JSON).');
+    throw new Error(
+      'Không thể phân tích phản hồi từ server (không phải JSON).',
+    );
   }
 
   if (!json || !json.success) {
@@ -42,7 +46,10 @@ export async function fetchAjaxPlayer(config: PlayerConfig): Promise<ResolvedMed
   return parsePlayerResponse(json, config.mode);
 }
 
-async function parsePlayerResponse(json: any, mode: string): Promise<ResolvedMedia> {
+async function parsePlayerResponse(
+  json: any,
+  mode: string,
+): Promise<ResolvedMedia> {
   if (json.playTech === 'iframe' && typeof json.link === 'string') {
     if (json.link.indexOf('googleapiscdn.com') !== -1 && mode === 'm3u8') {
       return await resolveGoogleApisCdn(json.link);

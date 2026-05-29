@@ -4,10 +4,17 @@ export function setupArtplayerEvents(art: any) {
 
   art.on('video:loadedmetadata', () => {
     try {
-      if (!hasSeekedInitial && art.video.duration > 0 && window.reader && window.reader.chapter) {
+      if (
+        !hasSeekedInitial &&
+        art.video.duration > 0 &&
+        window.reader &&
+        window.reader.chapter
+      ) {
         const initialProgress = window.reader.chapter.progress || 0;
         if (initialProgress > 0 && initialProgress < 100) {
-          art.video.currentTime = Math.floor((initialProgress / 100) * art.video.duration);
+          art.video.currentTime = Math.floor(
+            (initialProgress / 100) * art.video.duration,
+          );
         }
         hasSeekedInitial = true;
       }
@@ -18,11 +25,17 @@ export function setupArtplayerEvents(art: any) {
 
   art.on('video:timeupdate', () => {
     try {
-      if (art.video.duration > 0 && window.reader && typeof window.reader.post === 'function') {
+      if (
+        art.video.duration > 0 &&
+        window.reader &&
+        typeof window.reader.post === 'function'
+      ) {
         const currentTime = art.video.currentTime;
         if (Math.abs(currentTime - lastSaveTime) >= 5) {
           lastSaveTime = currentTime;
-          const progressInt = Math.floor((currentTime / art.video.duration) * 100);
+          const progressInt = Math.floor(
+            (currentTime / art.video.duration) * 100,
+          );
           window.reader.post({
             type: 'save',
             data: progressInt,
@@ -30,6 +43,7 @@ export function setupArtplayerEvents(art: any) {
         }
       }
     } catch (e) {
+      //
     }
   });
 
@@ -43,6 +57,7 @@ export function setupArtplayerEvents(art: any) {
         if (window.reader.nextChapter) window.reader.post({ type: 'next' });
       }
     } catch (e) {
+      //
     }
   });
 }

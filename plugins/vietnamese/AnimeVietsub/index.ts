@@ -13,9 +13,10 @@ class AnimeVietsubPlugin implements Plugin.PluginBase {
   name = 'AnimeVietsub';
   icon = 'src/vi/animevietsub/icon.png';
   site = 'https://animevietsub.site';
-  version = '1.0.22';
+  version = '1.0.23';
   filters = filters;
   customJS = 'src/vi/animevietsub/player.js';
+  customCSS = 'src/vi/animevietsub/custom.css';
 
   pluginSettings: Plugin.PluginSettings = {
     playMode: {
@@ -193,8 +194,8 @@ class AnimeVietsubPlugin implements Plugin.PluginBase {
         $('meta[property="og:title"]').attr('content') ||
         '',
       cover:
-        $('meta[property="og:image"]').attr('content') ||
-        $('.TPostBg img').attr('src') ||
+        $('.attachment-img-mov-md').attr('src') ||
+        $('meta[property="og:image"]').attr('content') || // ele 1: banner, ele 2: cover
         $('.Image img').attr('src') ||
         defaultCover,
       summary:
@@ -291,6 +292,9 @@ class AnimeVietsubPlugin implements Plugin.PluginBase {
     const url = this.site + chapterPath;
     const html = await fetchText(url);
     if (!html) throw new Error('API error: ' + url);
+    const $ = loadCheerio(html);
+    // Get banner
+    const img = $('img.TPostBg').first().attr('src')?.trim();
     // ── 1. Try extracting window.PLAYER_DATA from inline scripts ──
     const pdMatch = html.match(
       /window\.PLAYER_DATA\s*=\s*(\{[\s\S]*?\})\s*;?\s*<\/script>/,
@@ -310,9 +314,13 @@ class AnimeVietsubPlugin implements Plugin.PluginBase {
           pd.link.includes('googleapiscdn.com')
         ) {
           if (this.playMode === 'embed') {
-            return this.buildPlayerHtml({ iframe: pd.link, embedOnly: true });
+            return this.buildPlayerHtml({
+              iframe: pd.link,
+              embedOnly: true,
+              bannerUrl: img,
+            });
           }
-          return this.buildPlayerHtml({ iframe: pd.link });
+          return this.buildPlayerHtml({ iframe: pd.link, bannerUrl: img });
         }
 
         // Case B: api / all with sources array
@@ -325,7 +333,7 @@ class AnimeVietsubPlugin implements Plugin.PluginBase {
             type: s.type || '',
             label: s.label || '',
           }));
-          return this.buildPlayerHtml({ sources });
+          return this.buildPlayerHtml({ sources, bannerUrl: img });
         }
 
         // Case C: api / all with single string link
@@ -335,18 +343,27 @@ class AnimeVietsubPlugin implements Plugin.PluginBase {
         ) {
           const link = pd.link.replace(/^&http/, 'http');
           if (/\.m3u8(\?|$)/i.test(link)) {
-            return this.buildPlayerHtml({ m3u8: link, referer: url });
+            return this.buildPlayerHtml({
+              m3u8: link,
+              referer: url,
+              bannerUrl: img,
+            });
           }
           if (/\.(mp4|webm)(\?|$)/i.test(link)) {
             return this.buildPlayerHtml({
               sources: [{ file: link, type: 'mp4', label: '' }],
+              bannerUrl: img,
             });
           }
         }
 
         // Case D: iframe to non-googleapiscdn player
         if (pd.playTech === 'iframe' && typeof pd.link === 'string') {
-          return this.buildPlayerHtml({ iframe: pd.link, embedOnly: true });
+          return this.buildPlayerHtml({
+            iframe: pd.link,
+            embedOnly: true,
+            bannerUrl: img,
+          });
         }
       } catch (_) {
         //
@@ -357,7 +374,6 @@ class AnimeVietsubPlugin implements Plugin.PluginBase {
     // The customJS handles the AJAX response: if the server returns an
     // iframe URL (e.g. googleapiscdn), it uses hidden-iframe token
     // extraction → direct m3u8 playback. Always allow this path.
-    const $ = loadCheerio(html);
     this.checkCommonBlocked($);
     const cleanPath = chapterPath.split('?')[0].split('#')[0];
     let $link = $(
@@ -382,12 +398,17 @@ class AnimeVietsubPlugin implements Plugin.PluginBase {
         id: dataId,
         referer: url,
         site: this.site,
+        bannerUrl: img,
       });
     }
 
     // ── 3. Last resort: embed the episode page in an iframe ──
     if (this.playMode === 'embed') {
-      return this.buildPlayerHtml({ iframe: url, embedOnly: true });
+      return this.buildPlayerHtml({
+        iframe: url,
+        embedOnly: true,
+        bannerUrl: img,
+      });
     }
     return '<p style="color:#ff4444;font-size:14px;font-family:sans-serif;text-align:center;padding:16px;">Không tìm thấy nguồn video cho tập phim này.</p><meta id="no-cache-marker"/><meta id="no-prefetch-marker"/>';
   }
@@ -402,10 +423,12 @@ class AnimeVietsubPlugin implements Plugin.PluginBase {
     referer?: string;
     site?: string;
     embedOnly?: boolean;
+    bannerUrl?: string;
   }): string {
     const esc = (s: string) => encodeHtmlEntities(s);
 
     const attrs: string[] = ['id="avs-player-container"'];
+    if (opts.bannerUrl) attrs.push(`data-banner="${esc(opts.bannerUrl)}"`);
     if (opts.m3u8) attrs.push(`data-m3u8="${esc(opts.m3u8)}"`);
     if (opts.sources)
       attrs.push(`data-sources="${esc(JSON.stringify(opts.sources))}"`);

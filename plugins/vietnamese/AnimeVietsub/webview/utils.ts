@@ -33,10 +33,14 @@ export function escapeAttr(s: string) {
 export function cleanupIframe(iframe: HTMLIFrameElement) {
   try {
     iframe.src = 'about:blank';
-  } catch (e) {}
+  } catch (e) {
+    //
+  }
   setTimeout(function () {
     try {
       iframe.remove();
-    } catch (e) {}
+    } catch (e) {
+      //
+    }
   }, 200);
 }

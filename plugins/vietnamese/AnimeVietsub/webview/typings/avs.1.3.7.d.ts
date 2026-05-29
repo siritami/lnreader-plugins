@@ -1,9 +1,13 @@
+/* eslint-disable */
+
 declare global {
   interface Window {
     _avsCryptoSupported: boolean;
     _avsOnRateLimit?: (retryAfterSeconds: number) => void;
     AvsPlaylistLoader: new (config: LoaderConfig) => AvsPlaylistLoaderInstance;
-    AvsEncryptedLoader: new (config: LoaderConfig) => AvsEncryptedLoaderInstance;
+    AvsEncryptedLoader: new (
+      config: LoaderConfig,
+    ) => AvsEncryptedLoaderInstance;
     AvsDecryptPlaylist: (url: string) => Promise<string>;
   }
 
@@ -19,11 +23,7 @@ declare global {
     abort(): void;
     destroy(): void;
 
-    load(
-      context: any,
-      config: any,
-      callbacks: LoaderCallbacks,
-    ): void;
+    load(context: any, config: any, callbacks: LoaderCallbacks): void;
   }
 
   interface LoaderCallbacks {
@@ -61,11 +61,7 @@ declare global {
     abort(): void;
     destroy(): void;
 
-    load(
-      context: any,
-      config: any,
-      callbacks: LoaderCallbacks,
-    ): void;
+    load(context: any, config: any, callbacks: LoaderCallbacks): void;
   }
 
   interface AvsEncryptedLoaderInstance {
@@ -75,11 +71,7 @@ declare global {
     abort(): void;
     destroy(): void;
 
-    load(
-      context: any,
-      config: any,
-      callbacks: LoaderCallbacks,
-    ): void;
+    load(context: any, config: any, callbacks: LoaderCallbacks): void;
   }
 }
 

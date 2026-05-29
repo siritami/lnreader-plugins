@@ -1,3 +1,5 @@
+/* eslint-disable */
+
 export {};
 
 declare global {
@@ -7,15 +9,9 @@ declare global {
     _avsIsOurWrapper(func: Function): boolean;
     _avsRegisterOurWrapper(func: Function): void;
 
-    _avsMarkKey(
-      key: CryptoKey,
-      meta: AvsKeyMetadata,
-    ): void;
+    _avsMarkKey(key: CryptoKey, meta: AvsKeyMetadata): void;
 
-    _avsBeaconCanary(
-      type: string,
-      data?: Record<string, unknown>,
-    ): void;
+    _avsBeaconCanary(type: string, data?: Record<string, unknown>): void;
 
     _avsG6Diag(): {
       hasCrypto: boolean;
@@ -58,22 +54,14 @@ declare global {
   interface AvsPlaylistLoader {
     stats: Record<string, unknown>;
 
-    load(
-      req: unknown,
-      response: unknown,
-      callbacks: unknown,
-    ): void;
+    load(req: unknown, response: unknown, callbacks: unknown): void;
 
     abort(): void;
     destroy(): void;
   }
 
   interface AvsEncryptedLoader {
-    load(
-      req: unknown,
-      response: unknown,
-      callbacks: unknown,
-    ): void;
+    load(req: unknown, response: unknown, callbacks: unknown): void;
 
     abort?(): void;
     destroy?(): void;
