@@ -17,7 +17,7 @@ export function initArtplayer(
     type: initialType,
     fullscreen: true,
     fullscreenWeb: true,
-    autoSize: true,
+    autoSize: false,
     setting: true,
     playbackRate: true,
     autoPlayback: true,
@@ -29,6 +29,7 @@ export function initArtplayer(
     fastForward: true,
     theme: themeColors.primary,
     poster: bannerUrl,
+    aspectRatio: true,
     i18n: {
       vi: artVi,
     },

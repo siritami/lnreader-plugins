@@ -10,7 +10,7 @@ export async function nativeFetch(
       ? window.reader.fetch.bind(window.reader)
       : fetch;
   // eslint-disable-next-line
-  const init: RequestInit = { credentials: 'omit', headers };
+  const init: RequestInit = { credentials: 'include', headers };
 
   const r = await fetchFn(url, init);
   const h: Record<string, string> = {};
