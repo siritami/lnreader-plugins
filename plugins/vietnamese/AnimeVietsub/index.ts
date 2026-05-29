@@ -13,7 +13,7 @@ class AnimeVietsubPlugin implements Plugin.PluginBase {
   name = 'AnimeVietsub';
   icon = 'src/vi/animevietsub/icon.png';
   site = 'https://animevietsub.site';
-  version = '1.0.26';
+  version = '1.0.27';
   filters = filters;
   customJS = 'src/vi/animevietsub/player.js';
   customCSS = 'src/vi/animevietsub/custom.css';
