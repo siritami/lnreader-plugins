@@ -16,7 +16,7 @@ export function initArtplayer(
     url: initialUrl,
     type: initialType,
     fullscreen: true,
-    fullscreenWeb: true,
+    fullscreenWeb: false,
     autoSize: false,
     setting: true,
     playbackRate: true,
