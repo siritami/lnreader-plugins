@@ -89,14 +89,11 @@ async function initPlayer() {
 
   const modeLabel = document.getElementById('avs-mode-label');
 
-  // Bước 1: Thu thập config
   const config = parseConfig(container);
   initUtils(container, config.debugEnabled);
 
   try {
-    // Bước 2: Đi qua Resolver Pipeline
     const resolvedMedia = await resolveMedia(config);
-    // Bước 3: Render kết quả
     renderMedia(resolvedMedia, inner, modeLabel);
   } catch (error: any) {
     showError(error.message || 'Lỗi không xác định.');
@@ -104,5 +101,4 @@ async function initPlayer() {
   }
 }
 
-// Bắt đầu luồng
 initPlayer();
