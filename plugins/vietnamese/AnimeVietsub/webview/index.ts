@@ -95,6 +95,9 @@ async function initPlayer() {
 
   const inner = document.getElementById('avs-player-inner');
   if (!inner) return;
+  // width: 100%; aspect-ratio: 16/9;
+  inner.style.width = '100%';
+  inner.style.aspectRatio = '16/9';
 
   const modeLabel = document.getElementById('avs-mode-label');
 
