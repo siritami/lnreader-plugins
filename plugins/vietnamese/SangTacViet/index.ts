@@ -247,27 +247,70 @@ function decodeGlyphs(text: string): string {
 }
 
 // ── Content normalization  ─────────────────
-function looksLikeInterlinear(text: string): boolean {
-  return /<i\b[^>]*\b(?:t|v|p)\s*=\s*['"][^'"]*['"][^>]*>/i.test(text);
-}
+function normalizeChapterHtml(host: string, raw: string): string {
+  let text = raw || '';
+  if (!text) return '';
+  const h = host.toLowerCase();
 
-function normalizeInterlinear(raw: string): string {
-  let t = raw.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
-  t = t.replace(/<br\s*\/?>\s*/gi, '\n').replace(/<\/br\s*>/gi, '\n');
-  t = t.replace(
-    /<\/i>\s*\n+\s*(?=[,.;:!?%\)\]\}\u3002\uff0c\u3001\uff01\uff1f\uff1b\uff1a\u201d\u2019\u300d\u300f\u3011\u300b])/gi,
-    '</i>',
-  );
-  const marker = '__STV_GAP__';
-  t = t.replace(/<\/i>\s*<i\b/gi, '</i>' + marker + '<i');
-  t = t.replace(/<i\b[^>]*>([\s\S]*?)<\/i>/gi, '$1');
-  t = t.replace(
-    /<\/?(p|div|article|section|li|tr|h[1-6]|blockquote|ul|ol)[^>]*>/gi,
-    '\n',
-  );
-  t = t.replace(/<[^>]+>/g, '').replace(/[<>]/g, '');
-  t = decodeHtmlEntities(t);
-  t = t.replace(new RegExp(marker, 'g'), ' ');
+  if (h === 'sangtac' || h === 'dich') {
+    text = decodeGlyphs(text);
+  }
+
+  const $ = parseHTML(text, null, false);
+
+  if (h === 'fanqie') {
+    $('header, footer, article').remove();
+    $('*').removeAttr('idx');
+  }
+
+  $('br').replaceWith('\n');
+
+  const blockTags = [
+    'p',
+    'div',
+    'article',
+    'section',
+    'li',
+    'tr',
+    'h1',
+    'h2',
+    'h3',
+    'h4',
+    'h5',
+    'h6',
+    'blockquote',
+    'ul',
+    'ol',
+  ];
+  blockTags.forEach(tag => {
+    $(tag).each((_, el) => {
+      $(el).prepend('\n').append('\n');
+    });
+  });
+
+  $('i').each((_, el) => {
+    $(el).append(' ');
+  });
+
+  let output = '';
+  function walk(node: any) {
+    if (node.type === 'text') {
+      output += node.data;
+    } else if (node.type === 'tag') {
+      if (node.name === 'img') {
+        const src = node.attribs.src;
+        if (src) {
+          output += `\n__IMG__${src}__IMG__\n`;
+        }
+      } else {
+        if (node.children) node.children.forEach(walk);
+      }
+    }
+  }
+
+  $.root().contents().toArray().forEach(walk);
+
+  let t = decodeHtmlEntities(output);
   t = t.replace(/[\t\f\v ]+/g, ' ');
   t = t.replace(
     / +([,.;:!?%\)\]\}\u3002\uff0c\u3001\uff01\uff1f\uff1b\uff1a\u201d\u2019\u300d\u300f\u3011\u300b])/g,
@@ -281,62 +324,33 @@ function normalizeInterlinear(raw: string): string {
     .replace(/[ ]*\n[ ]*/g, '\n')
     .replace(/\n{3,}/g, '\n\n')
     .trim();
-  return t ? t.replace(/\n/g, '<br>') : '';
-}
 
-function normalizeChapterHtml(host: string, raw: string): string {
-  let text = raw || '';
-  if (!text) return '';
-  const h = host.toLowerCase();
-
-  if (h === 'fanqie') {
-    text = text.replace(/<header[^>]*>[\s\S]*?<\/header>/gi, '');
-    text = text.replace(/<footer[^>]*>[\s\S]*?<\/footer>/gi, '');
-    text = text.replace(/<\/?article>/gi, '');
-    text = text.replace(/\sidx="\d+"/g, '');
-    if (looksLikeInterlinear(text)) return normalizeInterlinear(text);
-    return text;
-  }
-
-  if (h === 'sangtac' || h === 'dich') {
-    text = decodeGlyphs(text);
-    if (looksLikeInterlinear(text)) return normalizeInterlinear(text);
-    if (!/<\w+[^>]*>/.test(text)) {
-      text = text
-        .replace(/&/g, '&amp;')
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;');
-      text = text
-        .replace(/\r\n/g, '\n')
-        .replace(/\r/g, '\n')
-        .replace(/\n/g, '<br>');
-    }
-    return text;
-  }
-
-  if (!/<\w+[^>]*>/.test(text)) {
-    text = text
-      .replace(/&/g, '&amp;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;');
-    text = text
-      .replace(/\r\n/g, '\n')
-      .replace(/\r/g, '\n')
-      .replace(/\n/g, '<br>');
-    return text;
-  }
-  if (looksLikeInterlinear(text)) return normalizeInterlinear(text);
-  return text;
+  return t;
 }
 
 function wrapWithParagraphs(rawText: string): string {
   if (!rawText) return '';
-  const cleanText = rawText.replace(/<br\s*\/?>/gi, '\n');
-  const paragraphs = cleanText.split('\n');
+  const paragraphs = rawText.split('\n');
   const htmlResult = paragraphs
     .map(line => line.trim())
     .filter(line => line.length > 0)
-    .map(line => `<p>${encodeHtmlEntities(line)}</p>`)
+    .map(line => {
+      if (line.startsWith('__IMG__') && line.endsWith('__IMG__')) {
+        const src = line.substring(7, line.length - 7);
+        return `<img src="${src}">`;
+      }
+      const parts = line.split(/(__IMG__.*?__IMG__)/);
+      const inner = parts
+        .map(part => {
+          if (part.startsWith('__IMG__') && part.endsWith('__IMG__')) {
+            const src = part.substring(7, part.length - 7);
+            return `<img src="${src}">`;
+          }
+          return encodeHtmlEntities(part);
+        })
+        .join('');
+      return `<p>${inner}</p>`;
+    })
     .join('\n');
   return htmlResult;
 }
@@ -418,7 +432,7 @@ class SangTacVietPlugin implements Plugin.PluginBase {
   get site() {
     return DOMAINS[this.selectedDomain] || SITE;
   }
-  version = '1.0.22';
+  version = '1.0.23';
   webStorageUtilized = true;
 
   pluginSettings: Plugin.PluginSettings = {
@@ -442,6 +456,11 @@ class SangTacVietPlugin implements Plugin.PluginBase {
         { label: 'Bing', value: 'bing' },
         { label: 'Google', value: 'google' },
       ],
+    },
+    removeSystemMessage: {
+      type: 'Switch',
+      label: 'Tự động xóa một số tin nhắn hệ thống của STV',
+      value: false,
     },
     autoRetry: {
       type: 'Switch',
@@ -474,6 +493,10 @@ class SangTacVietPlugin implements Plugin.PluginBase {
 
   get autoRetry() {
     return storage.get('autoRetry') as boolean;
+  }
+
+  get removeSystemMessage() {
+    return storage.get('removeSystemMessage') as boolean;
   }
 
   async applyTranslationCookies(origin: string): Promise<void> {
@@ -874,12 +897,9 @@ class SangTacVietPlugin implements Plugin.PluginBase {
     }
     if (String(data.code) === '0' && data.data) {
       const host = data.bookhost || bookHost;
-      const rawData = String(data.data)
-        .replace('@Bạn đang đọc bản lưu trong hệ thống', '')
-        .replace(
-          'Bạn đang xem văn bản gốc chưa dịch, có thể kéo xuống cuối trang để chọn bản dịch.',
-          '',
-        );
+      const rawData = this.removeSystemMessageFromChapterContent(
+        String(data.data),
+      );
       const content = normalizeChapterHtml(host, rawData);
       const title = data.chaptername?.trim();
       return (title ? `<h2>${title}</h2>` : '') + wrapWithParagraphs(content);
@@ -894,6 +914,20 @@ class SangTacVietPlugin implements Plugin.PluginBase {
         }
       }
     }
+  }
+
+  private removeSystemMessageFromChapterContent(ori: string): string {
+    if (!this.removeSystemMessage) return ori;
+    return ori
+      .replace('@Bạn đang đọc bản lưu trong hệ thống', '')
+      .replace(
+        'Bạn đang xem văn bản gốc chưa dịch, có thể kéo xuống cuối trang để chọn bản dịch.',
+        '',
+      )
+      .replace(
+        'Vì vấn đề nội dung, nguồn này không hỗ trợ xem văn bản gốc.',
+        '',
+      );
   }
 
   async searchNovels(
