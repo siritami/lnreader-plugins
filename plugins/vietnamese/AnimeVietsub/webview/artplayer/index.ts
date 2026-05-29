@@ -62,6 +62,7 @@ export function initArtplayer(
         },
         click: function () {
           if (ldb.dblclick()) {
+            // @ts-expect-error
             art.backward = 10;
             art.notice.show = 'Tua lại 10s';
           }
@@ -80,6 +81,7 @@ export function initArtplayer(
         },
         click: function () {
           if (rdb.dblclick()) {
+            // @ts-expect-error
             art.forward = 10;
             art.notice.show = 'Tua tới 10s';
           }

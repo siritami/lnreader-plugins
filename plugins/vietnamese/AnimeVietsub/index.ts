@@ -442,7 +442,7 @@ class AnimeVietsubPlugin implements Plugin.PluginBase {
 
     return [
       `<div ${attrs.join(' ')}`,
-      '  style="width: 100%; aspect-ratio: 16/9; background: #000; min-height: 200px;">',
+      '  style="width: 100%; aspect-ratio: 16/9; background: #000;">',
       '  <div id="avs-player-inner" style="width: 100%; height: 100%; display: flex; align-items: center; justify-content: center;">',
       '    <p style="color:#fff;font-family:sans-serif;">Đang tải video...</p>',
       '  </div>',
