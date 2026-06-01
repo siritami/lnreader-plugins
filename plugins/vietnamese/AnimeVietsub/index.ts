@@ -13,7 +13,7 @@ class AnimeVietsubPlugin implements Plugin.PluginBase {
   name = 'AnimeVietsub';
   icon = 'src/vi/animevietsub/icon.png';
   site = 'https://animevietsub.site';
-  version = '1.0.29';
+  version = '1.0.30';
   filters = filters;
   customJS = 'src/vi/animevietsub/player.js';
   customCSS = 'src/vi/animevietsub/custom.css';
@@ -49,7 +49,7 @@ class AnimeVietsubPlugin implements Plugin.PluginBase {
   }
 
   get playerType(): string {
-    return (storage.get('playerType') as string) || 'artplayer';
+    return (storage.get('playerType') as string) || 'html';
   }
 
   get enableDebug(): boolean {
