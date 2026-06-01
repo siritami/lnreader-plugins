@@ -33,8 +33,8 @@ class AnimeVietsubPlugin implements Plugin.PluginBase {
       label: 'Trình phát Video',
       type: 'Select',
       options: [
-        { label: 'Artplayer (Tùy chỉnh)', value: 'artplayer' },
-        { label: 'Video HTML (Mặc định)', value: 'html' },
+        { label: 'Artplayer', value: 'artplayer' },
+        { label: 'Video HTML', value: 'html' },
       ],
     },
     enableDebug: {
