@@ -85,12 +85,78 @@ export async function buildVideoPlayer(
             debugLog('HTML Video Notice: ' + msg);
           },
         },
-        on: () => {},
+        on: () => {
+          //
+        },
       };
       m3u8CustomType(video, initialUrl, dummyArt);
     } else {
       video.src = initialUrl;
     }
+
+    // --- Đồng bộ tiến độ xem với app gốc ---
+    let hasSeekedInitial = false;
+    let lastSaveTime = 0;
+
+    video.addEventListener('loadedmetadata', function () {
+      try {
+        if (
+          !hasSeekedInitial &&
+          video.duration > 0 &&
+          window.reader &&
+          window.reader.chapter
+        ) {
+          const initialProgress = window.reader.chapter.progress || 0;
+          if (initialProgress > 0 && initialProgress < 100) {
+            video.currentTime = Math.floor(
+              (initialProgress / 100) * video.duration,
+            );
+          }
+          hasSeekedInitial = true;
+        }
+      } catch (e) {
+        console.warn('[AVS] Lỗi khi khôi phục tiến độ:', e);
+      }
+    });
+
+    video.addEventListener('timeupdate', function () {
+      try {
+        if (
+          video.duration > 0 &&
+          window.reader &&
+          typeof window.reader.post === 'function'
+        ) {
+          const currentTime = video.currentTime;
+          // Cập nhật tiến độ sau mỗi 5 giây
+          if (Math.abs(currentTime - lastSaveTime) >= 5) {
+            lastSaveTime = currentTime;
+            const progressInt = Math.floor((currentTime / video.duration) * 100);
+            window.reader.post({
+              type: 'save',
+              data: progressInt,
+            });
+          }
+        }
+      } catch (e) {
+        // Bỏ qua lỗi
+      }
+    });
+
+    video.addEventListener('ended', function () {
+      try {
+        if (window.reader && typeof window.reader.post === 'function') {
+          // mark as completed
+          window.reader.post({
+            type: 'save',
+            data: 100,
+          });
+          // move to next chapter
+          if (window.reader.nextChapter) window.reader.post({ type: 'next' });
+        }
+      } catch (e) {
+        // Bỏ qua lỗi
+      }
+    });
   } else {
     initArtplayer(artContainer, initialUrl, initialType, bannerUrl);
   }
