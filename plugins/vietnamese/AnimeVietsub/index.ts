@@ -3,7 +3,7 @@ import { Plugin } from '@/types/plugin';
 import { load as loadCheerio } from 'cheerio';
 import { defaultCover } from '@libs/defaultCover';
 import { NovelStatus } from '@libs/novelStatus';
-import { encodeHtmlEntities } from '@libs/utils';
+import { encodeHtmlEntities, isUrlAbsolute } from '@libs/utils';
 import { storage } from '@libs/storage';
 
 import filters from './filters';
@@ -12,8 +12,8 @@ class AnimeVietsubPlugin implements Plugin.PluginBase {
   id = 'animevietsub';
   name = 'AnimeVietsub';
   icon = 'src/vi/animevietsub/icon.png';
-  site = 'https://animevietsub.site';
-  version = '1.0.31';
+  site = 'https://animevietsub.name';
+  version = '1.0.32';
   filters = filters;
   customJS = 'src/vi/animevietsub/player.js';
   customCSS = 'src/vi/animevietsub/custom.css';
@@ -63,18 +63,12 @@ class AnimeVietsubPlugin implements Plugin.PluginBase {
   };
 
   // ---------- helpers ----------
-  private absolutePath(href: string): string {
-    if (!href) return '';
-    try {
-      const u = new URL(href, this.site);
-      const siteUrl = new URL(this.site);
-      // In some cases, the returned path includes the "www." prefix
-      if (u.host.replace(/^www\./, '') === siteUrl.host.replace(/^www\./, '')) {
-        return u.pathname + u.search;
-      }
-      return href;
-    } catch {
-      return href;
+  private urlToPath(url: string): string {
+    if (!isUrlAbsolute(url)) {
+      return url;
+    } else {
+      const parsed = new URL(url);
+      return url.slice(parsed.origin.length);
     }
   }
 
@@ -107,7 +101,7 @@ class AnimeVietsubPlugin implements Plugin.PluginBase {
       const $a = $el.find('article a').first();
       const href = $a.attr('href') || '';
       if (!href || !/\/phim\//.test(href)) return;
-      const path = this.absolutePath(href);
+      const path = this.urlToPath(href);
       if (seen.has(path)) return;
       seen.add(path);
       const name =
@@ -130,7 +124,7 @@ class AnimeVietsubPlugin implements Plugin.PluginBase {
         const $a = $el.find('a.thumb, h3.title-item a, a').first();
         const href = $a.attr('href') || '';
         if (!href || !/\/phim\//.test(href)) return;
-        const path = this.absolutePath(href);
+        const path = this.urlToPath(href);
         if (seen.has(path)) return;
         seen.add(path);
         const name =
@@ -276,7 +270,7 @@ class AnimeVietsubPlugin implements Plugin.PluginBase {
           const $a = $(el);
           const href = $a.attr('href') || '';
           if (!href) return;
-          const path = this.absolutePath(href);
+          const path = this.urlToPath(href);
           if (seen.has(path)) return;
           seen.add(path);
           const epLabel = $a.attr('title')?.trim() || `Tập ${$a.text().trim()}`;
