@@ -1,6 +1,7 @@
 import path from 'path';
 import fs from 'fs';
 import process from 'process';
+import isValidFilename from 'valid-filename';
 import languages from './languages.js';
 import { execSync } from 'child_process';
 import { minify } from './terser.js';
@@ -129,6 +130,7 @@ for (let language in languages) {
     )(_require, {});
     const { id, name, site, version, icon, customJS, customCSS, filters } =
       instance;
+    if (!isValidFilename(id)) throw new Error(`This plugin ID (${id}) is invalid and cannot be used in the application.`);
     const normalisedName = name.replace(/\[.*\]/, '');
 
     // --only-new logic

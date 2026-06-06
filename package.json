@@ -51,7 +51,8 @@
     "tailwind-merge": "^3.3.1",
     "tailwindcss": "^4.1.14",
     "terser": "^5.36.0",
-    "typescript": "^5.7.2"
+    "typescript": "^5.7.2",
+    "valid-filename": "^4.0.0"
   },
   "devDependencies": {
     "@emotion/react": "^11.13.5",
