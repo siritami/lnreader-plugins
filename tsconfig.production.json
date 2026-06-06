@@ -111,19 +111,11 @@
     "noCheck": true,
     "noResolve": true
   },
+  "include": [
+    "./plugins/**/*"
+  ],
   "exclude": [
     "./plugins/**/*.broken.ts",
-    "./.js/**/*",
-    "scripts/**",
-    "docs/**",
-    "./src/*.*",
-    "./*.*",
-    "public/**",
-    ".github/**",
-    ".husky/**",
-    "node_modules/**",
-    "./src/**",
-    "./plugins/multisrc/*",
-    "./electron/**"
+    "./plugins/multisrc/*"
   ]
 }
