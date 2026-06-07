@@ -27,6 +27,7 @@ This is a fork of the original repository, containing only my custom plugins and
 #### Streaming
 
 - [AnimeVietsub](https://animevietsub.bz)[^1]
+- [AnimeVsub](https://animevsub.app)[^1]
 - [NguonC](https://phim.nguonc.com)[^1]
 - [HentaiZ](https://hentaiz.hot)[^1]
 
