@@ -504,9 +504,7 @@ class HakoPlugin implements Plugin.PluginBase {
       commentSection.find('.loading').remove();
 
       // Avatar decoration
-      commentSection
-        .find('img[src*="/images/frames"]')
-        .remove();
+      commentSection.find('img[src*="/images/frames"]').remove();
 
       output = `${output}\n\n${commentSection.prop('outerHTML')}`;
     }

@@ -14,6 +14,8 @@ import {
 } from '@/components/ui/tooltip';
 import { useAppStore } from '@/store';
 import { readerMockScript } from '@/lib/reader-mock';
+import corePlayerRaw from '../lib/core-player.js?raw';
+import corePlayerCss from '../lib/core-player.css?raw';
 
 export default function ParseChapterSection() {
   const isElectron = typeof window !== 'undefined' && !!window.electronAPI;
@@ -294,8 +296,11 @@ export default function ParseChapterSection() {
                             }
                             img, video, iframe { max-width: 100%; height: auto; }
                             a { color: #3b82f6; }
+                            ${corePlayerCss}
                           </style>
+                          <script src="https://cdn.jsdelivr.net/npm/hls.js@1.6.16/dist/hls.min.js"></script>
                           ${isElectron ? readerMockScript : ''}
+                          <script>${corePlayerRaw}</script>
                           ${
                             plugin?.customCSS
                               ? `<link rel="stylesheet" href="/public/static/${plugin.customCSS}" onload="window.parent.postMessage({ type: 'asset-loaded', asset: 'css' }, '*')" onerror="window.parent.postMessage({ type: 'asset-error', asset: 'css' }, '*')">`
