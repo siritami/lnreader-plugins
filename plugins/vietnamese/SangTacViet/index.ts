@@ -269,7 +269,7 @@ function normalizeChapterHtml(host: string, raw: string): string {
   const $ = parseHTML(text, null, false);
 
   if (h === 'fanqie') {
-    $('header, footer, article').remove();
+    $('header, footer').remove();
     $('*').removeAttr('idx');
   }
 
@@ -442,7 +442,7 @@ class SangTacVietPlugin implements Plugin.PluginBase {
   get site() {
     return DOMAINS[this.selectedDomain] || SITE;
   }
-  version = '1.0.25';
+  version = '1.0.26';
   webStorageUtilized = true;
 
   pluginSettings: Plugin.PluginSettings = {
