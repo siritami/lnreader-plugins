@@ -34,7 +34,6 @@ async function initPlayer() {
         referrer: urlObj.origin,
     });
     const m3u8Content = await req.text();
-    console.log(m3u8Content);
     const lines = m3u8Content.split('\n');
     let ivHex = '';
     let encryptedData = '';
