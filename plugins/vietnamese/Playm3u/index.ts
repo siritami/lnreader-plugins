@@ -127,10 +127,10 @@ const iptvPlaylistParser = {
 
 class Playm3uPlugin implements Plugin.PluginBase {
   id = 'playm3u';
-  name = '🎞 Play m3u';
+  name = '🎞 M3U Player';
   icon = 'src/vi/playm3u/icon.png';
   site = 'https://vnepg.site';
-  version = '1.0.0';
+  version = '1.0.1';
 
   pluginSettings: Plugin.PluginSettings = {
     m3uUrl: {
@@ -141,9 +141,9 @@ class Playm3uPlugin implements Plugin.PluginBase {
   };
 
   get m3uUrl(): string {
-    return (
-      (storage.get('m3uUrl') as string) || this.pluginSettings.m3uUrl.value
-    );
+    const url = (storage.get('m3uUrl') || this.pluginSettings.m3uUrl.value) as string;
+    if (!url) throw new Error("Please add a valid M3U playlist URL in the plugin settings.");
+    return url;
   }
 
   async popularNovels(pageNo: number): Promise<Plugin.NovelItem[]> {
