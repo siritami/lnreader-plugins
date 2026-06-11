@@ -4,7 +4,7 @@ import { defaultCover } from '@libs/defaultCover';
 import { NovelStatus } from '@libs/novelStatus';
 import { storage } from '@libs/storage';
 
-interface PlaylistItem {
+type PlaylistItem = {
   name: string;
   tvg: {
     id: string;
@@ -39,7 +39,7 @@ const iptvPlaylistParser = {
       return match?.[1] ?? '';
     };
     const getName = (str: string) => {
-      const info = str.replace(/\="(.*?)"/g, '');
+      const info = str.replace(/="(.*?)"/g, '');
       const parts = info.split(/,(.*)/);
       return parts[1] || '';
     };
