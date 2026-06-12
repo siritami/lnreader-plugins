@@ -1,8 +1,17 @@
+# LNReader Plugins
+
 This is a fork of the original repository, containing only my custom plugins and hotfixes.
+
+<p>
+<img alt="Total number of available plugins" src="https://raw.githubusercontent.com/Yuneko-dev/lnreader-plugins/plugins/v3.0.0/total.svg">
+<img alt="Open plugin requests" src="https://img.shields.io/github/issues/Yuneko-dev/lnreader-plugins/Plugin%20Request?color=success&label=plugin%20requests">
+<img alt="Open bug reports" src="https://img.shields.io/github/issues/Yuneko-dev/lnreader-plugins/Bug?color=red&label=bugs">
+</p>
 
 ### Included sources:
 
-#### Novel
+<details>
+<summary><b>📖 Novel (19 sources)</b></summary>
 
 - [Akaytruyen](https://akaytruyen.com)
 - [DocTruyenLN](https://quykiep.com)
@@ -23,8 +32,10 @@ This is a fork of the original repository, containing only my custom plugins and
 - [Valvrareteam](https://valvrareteam.net)
 - [WanwanSekai](https://wanwansekai.com)
 - [ZumiNovel](https://zuminovel.com)[^1]
+</details>
 
-#### Streaming
+<details>
+<summary><b>🎬 Streaming (9 sources)</b></summary>
 
 - [AnimeVietsub](https://animevietsub.bz)[^1]
 - [AnimeVsub](https://animevsub.app)[^1]
@@ -35,10 +46,13 @@ This is a fork of the original repository, containing only my custom plugins and
 - [OPhim](https://ophim17.cc)[^1]
 - [PhimFun](https://phimfun.net)[^1]
 - [Yêu Anime](https://yeuanime.org)[^1]
+</details>
 
-#### News
+<details>
+<summary><b>📰 News (1 source)</b></summary>
 
 - [BaoMoi](https://baomoi.com)
+</details>
 
 [^1]: This plugin is incompatible with the original LNReader as it utilizes new APIs introduced in [LNReader-Extended](https://github.com/Yuneko-dev/lnreader-extended)
 
