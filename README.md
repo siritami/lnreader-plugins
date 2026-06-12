@@ -41,7 +41,7 @@ This is a fork of the original repository, containing only my custom plugins and
 - [AnimeVsub](https://animevsub.app)[^1]
 - [NguonC](https://phim.nguonc.com)[^1]
 - [HentaiZ](https://hentaiz.hot)[^1]
-- ~~[AnimeHay](https://animehay.fm)[^1]~~
+- ~~[AnimeHay](https://animehay.fm)[^1][^2]~~
 - [Motchill](https://envasion.net)[^1]
 - [OPhim](https://ophim17.cc)[^1]
 - [PhimFun](https://phimfun.net)[^1]
@@ -55,6 +55,7 @@ This is a fork of the original repository, containing only my custom plugins and
 </details>
 
 [^1]: This plugin is incompatible with the original LNReader as it utilizes new APIs introduced in [LNReader-Extended](https://github.com/Yuneko-dev/lnreader-extended)
+[^2]: This plugin has been discontinued and removed due to the poor quality of the website.
 
 ### Install URL
 ```sh
