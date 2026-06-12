@@ -125,12 +125,12 @@ const iptvPlaylistParser = {
   },
 };
 
-class Playm3uPlugin implements Plugin.PluginBase {
-  id = 'playm3u';
+class M3UPlayerPlugin implements Plugin.PluginBase {
+  id = 'yuneko.m3uplayer';
   name = '🎞 M3U Player';
-  icon = 'src/vi/playm3u/icon.png';
+  icon = 'src/multi/m3uplayer/icon.png';
   site = 'https://vnepg.site';
-  version = '1.0.1';
+  version = '1.0.0';
 
   pluginSettings: Plugin.PluginSettings = {
     m3uUrl: {
@@ -157,11 +157,11 @@ class Playm3uPlugin implements Plugin.PluginBase {
       params.set('url', item.url);
       params.set('name', item.name);
       if (item.tvg.logo) params.set('logo', item.tvg.logo);
-      if (item.http['user-agent']) params.set('ua', item.http['user-agent']);
+      // if (item.http['user-agent']) params.set('ua', item.http['user-agent']);
 
       return {
         name: item.name,
-        path: `/playm3u?${params.toString()}`,
+        path: `/m3u?${params.toString()}`,
         cover: item.tvg.logo || defaultCover,
       };
     });
@@ -179,6 +179,9 @@ class Playm3uPlugin implements Plugin.PluginBase {
   }
 
   async parseNovel(novelPath: string): Promise<Plugin.SourceNovel> {
+    if (!novelPath.startsWith('/m3u?')) {
+      throw new Error("Invalid URL");
+    }
     const params = new URLSearchParams(novelPath.split('?')[1]);
     const name = params.get('name') || 'Unknown';
     const cover = params.get('logo') || defaultCover;
@@ -199,16 +202,17 @@ class Playm3uPlugin implements Plugin.PluginBase {
   }
 
   async parseChapter(chapterPath: string): Promise<string> {
+    if (!chapterPath.startsWith('/m3u?')) {
+      throw new Error("Invalid URL");
+    }
     const params = new URLSearchParams(chapterPath.split('?')[1]);
     const url = params.get('url') || '';
-    const ua = params.get('ua') || '';
 
     return [
       '<meta name="lnreader-chapter-type" content="video">',
       '<meta name="lnreader-video-mode" content="direct">',
       '<meta name="lnreader-video-type" content="m3u8">',
       `<meta name="lnreader-video-url" content="${url}">`,
-      ua ? `<meta name="lnreader-video-ua" content="${ua}">` : '',
       '<meta id="no-cache-marker"/>',
       '<meta id="no-prefetch-marker"/>',
     ].join('\n');
@@ -219,4 +223,4 @@ class Playm3uPlugin implements Plugin.PluginBase {
   }
 }
 
-export default new Playm3uPlugin();
+export default new M3UPlayerPlugin();
