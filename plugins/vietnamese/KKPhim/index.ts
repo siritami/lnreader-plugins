@@ -15,7 +15,7 @@ class KKPhimPlugin implements Plugin.PluginBase {
   name = '🎞 KKPhim';
   icon = 'src/vi/kkphim/icon.png';
   site = SITE;
-  version = '1.8.0';
+  version = '1.0.0';
   customJS = 'src/vi/kkphim/player.js';
 
   filters = filters;
