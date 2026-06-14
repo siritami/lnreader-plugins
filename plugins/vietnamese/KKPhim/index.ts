@@ -195,14 +195,15 @@ class KKPhimPlugin implements Plugin.PluginBase {
         if (depth === 0) { arrEnd = i; break; }
       }
 
-      let episodesData: Array<{
+      let episodesData: {
         server_name: string;
-        list: Array<{ name: string; slug: string; embed: string; m3u8: string }>;
-      }> = [];
+        list: { name: string; slug: string; embed: string; m3u8: string }[];
+      }[] = [];
       if (arrEnd > arrStart) {
         try {
           episodesData = JSON.parse(html.substring(arrStart, arrEnd + 1));
         } catch (e) {
+          // JSON parse failed — episodesData stays empty
         }
       }
 
