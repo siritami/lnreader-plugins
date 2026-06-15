@@ -8,8 +8,8 @@ class YeuAnimePlugin implements Plugin.PluginBase {
   id = 'yuneko.yeuanime';
   name = '🎞 Yêu Anime';
   icon = 'src/vi/yeuanime/icon.png';
-  site = 'https://yeuanime.org';
-  version = '1.0.0';
+  site = 'https://yeuanime.xyz';
+  version = '1.0.1';
 
   imageRequestInit: Plugin.ImageRequestInit = {
     headers: {

@@ -12,7 +12,7 @@ import { Buffer } from '@libs/utils';
 import { storage } from '@libs/storage';
 import { ctr } from '@libs/aes';
 
-const SITE = 'https://hentaiz.chat';
+const SITE = 'https://hentaiz.cool';
 const STORAGE_URL = 'https://storage.haiten.org';
 const MIMIX_API = 'https://x.mimix.cc/watch/';
 
@@ -452,7 +452,7 @@ class HentaiZPlugin implements Plugin.PluginBase {
   name = '🎞 HentaiZ';
   icon = 'src/vi/hentaiz/icon.png';
   site = SITE;
-  version = '1.0.11';
+  version = '1.0.12';
 
   customJS = 'src/vi/hentaiz/player.js';
 
