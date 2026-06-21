@@ -130,7 +130,7 @@ class M3UPlayerPlugin implements Plugin.PluginBase {
   name = '🎞 M3U Player';
   icon = 'src/multi/m3uplayer/icon.png';
   site = 'https://vnepg.site';
-  version = '1.0.0';
+  version = '1.0.1';
 
   pluginSettings: Plugin.PluginSettings = {
     m3uUrl: {
@@ -215,6 +215,7 @@ class M3UPlayerPlugin implements Plugin.PluginBase {
       `<meta name="lnreader-video-url" content="${url}">`,
       '<meta id="no-cache-marker"/>',
       '<meta id="no-prefetch-marker"/>',
+      '<meta id="lnreader-video-disable-progress"/>',
     ].join('\n');
   }
 
