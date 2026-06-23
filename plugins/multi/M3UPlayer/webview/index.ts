@@ -6,7 +6,7 @@
  *
  * Runs inside the WebView after parseChapter returns lazy-mode HTML.
  * Reads stream config from #m3u-shaka-container data attributes,
- * loads Shaka Player from CDN, and plays MPD / DASH / FLV streams
+ * loads Shaka Player locally, and plays MPD / DASH / FLV streams
  * (including ClearKey & Widevine DRM).
  *
  * Shaka Player docs: https://shaka-project.github.io/shaka-player/docs/api/tutorial-basic-usage.html
@@ -14,6 +14,9 @@
 
 // @ts-ignore – side-effect import: sets window.shaka
 import './shaka-player.compiled.js';
+
+const DEFAULT_UA =
+  'Mozilla/5.0 (Linux; Android 12; Pixel 6) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36';
 
 function log(msg: string) {
   try {
@@ -48,7 +51,8 @@ function getShaka(): any {
   const url = el.getAttribute('data-url') || '';
   const licenseType = el.getAttribute('data-license-type') || '';
   const licenseKey = el.getAttribute('data-license-key') || '';
-  const userAgent = el.getAttribute('data-user-agent') || 'Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36';
+  // Always use a User-Agent – CDNs reject requests without one
+  const userAgent = el.getAttribute('data-user-agent') || DEFAULT_UA;
   const referer = el.getAttribute('data-referer') || '';
 
   if (!url) {
@@ -58,6 +62,8 @@ function getShaka(): any {
 
   log('URL: ' + url);
   log('License type: ' + (licenseType || 'none'));
+  log('License key: ' + (licenseKey || 'none'));
+  log('UA: ' + userAgent);
   log('Initializing Shaka Player…');
 
   try {
@@ -110,7 +116,7 @@ function getShaka(): any {
             },
           },
         });
-        log('ClearKey configured (inline).');
+        log('ClearKey configured (inline key:pair).');
       } else {
         player.configure({
           drm: {
@@ -119,7 +125,7 @@ function getShaka(): any {
             },
           },
         });
-        log('ClearKey configured (server).');
+        log('ClearKey configured (server URL).');
       }
     } else if (licenseType === 'widevine' && licenseKey) {
       player.configure({
@@ -138,7 +144,7 @@ function getShaka(): any {
       .getNetworkingEngine()
       .registerRequestFilter((type: number, request: any) => {
         // Always set User-Agent (CDNs reject requests without one)
-        request.headers['User-Agent'] = effectiveUA;
+        request.headers['User-Agent'] = userAgent;
         if (referer) {
           request.headers['Referer'] = referer;
           try {
@@ -147,46 +153,34 @@ function getShaka(): any {
             /* ignore */
           }
         }
-        // For license requests, ensure proper headers
-        if (type === 6) { // LICENSE request type
-          request.headers['Content-Type'] = 'application/octet-stream';
-          log('License request → ' + request.uris?.[0] || request.url || 'unknown');
+        // For license requests, ensure proper Content-Type
+        if (type === 6) {
+          // NetworkingEngine.RequestType.LICENSE = 6
+          request.headers['Content-Type'] = request.headers['Content-Type'] || 'application/octet-stream';
+          log('License request → ' + (request.uris?.[0] || request.url || 'unknown'));
         }
       });
 
-    // Log responses for debugging – capture non-2xx for error reporting
-    let lastFailedUri = '';
-    let lastFailedStatus = 0;
+    // Log responses for debugging
     player
       .getNetworkingEngine()
       .registerResponseFilter((type: number, response: any) => {
-        log('Response type=' + type + ' status=' + response.status + ' uri=' + (response.uri || ''));
-        if (response.status < 200 || response.status >= 300) {
-          lastFailedUri = response.uri || '';
-          lastFailedStatus = response.status;
+        const status = response.status || response.code || 'unknown';
+        log('Response type=' + type + ' status=' + status + ' uri=' + (response.uri || ''));
+        if (type === 6) {
+          log('License response status: ' + status);
         }
       });
 
     // ── 7. Load manifest & play ──
     log('Loading: ' + url);
-    log('UA: ' + effectiveUA);
-    try {
-      await player.load(url);
-      log('Loaded! Playing…');
-      await video.play();
-      log('▶ Playing!');
-    } catch (loadErr: any) {
-      const code = loadErr.code || 'unknown';
-      const msg = loadErr.message || String(loadErr);
-      showError('Load failed [' + code + ']: ' + msg);
-    }
+    await player.load(url);
+    log('Loaded! Playing…');
+    await video.play();
+    log('▶ Playing!');
   } catch (err: any) {
     const code = err.code || '';
-    const msg = err.message || String(err);
-    let detail = '';
-    if (lastFailedStatus) {
-      detail = '\nHTTP ' + lastFailedStatus + ' → ' + lastFailedUri;
-    }
-    showError('Failed to load stream: Shaka Error ' + code + '\n' + msg + detail);
+    const message = err.message || String(err);
+    showError('Failed to load stream: Shaka Error ' + code + '\n' + message);
   }
 })();
