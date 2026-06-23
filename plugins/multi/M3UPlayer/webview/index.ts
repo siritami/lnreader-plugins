@@ -8,23 +8,15 @@
  * Reads stream config from #m3u-shaka-container data attributes,
  * loads Shaka Player from CDN, and plays MPD / DASH / FLV streams
  * (including ClearKey & Widevine DRM).
+ *
+ * Shaka Player docs: https://shaka-project.github.io/shaka-player/docs/api/tutorial-basic-usage.html
  */
 
-const SHAKA_CDN =
-  'https://cdnjs.cloudflare.com/ajax/libs/shaka-player/4.7.11/shaka-player.compiled.js';
+// @ts-ignore – local copy of shaka-player compiled bundle
+import shaka from './shaka-player.compiled.js';
 
 function log(msg: string) {
   window.LNReaderPlayer!.log(msg);
-}
-
-function loadScript(src: string): Promise<void> {
-  return new Promise((resolve, reject) => {
-    const s = document.createElement('script');
-    s.src = src;
-    s.onload = () => resolve();
-    s.onerror = () => reject(new Error('Failed to load ' + src));
-    document.head.appendChild(s);
-  });
 }
 
 (async function () {
@@ -47,16 +39,10 @@ function loadScript(src: string): Promise<void> {
     return;
   }
 
-  log('Loading Shaka Player…');
+  log('Initializing Shaka Player…');
 
   try {
-    // ── 1. Load Shaka Player from CDN ──
-    if (!(window as any).shaka) {
-      await loadScript(SHAKA_CDN);
-    }
-    const shaka = (window as any).shaka;
-
-    // ── 2. Polyfills ──
+    // ── 1. Install polyfills (must be called before anything else) ──
     shaka.polyfill.installAll();
 
     if (!shaka.Player.isBrowserSupported()) {
@@ -64,30 +50,36 @@ function loadScript(src: string): Promise<void> {
       return;
     }
 
-    // ── 3. Create <video> element ──
+    // ── 2. Create <video> element ──
     const video = document.createElement('video');
+    video.id = 'shaka-video';
     video.style.cssText =
       'position:fixed;top:0;left:0;width:100vw;height:100vh;object-fit:contain;background:#000;z-index:9999;';
     video.setAttribute('playsinline', '');
     video.setAttribute('autoplay', '');
+    video.setAttribute('controls', '');
     document.body.style.margin = '0';
     document.body.style.padding = '0';
     document.body.style.overflow = 'hidden';
     document.body.appendChild(video);
 
-    // ── 4. Init Shaka Player ──
+    // ── 3. Create Player (attach to video element) ──
+    // Per docs: new shaka.Player(mediaElement) attaches automatically
     const player = new shaka.Player(video);
 
+    // ── 4. Listen for errors ──
     player.addEventListener('error', (evt: any) => {
       const err = evt.detail;
       log('Shaka error [' + err.code + ']: ' + err.message);
     });
 
     // ── 5. Configure DRM ──
+    // Per docs: https://shaka-project.github.io/shaka-player/docs/api/tutorial-drm-config.html
     if (licenseType === 'clearkey' && licenseKey) {
       // Format: key_id_hex:key_hex  (from KODIPROP license_key)
       const parts = licenseKey.split(':');
       if (parts.length === 2) {
+        // ClearKey with inline keys (hex key-id → hex key)
         player.configure({
           drm: {
             clearKeys: {
@@ -95,9 +87,9 @@ function loadScript(src: string): Promise<void> {
             },
           },
         });
-        log('ClearKey configured.');
+        log('ClearKey configured (inline).');
       } else {
-        // Might be a URL-based clearkey
+        // ClearKey via license server URL
         player.configure({
           drm: {
             servers: {
@@ -105,9 +97,10 @@ function loadScript(src: string): Promise<void> {
             },
           },
         });
-        log('ClearKey (URL) configured.');
+        log('ClearKey configured (server).');
       }
     } else if (licenseType === 'widevine' && licenseKey) {
+      // Widevine license server
       player.configure({
         drm: {
           servers: {
@@ -126,15 +119,19 @@ function loadScript(src: string): Promise<void> {
           if (userAgent) request.headers['User-Agent'] = userAgent;
           if (referer) {
             request.headers['Referer'] = referer;
-            request.headers['Origin'] = new URL(referer).origin;
+            try {
+              request.headers['Origin'] = new URL(referer).origin;
+            } catch (_) {
+              /* ignore invalid referer */
+            }
           }
         });
     }
 
-    // ── 7. Load & play ──
-    log('Loading stream…');
+    // ── 7. Load manifest & play ──
+    log('Loading stream: ' + url);
     await player.load(url);
-    log('Stream loaded. Playing…');
+    log('Stream loaded. Starting playback…');
     await video.play();
     log('▶ Playing!');
   } catch (err: any) {
