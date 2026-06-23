@@ -4,6 +4,12 @@ import { defaultCover } from '@libs/defaultCover';
 import { NovelStatus } from '@libs/novelStatus';
 import { storage } from '@libs/storage';
 
+type KodipropInfo = {
+  manifestType: string;
+  licenseType: string;
+  licenseKey: string;
+};
+
 type PlaylistItem = {
   name: string;
   tvg: {
@@ -29,6 +35,13 @@ type PlaylistItem = {
   };
   timeshift: string;
   lang: string;
+  kodiprop: KodipropInfo;
+};
+
+const defaultKodiprop: KodipropInfo = {
+  manifestType: '',
+  licenseType: '',
+  licenseKey: '',
 };
 
 const iptvPlaylistParser = {
@@ -66,12 +79,14 @@ const iptvPlaylistParser = {
 
     const items: PlaylistItem[] = [];
     let currentItem: Partial<PlaylistItem> | null = null;
+    let currentKodiprop: KodipropInfo = { ...defaultKodiprop };
 
     for (let i = 1; i < lines.length; i++) {
       const line = lines[i].trim();
       if (!line) continue;
 
       if (line.startsWith('#EXTINF:')) {
+        currentKodiprop = { ...defaultKodiprop };
         currentItem = {
           name: getName(line),
           tvg: {
@@ -98,6 +113,15 @@ const iptvPlaylistParser = {
           timeshift: getAttribute(line, 'timeshift'),
           lang: getAttribute(line, 'lang'),
         };
+      } else if (line.startsWith('#KODIPROP:')) {
+        const prop = line.substring('#KODIPROP:'.length).trim();
+        if (prop.startsWith('inputstream.adaptive.manifest_type=')) {
+          currentKodiprop.manifestType = prop.split('=', 2)[1];
+        } else if (prop.startsWith('inputstream.adaptive.license_type=')) {
+          currentKodiprop.licenseType = prop.split('=', 2)[1];
+        } else if (prop.startsWith('inputstream.adaptive.license_key=')) {
+          currentKodiprop.licenseKey = prop.split('=', 2)[1];
+        }
       } else if (line.startsWith('#EXTVLCOPT:')) {
         if (!currentItem?.http) continue;
         currentItem.http.referrer =
@@ -116,8 +140,10 @@ const iptvPlaylistParser = {
           getParameter(line, 'user-agent') || currentItem.http['user-agent'];
         currentItem.http.referrer =
           getParameter(line, 'referer') || currentItem.http.referrer;
+        currentItem.kodiprop = { ...currentKodiprop };
         items.push(currentItem as PlaylistItem);
         currentItem = null;
+        currentKodiprop = { ...defaultKodiprop };
       }
     }
 
@@ -125,12 +151,34 @@ const iptvPlaylistParser = {
   },
 };
 
+function esc(s: string): string {
+  return s.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
+}
+
+function detectStreamFormat(
+  url: string,
+  manifestType: string,
+): 'm3u8' | 'mp4' | 'webm' | 'mpd' | 'flv' | 'unknown' {
+  const u = url.toLowerCase().split('?')[0];
+  if (u.endsWith('.m3u8')) return 'm3u8';
+  if (u.endsWith('.mp4')) return 'mp4';
+  if (u.endsWith('.webm')) return 'webm';
+  if (u.endsWith('.mpd')) return 'mpd';
+  if (u.endsWith('.flv')) return 'flv';
+  if (manifestType === 'hls' || manifestType === 'm3u8') return 'm3u8';
+  if (manifestType === 'mpd' || manifestType === 'dash') return 'mpd';
+  if (url.includes('.m3u8') || url.includes('/hls/')) return 'm3u8';
+  if (url.includes('.mpd') || url.includes('/dash/')) return 'mpd';
+  return 'unknown';
+}
+
 class M3UPlayerPlugin implements Plugin.PluginBase {
   id = 'yuneko.m3uplayer';
   name = '🎞 M3U Player';
   icon = 'src/multi/m3uplayer/icon.png';
   site = 'https://vnepg.site';
-  version = '1.0.1';
+  version = '1.1.0';
+  customJS = 'src/multi/m3uplayer/player.js';
 
   pluginSettings: Plugin.PluginSettings = {
     m3uUrl: {
@@ -157,10 +205,24 @@ class M3UPlayerPlugin implements Plugin.PluginBase {
       params.set('url', item.url);
       params.set('name', item.name);
       if (item.tvg.logo) params.set('logo', item.tvg.logo);
-      // if (item.http['user-agent']) params.set('ua', item.http['user-agent']);
+      if (item.http['user-agent']) params.set('ua', item.http['user-agent']);
+      if (item.http.referrer) params.set('referer', item.http.referrer);
+      if (item.kodiprop.manifestType) params.set('mt', item.kodiprop.manifestType);
+      if (item.kodiprop.licenseType) params.set('lt', item.kodiprop.licenseType);
+      if (item.kodiprop.licenseKey) params.set('lk', item.kodiprop.licenseKey);
+
+      const fmt = detectStreamFormat(item.url, item.kodiprop.manifestType);
+      const tag =
+        fmt === 'm3u8' ? '🟢HLS'
+        : fmt === 'mp4' || fmt === 'webm' ? '🔵MP4'
+        : fmt === 'mpd' && item.kodiprop.licenseType === 'widevine' ? '🔴DRM'
+        : fmt === 'mpd' && item.kodiprop.licenseType === 'clearkey' ? '🟡DRM'
+        : fmt === 'mpd' ? '🟠DASH'
+        : fmt === 'flv' ? '⚪FLV'
+        : '';
 
       return {
-        name: item.name,
+        name: tag ? `${item.name} ${tag}` : item.name,
         path: `/m3u?${params.toString()}`,
         cover: item.tvg.logo || defaultCover,
       };
@@ -185,6 +247,13 @@ class M3UPlayerPlugin implements Plugin.PluginBase {
     const params = new URLSearchParams(novelPath.split('?')[1]);
     const name = params.get('name') || 'Unknown';
     const cover = params.get('logo') || defaultCover;
+    const url = params.get('url') || '';
+    const mt = params.get('mt') || '';
+    const lt = params.get('lt') || '';
+
+    const fmt = detectStreamFormat(url, mt);
+    const fmtLabel = fmt.toUpperCase();
+    const drmLabel = lt ? ` [${lt.toUpperCase()}]` : '';
 
     return {
       path: novelPath,
@@ -193,7 +262,7 @@ class M3UPlayerPlugin implements Plugin.PluginBase {
       status: NovelStatus.Ongoing,
       chapters: [
         {
-          name,
+          name: `${name} (${fmtLabel}${drmLabel})`,
           path: novelPath,
           chapterNumber: 1,
         },
@@ -207,15 +276,44 @@ class M3UPlayerPlugin implements Plugin.PluginBase {
     }
     const params = new URLSearchParams(chapterPath.split('?')[1]);
     const url = params.get('url') || '';
+    const mt = params.get('mt') || '';
+    const lt = params.get('lt') || '';
+    const lk = params.get('lk') || '';
+    const ua = params.get('ua') || '';
+    const referer = params.get('referer') || '';
 
-    return [
+    const fmt = detectStreamFormat(url, mt);
+
+    const base: string[] = [
       '<meta name="lnreader-chapter-type" content="video">',
-      '<meta name="lnreader-video-mode" content="direct">',
-      '<meta name="lnreader-video-type" content="m3u8">',
-      `<meta name="lnreader-video-url" content="${url}">`,
       '<meta id="no-cache-marker"/>',
       '<meta id="no-prefetch-marker"/>',
       '<meta id="lnreader-video-disable-progress"/>',
+    ];
+
+    // HLS / MP4 / WebM → direct mode (built-in player handles them)
+    if (fmt === 'm3u8' || fmt === 'mp4' || fmt === 'webm') {
+      const type = fmt === 'm3u8' ? 'm3u8' : 'video-file';
+      return [
+        ...base,
+        '<meta name="lnreader-video-mode" content="direct">',
+        `<meta name="lnreader-video-type" content="${type}">`,
+        `<meta name="lnreader-video-url" content="${esc(url)}">`,
+      ].join('\n');
+    }
+
+    // MPD / FLV / unknown → lazy mode → Shaka Player via customJS
+    const attrs: string[] = ['id="m3u-shaka-container"'];
+    attrs.push(`data-url="${esc(url)}"`);
+    if (lt) attrs.push(`data-license-type="${esc(lt)}"`);
+    if (lk) attrs.push(`data-license-key="${esc(lk)}"`);
+    if (ua) attrs.push(`data-user-agent="${esc(ua)}"`);
+    if (referer) attrs.push(`data-referer="${esc(referer)}"`);
+
+    return [
+      ...base,
+      '<meta name="lnreader-video-mode" content="lazy">',
+      `<div ${attrs.join(' ')} style="display:none;"></div>`,
     ].join('\n');
   }
 
