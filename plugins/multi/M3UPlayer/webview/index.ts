@@ -48,7 +48,7 @@ function getShaka(): any {
   const url = el.getAttribute('data-url') || '';
   const licenseType = el.getAttribute('data-license-type') || '';
   const licenseKey = el.getAttribute('data-license-key') || '';
-  const userAgent = el.getAttribute('data-user-agent') || '';
+  const userAgent = el.getAttribute('data-user-agent') || 'Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36';
   const referer = el.getAttribute('data-referer') || '';
 
   if (!url) {
@@ -133,11 +133,12 @@ function getShaka(): any {
     }
 
     // ── 6. Request filters (User-Agent / Referer) ──
-    // Always register to add headers to ALL requests (manifest + segments)
+    // Always register to add headers to ALL requests (manifest + segments + license)
     player
       .getNetworkingEngine()
-      .registerRequestFilter((_type: number, request: any) => {
-        if (userAgent) request.headers['User-Agent'] = userAgent;
+      .registerRequestFilter((type: number, request: any) => {
+        // Always set User-Agent (CDNs reject requests without one)
+        request.headers['User-Agent'] = effectiveUA;
         if (referer) {
           request.headers['Referer'] = referer;
           try {
@@ -146,23 +147,46 @@ function getShaka(): any {
             /* ignore */
           }
         }
+        // For license requests, ensure proper headers
+        if (type === 6) { // LICENSE request type
+          request.headers['Content-Type'] = 'application/octet-stream';
+          log('License request → ' + request.uris?.[0] || request.url || 'unknown');
+        }
       });
 
-    // Log responses for debugging
+    // Log responses for debugging – capture non-2xx for error reporting
+    let lastFailedUri = '';
+    let lastFailedStatus = 0;
     player
       .getNetworkingEngine()
       .registerResponseFilter((type: number, response: any) => {
         log('Response type=' + type + ' status=' + response.status + ' uri=' + (response.uri || ''));
+        if (response.status < 200 || response.status >= 300) {
+          lastFailedUri = response.uri || '';
+          lastFailedStatus = response.status;
+        }
       });
 
     // ── 7. Load manifest & play ──
     log('Loading: ' + url);
-    await player.load(url);
-    log('Loaded! Playing…');
-    await video.play();
-    log('▶ Playing!');
+    log('UA: ' + effectiveUA);
+    try {
+      await player.load(url);
+      log('Loaded! Playing…');
+      await video.play();
+      log('▶ Playing!');
+    } catch (loadErr: any) {
+      const code = loadErr.code || 'unknown';
+      const msg = loadErr.message || String(loadErr);
+      showError('Load failed [' + code + ']: ' + msg);
+    }
   } catch (err: any) {
-    const msg = err.message || err.code || String(err);
-    showError('Failed to load stream: ' + msg);
+    const code = err.code || '';
+    const msg = err.message || String(err);
+    let detail = '';
+    if (lastFailedStatus) {
+      detail = '\nHTTP ' + lastFailedStatus + ' → ' + lastFailedUri;
+    }
+    showError('Failed to load stream: Shaka Error ' + code + '\n' + msg + detail);
   }
 })();
