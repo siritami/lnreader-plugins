@@ -12,11 +12,15 @@
  * Shaka Player docs: https://shaka-project.github.io/shaka-player/docs/api/tutorial-basic-usage.html
  */
 
-// @ts-ignore – local copy of shaka-player compiled bundle
-import shaka from './shaka-player.compiled.js';
+// @ts-ignore – side-effect import: sets window.shaka
+import './shaka-player.compiled.js';
 
 function log(msg: string) {
   window.LNReaderPlayer!.log(msg);
+}
+
+function getShaka(): any {
+  return (window as any).shaka;
 }
 
 (async function () {
@@ -42,6 +46,12 @@ function log(msg: string) {
   log('Initializing Shaka Player…');
 
   try {
+    const shaka = getShaka();
+    if (!shaka) {
+      log('Shaka Player not loaded.');
+      return;
+    }
+
     // ── 1. Install polyfills (must be called before anything else) ──
     shaka.polyfill.installAll();
 
