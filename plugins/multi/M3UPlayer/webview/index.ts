@@ -133,21 +133,27 @@ function getShaka(): any {
     }
 
     // ── 6. Request filters (User-Agent / Referer) ──
-    if (userAgent || referer) {
-      player
-        .getNetworkingEngine()
-        .registerRequestFilter((_type: number, request: any) => {
-          if (userAgent) request.headers['User-Agent'] = userAgent;
-          if (referer) {
-            request.headers['Referer'] = referer;
-            try {
-              request.headers['Origin'] = new URL(referer).origin;
-            } catch (_) {
-              /* ignore */
-            }
+    // Always register to add headers to ALL requests (manifest + segments)
+    player
+      .getNetworkingEngine()
+      .registerRequestFilter((_type: number, request: any) => {
+        if (userAgent) request.headers['User-Agent'] = userAgent;
+        if (referer) {
+          request.headers['Referer'] = referer;
+          try {
+            request.headers['Origin'] = new URL(referer).origin;
+          } catch (_) {
+            /* ignore */
           }
-        });
-    }
+        }
+      });
+
+    // Log responses for debugging
+    player
+      .getNetworkingEngine()
+      .registerResponseFilter((type: number, response: any) => {
+        log('Response type=' + type + ' status=' + response.status + ' uri=' + (response.uri || ''));
+      });
 
     // ── 7. Load manifest & play ──
     log('Loading: ' + url);
