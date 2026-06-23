@@ -177,7 +177,7 @@ class M3UPlayerPlugin implements Plugin.PluginBase {
   name = '🎞 M3U Player';
   icon = 'src/multi/m3uplayer/icon.png';
   site = 'https://vnepg.site';
-  version = '1.4.0';
+  version = '1.5.0';
   customJS = 'src/multi/m3uplayer/player.js';
 
   pluginSettings: Plugin.PluginSettings = {

@@ -16,7 +16,22 @@
 import './shaka-player.compiled.js';
 
 function log(msg: string) {
-  window.LNReaderPlayer!.log(msg);
+  try {
+    window.LNReaderPlayer!.log(msg);
+  } catch (_) {
+    console.log('[M3UPlayer] ' + msg);
+  }
+}
+
+function showError(msg: string) {
+  log('ERROR: ' + msg);
+  const overlay = document.createElement('div');
+  overlay.style.cssText =
+    'position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);' +
+    'color:#fff;background:rgba(0,0,0,0.85);padding:20px 30px;border-radius:12px;' +
+    'font:16px/1.4 sans-serif;z-index:10000;text-align:center;max-width:90vw;word-break:break-word;';
+  overlay.textContent = msg;
+  document.body.appendChild(overlay);
 }
 
 function getShaka(): any {
@@ -24,11 +39,9 @@ function getShaka(): any {
 }
 
 (async function () {
-  if (!window.LNReaderPlayer) return;
-
   const el = document.getElementById('m3u-shaka-container');
   if (!el) {
-    log('No stream config found.');
+    showError('No stream config found.');
     return;
   }
 
@@ -39,16 +52,18 @@ function getShaka(): any {
   const referer = el.getAttribute('data-referer') || '';
 
   if (!url) {
-    log('No stream URL provided.');
+    showError('No stream URL provided.');
     return;
   }
 
+  log('URL: ' + url);
+  log('License type: ' + (licenseType || 'none'));
   log('Initializing Shaka Player…');
 
   try {
     const shaka = getShaka();
     if (!shaka) {
-      log('Shaka Player not loaded.');
+      showError('Shaka Player not loaded. Check bundle.');
       return;
     }
 
@@ -56,7 +71,7 @@ function getShaka(): any {
     shaka.polyfill.installAll();
 
     if (!shaka.Player.isBrowserSupported()) {
-      log('Browser does not support Shaka Player.');
+      showError('Browser does not support Shaka Player.');
       return;
     }
 
@@ -74,22 +89,20 @@ function getShaka(): any {
     document.body.appendChild(video);
 
     // ── 3. Create Player (attach to video element) ──
-    // Per docs: new shaka.Player(mediaElement) attaches automatically
     const player = new shaka.Player(video);
 
     // ── 4. Listen for errors ──
     player.addEventListener('error', (evt: any) => {
       const err = evt.detail;
-      log('Shaka error [' + err.code + ']: ' + err.message);
+      const code = err.code || 'unknown';
+      const message = err.message || JSON.stringify(err);
+      showError('Shaka error [' + code + ']: ' + message);
     });
 
     // ── 5. Configure DRM ──
-    // Per docs: https://shaka-project.github.io/shaka-player/docs/api/tutorial-drm-config.html
     if (licenseType === 'clearkey' && licenseKey) {
-      // Format: key_id_hex:key_hex  (from KODIPROP license_key)
       const parts = licenseKey.split(':');
       if (parts.length === 2) {
-        // ClearKey with inline keys (hex key-id → hex key)
         player.configure({
           drm: {
             clearKeys: {
@@ -99,7 +112,6 @@ function getShaka(): any {
         });
         log('ClearKey configured (inline).');
       } else {
-        // ClearKey via license server URL
         player.configure({
           drm: {
             servers: {
@@ -110,7 +122,6 @@ function getShaka(): any {
         log('ClearKey configured (server).');
       }
     } else if (licenseType === 'widevine' && licenseKey) {
-      // Widevine license server
       player.configure({
         drm: {
           servers: {
@@ -132,19 +143,20 @@ function getShaka(): any {
             try {
               request.headers['Origin'] = new URL(referer).origin;
             } catch (_) {
-              /* ignore invalid referer */
+              /* ignore */
             }
           }
         });
     }
 
     // ── 7. Load manifest & play ──
-    log('Loading stream: ' + url);
+    log('Loading: ' + url);
     await player.load(url);
-    log('Stream loaded. Starting playback…');
+    log('Loaded! Playing…');
     await video.play();
     log('▶ Playing!');
   } catch (err: any) {
-    log('Error: ' + (err.message || String(err)));
+    const msg = err.message || err.code || String(err);
+    showError('Failed to load stream: ' + msg);
   }
 })();
