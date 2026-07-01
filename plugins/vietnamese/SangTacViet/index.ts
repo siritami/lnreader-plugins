@@ -237,7 +237,7 @@ class SangTacVietPlugin implements Plugin.PluginBase {
   get site() {
     return DOMAINS[this.selectedDomain] || SITE;
   }
-  version = '1.0.28';
+  version = '1.0.29';
   webStorageUtilized = true;
 
   pluginSettings: Plugin.PluginSettings = {

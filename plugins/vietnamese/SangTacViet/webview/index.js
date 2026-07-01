@@ -15,10 +15,9 @@ const captchaHTML = `<div>
           alt="Captcha Image"
           style="cursor: pointer"
           title="Nhấn để đổi ảnh mới"
-          onclick="refreshCaptcha()"
         />
       </div>
-      <button id="captcha-btn" class="captcha-btn" onclick="captchaBtnClick()">Xác thực</button>
+      <button id="captcha-btn" class="captcha-btn">Xác thực</button>
       <div
         id="captcha-error"
         style="color: red; font-size: 13px; text-align: center; display: none"
@@ -186,6 +185,12 @@ document.addEventListener('DOMContentLoaded', () => {
   if (captchaPlaceholder) {
     console.log('Detected captcha placeholder, injecting captcha HTML.');
     captchaPlaceholder.innerHTML = captchaHTML;
+    document
+      .getElementById('captcha-image')
+      .addEventListener('click', refreshCaptcha);
+    document
+      .getElementById('captcha-btn')
+      .addEventListener('click', captchaBtnClick);
     refreshCaptcha();
   }
 });

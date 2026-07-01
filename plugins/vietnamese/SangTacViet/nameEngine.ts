@@ -1,5 +1,6 @@
 /* eslint-disable no-useless-escape */
 import type { CheerioAPI } from 'cheerio';
+import { hanvietdic } from './dict';
 
 /**
  * Proper-noun (person name) auto-replacement, ported from STV `qtOnline.js`
@@ -372,11 +373,30 @@ class NameEngine {
       const hv = result.map(r => r.h).join(' ');
       const name = this.testsuffix(
         chi,
-        titleCase(hv).replace(/^Ti /, 'Tư ').replace('Chư Cát', 'Gia Cát'),
+        titleCase(
+          this.convertohanviets(chi) ||
+            (hv.trim().length
+              ? hv
+              : `{Error: Missing Hán-Việt reading for ${chi}}`),
+        )
+          .replace(/^Ti /, 'Tư ')
+          .replace('Chư Cát', 'Gia Cát'),
       );
       // merge: name into first token, empty the rest
       this.applyName(result, chi, name);
     }
+  }
+
+  private convertohanviet(chi: string) {
+    return hanvietdic[chi] || '';
+  }
+  private convertohanviets(str: string) {
+    const result = [];
+    // eslint-disable-next-line @typescript-eslint/prefer-for-of
+    for (let i = 0; i < str.length; i++) {
+      result.push(this.convertohanviet(str[i]));
+    }
+    return result.join(' ');
   }
 
   private applyName(result: Tok[], chi: string, name: string): void {
