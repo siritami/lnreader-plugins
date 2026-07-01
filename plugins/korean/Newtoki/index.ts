@@ -89,14 +89,14 @@ const pluginSettingTranslate: Plugin.SelectSetting = {
 };
 
 // https://t.me/s/newtoki_url
-const SITE = 'https://sbxh6.com';
+const SITE = 'https://toki28.com';
 
 class NewtokiPlugin implements Plugin.PluginBase {
   id = 'newtoki.novel';
   name = 'Newtoki';
   icon = 'src/kr/newtoki/icon.png';
   site = SITE;
-  version = '1.0.6';
+  version = '1.0.7';
 
   imageRequestInit: Plugin.ImageRequestInit = {
     headers: {
@@ -287,23 +287,27 @@ class NewtokiPlugin implements Plugin.PluginBase {
   ): Promise<Plugin.NovelItem[]> {
     const { filters } = options;
 
-    let url = `${this.site}/novel?page=${pageNo}`;
+    const url = new URL(`${this.site}/novel`);
+
+    if (pageNo > 1) {
+      url.searchParams.set('page', pageNo.toString());
+    }
 
     if (options.showLatestNovels) {
       // Latest mode - no sort param needed, default is latest
     } else if (filters) {
       if (filters.sort?.value) {
-        url += `&sort=${filters.sort.value}`;
+        url.searchParams.set('sort', filters.sort.value as string);
       }
       if (filters.genre?.value) {
-        url += `&g=${encodeURIComponent(filters.genre.value as string)}`;
+        url.searchParams.set('g', filters.genre.value as string);
       }
       if (filters.platform?.value) {
-        url += `&p=${encodeURIComponent(filters.platform.value as string)}`;
+        url.searchParams.set('p', filters.platform.value as string);
       }
     }
 
-    const body = await fetchText(url, { headers: this.defaultHeaders() });
+    const body = await fetchText(url.toString(), { headers: this.defaultHeaders() });
     if (!body) {
       throw new Error(
         'This website is using Cloudflare to protect against malicious bots. Use WebView to bypass it.',
