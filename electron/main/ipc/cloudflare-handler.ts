@@ -341,15 +341,15 @@ export async function solveCloudflareTurnstile(
     const html = `<!DOCTYPE html>
 <html>
 <head>
-  <script src="https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit" async defer></script>
+  <script src="https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit&onload=myCallback" async defer></script>
 </head>
 <body style="display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; background: #fff;">
   <div id="captcha"></div>
   <script>
     window.turnstileToken = null;
-    window.onload = function() {
+    window.myCallback = function() {
       turnstile.render('#captcha', {
-        sitekey: '${sitekey}',
+        sitekey: ${JSON.stringify(sitekey)},
         callback: function(token) {
           window.turnstileToken = token;
         }
@@ -359,19 +359,11 @@ export async function solveCloudflareTurnstile(
 </body>
 </html>`;
 
-    win.webContents.once('did-finish-load', async () => {
-      try {
-        await win.webContents.executeJavaScript(`
-          document.open();
-          document.write(${JSON.stringify(html)});
-          document.close();
-        `);
-      } catch (err) {
-        console.error('Errr:', err);
-      }
-    });
+    const dataUrl = `data:text/html;charset=utf-8,${encodeURIComponent(html)}`;
 
-    await win.loadURL(url);
+    await win.loadURL(dataUrl, {
+      baseURLForDataURL: url,
+    });
 
     win.webContents.debugger.attach('1.3');
 
