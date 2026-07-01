@@ -16,7 +16,7 @@ This is a fork of the original repository, containing only my custom plugins and
 - [Akaytruyen](https://akaytruyen.com)
 - [DocTruyenLN](https://quykiep.com)
 - [Hako Novel](https://ln.hako.vn)[^1]
-- ~~[JukaNovel](https://jukaza.site)[^1]~~
+- [JukaNovel](https://sangtacviet.online)[^1]
 - [LNKuro](https://lnkuro.top)
 - [Luvevaland](https://luvevaland.co)
 - [MeTruyenCV](https://metruyencv.com)[^1]
