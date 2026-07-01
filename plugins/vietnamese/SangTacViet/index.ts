@@ -285,15 +285,6 @@ class SangTacVietPlugin implements Plugin.PluginBase {
     },
   };
 
-  constructor() {
-    const ps = this.pluginSettings;
-    for (const key in ps) {
-      if (storage.get(key) === undefined) {
-        storage.set(key, ps[key].value);
-      }
-    }
-  }
-
   get selectedDomain(): string {
     return (storage.get('selectedDomain') as string) || 'sangtacviet.app';
   }

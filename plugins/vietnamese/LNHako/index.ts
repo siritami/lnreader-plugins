@@ -178,25 +178,34 @@ class HakoPlugin implements Plugin.PluginBase {
   id = 'ln.hako.vn';
   name = 'Hako Novel';
   icon = 'src/vi/hakolightnovel/icon.png';
-  version = '1.2.8';
+  version = '1.2.9';
 
   customCSS = 'src/vi/hakolightnovel/custom.css';
 
   pluginSettings: Plugin.PluginSettings = {
-    usingDocln: {
-      value: false,
-      label: 'Sử dụng tên miền docln.sbs (nếu ln.hako.vn bị lỗi)',
-      type: 'Switch',
+    domain: {
+      value: 'https://ln.hako.vn',
+      label: 'Chọn tên miền',
+      type: 'Select',
+      options: [
+        {
+          label: 'ln.hako.vn',
+          value: 'https://ln.hako.vn',
+        },
+        {
+          label: 'docln.sbs',
+          value: 'https://docln.sbs',
+        },
+        {
+          label: 'docln.net',
+          value: 'https://docln.net',
+        },
+      ],
     },
     showAllChapters: {
       value: false,
       label:
-        'Hiển thị tất cả chương, không chia theo Volume. Chương có dạng [{volume_name}]: {chapter_name}',
-      type: 'Switch',
-    },
-    showChapterComments: {
-      value: false,
-      label: 'Hiển thị bình luận ở cuối mỗi chương (thử nghiệm)',
+        'Hiển thị tất cả các chương, không chia theo Volume. Tên chương có dạng [{volume_name}]: {chapter_name}',
       type: 'Switch',
     },
     showTitleInfo: {
@@ -204,14 +213,19 @@ class HakoPlugin implements Plugin.PluginBase {
       label: 'Hiển thị tên Volume, Chapter và thông tin truyện ở đầu chương',
       type: 'Switch',
     },
+    showChapterComments: {
+      value: false,
+      label: 'Hiển thị bình luận ở cuối mỗi chương (thử nghiệm)',
+      type: 'Switch',
+    },
   };
 
   get site() {
-    return this.usingDocln ? 'https://docln.sbs' : 'https://ln.hako.vn';
+    return this.domain || 'https://ln.hako.vn';
   }
 
-  get usingDocln() {
-    return storage.get('usingDocln') as boolean;
+  get domain() {
+    return storage.get('domain') as string;
   }
 
   get showAllChapters() {
