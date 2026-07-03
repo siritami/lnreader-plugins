@@ -2,6 +2,9 @@
 
 This is a fork of the original repository, containing only my custom plugins and hotfixes.
 
+> [!WARNING]  
+> I highly recommend using this plugin collection with my modified version of LNReader-eXtended. Most of the plugins here are not compatible with the original LNReader or other apps that support JS plugins (such as Tsundoku, IReader, Kototoro, etc.), as these plugins rely heavily on modern JavaScript libraries.
+
 <p>
 <img alt="Total number of available plugins" src="https://raw.githubusercontent.com/Yuneko-dev/lnreader-plugins/plugins/v3.0.0/total.svg">
 <img alt="Open plugin requests" src="https://img.shields.io/github/issues/Yuneko-dev/lnreader-plugins/Plugin%20Request?color=success&label=plugin%20requests">
