@@ -237,7 +237,7 @@ class SangTacVietPlugin implements Plugin.PluginBase {
   get site() {
     return DOMAINS[this.selectedDomain] || SITE;
   }
-  version = '1.0.29';
+  version = '1.0.30';
   webStorageUtilized = true;
 
   pluginSettings: Plugin.PluginSettings = {
@@ -431,13 +431,15 @@ class SangTacVietPlugin implements Plugin.PluginBase {
       const infoJson = await infoRes.json();
 
       if (infoJson.code === 100 && infoJson.book) {
+        console.log('infoJson.book', infoJson.book);
         const book = infoJson.book;
         novel.name = (book.tname || book.name || 'Không có tiêu đề').trim();
         novel.author = (book.hauthor || book.author || '').trim();
-        novel.summary = (book.info || '')
-          .replace(/\r\n/g, '\n')
-          .replace(/\r/g, '\n')
-          .replace(/\t/g, '\n')
+        novel.summary = decodeHtmlEntities(book.info || '')
+          .replace(/<br\s*\/?>/gi, '\n') // <br>, <br/>, <br />
+          .replace(/\t/g, ' ')
+          .replace(/\r\n|\r/g, '\n')
+          .replace(/\n{3,}/g, '\n\n')
           .trim();
         novel.genres = (book.category || '').trim();
         novel.cover = book.thumb
@@ -739,18 +741,24 @@ class SangTacVietPlugin implements Plugin.PluginBase {
             body.set('purpose', 'read');
             body.set('provider', 'cloudflare');
             // Verify the captcha token with the server
-            const respCaptcha = await fetchApi(`${this.site}/index.php?ngmar=verifyca`, {
-              headers: {
-                accept: '*/*',
-                'accept-language': 'vi',
-                'content-type': 'application/x-www-form-urlencoded',
-                pragma: 'no-cache',
-                referer: `${this.site}${chapterPath}`,
+            const respCaptcha = await fetchApi(
+              `${this.site}/index.php?ngmar=verifyca`,
+              {
+                headers: {
+                  accept: '*/*',
+                  'accept-language': 'vi',
+                  'content-type': 'application/x-www-form-urlencoded',
+                  pragma: 'no-cache',
+                  referer: `${this.site}${chapterPath}`,
+                },
+                body: body.toString(),
+                method: 'POST',
               },
-              body: body.toString(),
-              method: 'POST',
-            });
-            console.log('Captcha verification response:', await respCaptcha.text());
+            );
+            console.log(
+              'Captcha verification response:',
+              await respCaptcha.text(),
+            );
             return this._parseChapter(chapterPath); // Retry after captcha
           } catch (e) {
             console.error('Captcha solving error:', e);
