@@ -10,6 +10,7 @@ type EmbedPlayerWindow = Window & {
     playDirect: (url: string) => void;
   };
   reader?: {
+    // eslint-disable-next-line
     fetch: (url: string, init?: RequestInit) => Promise<Response>;
   };
 };
