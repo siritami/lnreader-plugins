@@ -195,6 +195,12 @@ class HakoPlugin implements Plugin.PluginBase {
       label: 'Hiển thị bình luận ở cuối mỗi chương (thử nghiệm)',
       type: 'Switch',
     },
+    showMetadataInDescription: {
+      value: false,
+      label:
+        'Hiển thị chi tiết thông tin truyện trong mô tả. Cũng sử dụng markdown để hiển thị.',
+      type: 'Switch',
+    },
   };
 
   get site() {
@@ -215,6 +221,10 @@ class HakoPlugin implements Plugin.PluginBase {
 
   get showTitleInfo() {
     return storage.get('showTitleInfo') as boolean;
+  }
+
+  get showMetadataInDescription() {
+    return storage.get('showMetadataInDescription') as boolean;
   }
 
   private async fetchHtmlFromMirrors(
@@ -302,40 +312,52 @@ class HakoPlugin implements Plugin.PluginBase {
 
     const novelType = $('.series-type').first().text().trim();
     novel.name = $('.series-name').first().text().trim();
-    const summary = nhm.translate($('.summary-content').html() || '');
-    const prefixHeader = '## ✦';
-    const facts = $('.fact-item')
-      .map((_, el) => {
-        const factName = $(el)
-          .find('.fact-name')
-          .first()
-          .text()
-          .trim()
-          .replace(/:$/, '');
 
-        const factValue = nhm.translate($(el).find('.fact-value').html() || '');
-        return `${prefixHeader} ${factName}\n${factValue}`;
-      })
-      .get();
-    const note = $('.series-note').first();
-    const result = note.length
-      ? {
-          title: note.find('header .sect-title').first().text().trim(),
-          content: note.find('main').first().html()?.trim() ?? '',
-        }
-      : null;
+    if (this.showMetadataInDescription) {
+      const summary = nhm.translate($('.summary-content').html() || '');
+      const prefixHeader = '## ✦';
+      const facts = $('.fact-item')
+        .map((_, el) => {
+          const factName = $(el)
+            .find('.fact-name')
+            .first()
+            .text()
+            .trim()
+            .replace(/:$/, '');
 
-    novel.summary = [
-      ...(facts.length ? facts : []),
-      `${prefixHeader} Tóm tắt`,
-      summary,
-      ...(result
-        ? [
-            `${prefixHeader} ${result.title}`,
-            nhm.translate(result.content).trim(),
-          ]
-        : []),
-    ].join('\n');
+          const factValue = nhm.translate(
+            $(el).find('.fact-value').html() || '',
+          );
+          return `${prefixHeader} ${factName}\n${factValue}`;
+        })
+        .get();
+      const note = $('.series-note').first();
+      const result = note.length
+        ? {
+            title: note.find('header .sect-title').first().text().trim(),
+            content: note.find('main').first().html()?.trim() ?? '',
+          }
+        : null;
+
+      novel.summary = [
+        ...(facts.length ? facts : []),
+        `${prefixHeader} Tóm tắt`,
+        summary,
+        ...(result
+          ? [
+              `${prefixHeader} ${result.title}`,
+              nhm.translate(result.content).trim(),
+            ]
+          : []),
+      ].join('\n');
+    } else {
+      novel.summary = $('.summary-content p')
+        .map(function () {
+          return $(this).text().trim();
+        })
+        .get()
+        .join('\n');
+    }
 
     const coverEl = $('.series-cover .img-in-ratio').first();
     const coverDataBg = coverEl.attr('data-bg')?.trim();
