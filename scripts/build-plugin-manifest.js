@@ -87,7 +87,26 @@ const createRecursiveProxy = () => {
 
 const proxy = createRecursiveProxy();
 
-const _require = () => proxy;
+const ContentWarning = {
+  UNSPECIFIED: 0,
+  SAFE: 1,
+  MIXED: 2,
+  NSFW: 3,
+};
+
+const ContentType = {
+  NOVEL: 'novel',
+  IMAGE: 'image',
+  VIDEO: 'video',
+  MIXED: 'mixed',
+};
+
+const _require = packageName => {
+  if (packageName === '@libs/pluginMetadata') {
+    return { ContentWarning, ContentType };
+  }
+  return proxy;
+};
 
 const COMPILED_PLUGIN_DIR = './.js/plugins';
 
@@ -120,8 +139,18 @@ for (let language in languages) {
       ${rawCode}; 
       return exports.default`,
     )(_require, {});
-    const { id, name, site, version, icon, customJS, customCSS, filters } =
-      instance;
+    const {
+      id,
+      name,
+      site,
+      version,
+      icon,
+      customJS,
+      customCSS,
+      filters,
+      contentWarning,
+      contentType,
+    } = instance;
     if (!isValidFilename(id))
       throw new Error(
         `This plugin ID (${id}) is invalid and cannot be used in the application.`,
@@ -148,6 +177,8 @@ for (let language in languages) {
       iconUrl: `${STATIC_LINK}/${icon || 'siteNotAvailable.png'}`,
       customJS: customJS ? `${STATIC_LINK}/${customJS}` : undefined,
       customCSS: customCSS ? `${STATIC_LINK}/${customCSS}` : undefined,
+      contentWarning,
+      contentType,
     };
 
     if (pluginSet.has(id)) {

@@ -1,4 +1,5 @@
-import { FilterToValues, Filters } from '@libs/filterInputs';
+import type { FilterToValues, Filters } from '@libs/filterInputs';
+import type { ContentType, ContentWarning } from './constants';
 export namespace Plugin {
   export type ChapterItem = {
     name: string;
@@ -51,6 +52,8 @@ export namespace Plugin {
     version: string;
     icon: string;
     site: string;
+    contentWarning?: ContentWarning;
+    contentType?: ContentType;
   };
   export type ImageRequestInit = {
     [x: string]:
@@ -121,6 +124,8 @@ export namespace Plugin {
     customJS?: string;
     customCSS?: string;
     site: string;
+    contentWarning?: ContentWarning;
+    contentType?: ContentType;
     imageRequestInit?: ImageRequestInit;
     filters?: Filters;
     version: string;

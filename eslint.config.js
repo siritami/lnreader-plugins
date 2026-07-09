@@ -172,6 +172,7 @@ export default tseslint.config(
                 '!@libs/isAbsoluteUrl',
                 '!@libs/filterInputs',
                 '!@libs/defaultCover',
+                '!@libs/pluginMetadata',
                 '!@libs/aes',
                 '!@libs/utils',
                 '!@libs/cookie',
