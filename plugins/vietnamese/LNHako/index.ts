@@ -6,75 +6,52 @@ import { FilterTypes, Filters } from '@libs/filterInputs';
 import { storage } from '@libs/storage';
 import { bytesToUtf8, Buffer, createVolumePage } from '@libs/utils';
 import { isUrlAbsolute } from '@libs/isAbsoluteUrl';
-import { Parser } from 'htmlparser2';
+import { NodeHtmlMarkdown } from 'node-html-markdown';
 
-function htmlToSimpleMarkdown(html: string) {
-  let markdown = '';
+const nhm = new NodeHtmlMarkdown({
+  blockElements: [
+    // Metadata
+    'head',
+    'title',
+    'meta',
+    'base',
+    'link',
 
-  let inAnchor = false;
-  let anchorText = '';
-  let anchorHref = '';
+    // Script
+    'script',
+    'noscript',
 
-  const parser = new Parser({
-    onopentag(name, attributes) {
-      if (name === 'a') {
-        inAnchor = true;
-        anchorHref = attributes.href || '';
-        anchorText = '';
-      } else if (name === 'img') {
-        const alt = attributes.alt || 'image';
-        const src = attributes.src || '';
-        const imgMarkdown = `![${alt}](${src})`;
-        if (inAnchor) {
-          anchorText += imgMarkdown;
-        } else {
-          markdown += imgMarkdown;
-        }
-      } else if (name === 'br') {
-        markdown += '\n';
-      } else if (name === 'p' || name === 'div') {
-        markdown += '\n\n';
-      }
-    },
+    // Style
+    'style',
 
-    ontext(text) {
-      let cleanText = text.replace(/[\r\n\t ]+/g, ' ');
+    // Embedded content
+    'iframe',
+    'object',
+    'embed',
+    'applet',
 
-      if (inAnchor) {
-        anchorText += cleanText;
-      } else {
-        if (markdown.endsWith('\n') && cleanText === ' ') {
-          return;
-        }
-        if (markdown.endsWith('\n') || markdown === '') {
-          cleanText = cleanText.trimStart();
-        }
+    // SVG / Canvas
+    'svg',
+    'canvas',
 
-        markdown += cleanText;
-      }
-    },
+    // Media source
+    'source',
+    'track',
 
-    onclosetag(name) {
-      if (name === 'a') {
-        markdown += `[${anchorText.trim()}](${anchorHref})`;
-        inAnchor = false;
-        anchorText = '';
-        anchorHref = '';
-      } else if (name === 'p' || name === 'div') {
-        markdown += '\n\n';
-      }
-    },
-  });
+    // Template
+    'template',
 
-  parser.write(html);
-  parser.end();
+    // Param
+    'param',
 
-  return markdown
-    .replace(/ +\n/g, '\n')
-    .replace(/\n +/g, '\n')
-    .replace(/\n{3,}/g, '\n\n')
-    .trim();
-}
+    // Media
+    'audio',
+    'video',
+
+    // Other
+    'wbr',
+  ],
+});
 
 function urlToPath(url: string): string {
   if (!isUrlAbsolute(url)) {
@@ -178,7 +155,7 @@ class HakoPlugin implements Plugin.PluginBase {
   id = 'ln.hako.vn';
   name = 'Hako Novel';
   icon = 'src/vi/hakolightnovel/icon.png';
-  version = '1.2.10';
+  version = '1.2.11';
 
   customCSS = 'src/vi/hakolightnovel/custom.css';
 
@@ -324,10 +301,9 @@ class HakoPlugin implements Plugin.PluginBase {
     const $ = load(html);
 
     const novelType = $('.series-type').first().text().trim();
-
     novel.name = $('.series-name').first().text().trim();
-    const summary = htmlToSimpleMarkdown($('.summary-content').html() || '');
-    const prefixHeader = '✦';
+    const summary = nhm.translate($('.summary-content').html() || '');
+    const prefixHeader = '## ✦';
     const facts = $('.fact-item')
       .map((_, el) => {
         const factName = $(el)
@@ -337,9 +313,7 @@ class HakoPlugin implements Plugin.PluginBase {
           .trim()
           .replace(/:$/, '');
 
-        const factValue = htmlToSimpleMarkdown(
-          $(el).find('.fact-value').html() || '',
-        );
+        const factValue = nhm.translate($(el).find('.fact-value').html() || '');
         return `${prefixHeader} ${factName}\n${factValue}`;
       })
       .get();
@@ -358,7 +332,7 @@ class HakoPlugin implements Plugin.PluginBase {
       ...(result
         ? [
             `${prefixHeader} ${result.title}`,
-            htmlToSimpleMarkdown(result.content).trim(),
+            nhm.translate(result.content).trim(),
           ]
         : []),
     ].join('\n');

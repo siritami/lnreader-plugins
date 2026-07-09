@@ -166,6 +166,7 @@ export default tseslint.config(
                 '!cheerio',
                 '!dayjs',
                 '!urlencode',
+                '!node-html-markdown',
                 '!@libs/novelStatus',
                 '!@libs/fetch',
                 '!@libs/isAbsoluteUrl',

@@ -1,8 +1,8 @@
 import { Plugin } from '@/types/plugin';
-import p_0 from '@plugins/japanese/NocSyosetu';
-import p_1 from '@plugins/japanese/Pixiv';
-import p_2 from '@plugins/korean/Newtoki';
-import p_3 from '@plugins/english/CosplayTele';
+import p_0 from '@plugins/english/CosplayTele';
+import p_1 from '@plugins/japanese/NocSyosetu';
+import p_2 from '@plugins/japanese/Pixiv';
+import p_3 from '@plugins/korean/Newtoki';
 import p_4 from '@plugins/multi/M3UPlayer';
 import p_5 from '@plugins/vietnamese/AkayTruyen';
 import p_6 from '@plugins/vietnamese/AnimeVietsub';
