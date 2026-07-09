@@ -5,15 +5,17 @@ import { load as loadCheerio } from 'cheerio';
 import { defaultCover } from '@libs/defaultCover';
 import { NovelStatus } from '@libs/novelStatus';
 import { encodeHtmlEntities } from '@libs/utils';
+import { ContentType } from '@libs/pluginMetadata';
 
 const SITE = 'https://animevsub.app';
 
 class AnimeVsubPlugin implements Plugin.PluginBase {
   id = 'yuneko.animevsub';
-  name = '🎞 AnimeVsub';
+  name = 'AnimeVsub';
   icon = 'src/vi/animevsub/icon.png';
   site = SITE;
-  version = '1.0.0';
+  version = '1.0.1';
+  contentType = ContentType.VIDEO;
 
   filters = {
     tab: {

@@ -6,17 +6,20 @@ import { NovelStatus } from '@libs/novelStatus';
 import { createVolumePage, encodeHtmlEntities } from '@libs/utils';
 import { isUrlAbsolute } from '@libs/isAbsoluteUrl';
 import { storage } from '@libs/storage';
+import { ContentType } from '@libs/pluginMetadata';
+
 import filters from './filters';
 
 const SITE = 'https://kkphim.com';
 
 class KKPhimPlugin implements Plugin.PluginBase {
   id = 'kkphim';
-  name = '🎞 KKPhim';
+  name = 'KKPhim';
   icon = 'src/vi/kkphim/icon.png';
   site = SITE;
-  version = '1.0.1';
+  version = '1.0.2';
   customJS = 'src/vi/kkphim/player.js';
+  contentType = ContentType.VIDEO;
 
   filters = filters;
 

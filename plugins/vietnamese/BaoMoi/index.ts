@@ -6,13 +6,15 @@ import { Filters, FilterTypes } from '@libs/filterInputs';
 import { load as loadCheerio } from 'cheerio';
 import { defaultCover } from '@libs/defaultCover';
 import { NovelStatus } from '@libs/novelStatus';
+import { ContentType } from '@libs/pluginMetadata';
 
 class BaoMoiPlugin implements Plugin.PluginBase {
   id = 'baomoi.com';
   name = 'Báo Mới';
   icon = 'src/vi/baomoi/icon.png';
   site = 'https://baomoi.com';
-  version = '1.0.9';
+  version = '1.0.10';
+  contentType = ContentType.MIXED;
   filters: Filters = {
     page: {
       label: 'Tìm theo trang',

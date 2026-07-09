@@ -3,6 +3,7 @@ import { Plugin } from '@/types/plugin';
 import { defaultCover } from '@libs/defaultCover';
 import { NovelStatus } from '@libs/novelStatus';
 import { storage } from '@libs/storage';
+import { ContentType } from '@libs/pluginMetadata';
 
 type PlaylistItem = {
   name: string;
@@ -127,9 +128,10 @@ const iptvPlaylistParser = {
 
 class M3UPlayerPlugin implements Plugin.PluginBase {
   id = 'yuneko.m3uplayer';
-  name = '🎞 M3U Player';
+  name = 'M3U Player';
   icon = 'src/multi/m3uplayer/icon.png';
-  version = '1.0.2';
+  version = '1.0.3';
+  contentType = ContentType.VIDEO;
 
   pluginSettings: Plugin.PluginSettings = {
     m3uUrl: {

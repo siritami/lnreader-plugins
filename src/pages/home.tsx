@@ -8,6 +8,10 @@ import { Input } from '@/components/ui/input';
 
 import plugins from '@plugins/index';
 import { useAppStore } from '@/store';
+import {
+  getPluginDisplayName,
+  getPluginNameColor,
+} from '@/lib/plugin-metadata';
 import PopularNovelsSection from '@/components/popular-novels';
 import SearchNovelsSection from '@/components/search-novels';
 import ParseNovelSection from '@/components/parse-novel';
@@ -64,7 +68,9 @@ function Home() {
                       : 'text-foreground hover:bg-muted'
                   }`}
                 >
-                  {filteredPlugin.name}
+                  <span style={{ color: getPluginNameColor(filteredPlugin) }}>
+                    {getPluginDisplayName(filteredPlugin)}
+                  </span>
                 </button>
               ))}
             </div>
@@ -79,7 +85,15 @@ function Home() {
                 Plugin Playground
               </h1>
               <p className="text-muted-foreground">
-                Explore and test {plugin?.name || 'plugin'} features
+                Explore and test{' '}
+                {plugin ? (
+                  <span style={{ color: getPluginNameColor(plugin) }}>
+                    {getPluginDisplayName(plugin)}
+                  </span>
+                ) : (
+                  'plugin'
+                )}{' '}
+                features
               </p>
             </div>
 

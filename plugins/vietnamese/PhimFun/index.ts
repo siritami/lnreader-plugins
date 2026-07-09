@@ -3,13 +3,15 @@ import { Plugin } from '@/types/plugin';
 import { load as loadCheerio } from 'cheerio';
 import { defaultCover } from '@libs/defaultCover';
 import { NovelStatus } from '@libs/novelStatus';
+import { ContentType } from '@libs/pluginMetadata';
 
 class PhimFunPlugin implements Plugin.PluginBase {
   id = 'yuneko.phimfun';
-  name = '🎞 PhimFun';
+  name = 'PhimFun';
   icon = 'src/vi/phimfun/icon.png';
   site = 'https://phimfun.net';
-  version = '1.0.0';
+  version = '1.0.1';
+  contentType = ContentType.VIDEO;
 
   imageRequestInit: Plugin.ImageRequestInit = {
     headers: {

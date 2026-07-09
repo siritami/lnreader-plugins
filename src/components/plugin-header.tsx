@@ -4,6 +4,10 @@ import { Moon, Sun } from 'lucide-react';
 import { Plugin } from '@/types/plugin';
 import { Button } from '@/components/ui/button';
 import { useTheme } from '@/hooks/useTheme';
+import {
+  getPluginDisplayName,
+  getPluginNameColor,
+} from '@/lib/plugin-metadata';
 
 type PluginHeaderProps = {
   selectedPlugin?: Plugin.PluginBase;
@@ -29,8 +33,15 @@ export default function PluginHeader({ selectedPlugin }: PluginHeaderProps) {
             <h1 className="text-sm font-semibold text-foreground">
               Plugin Playground
             </h1>
-            <p className="text-xs text-muted-foreground">
-              {selectedPlugin?.name}
+            <p
+              className="text-xs text-muted-foreground"
+              style={{
+                color: selectedPlugin
+                  ? getPluginNameColor(selectedPlugin)
+                  : undefined,
+              }}
+            >
+              {selectedPlugin ? getPluginDisplayName(selectedPlugin) : ''}
             </p>
           </div>
         </div>

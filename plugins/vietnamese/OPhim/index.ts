@@ -2,14 +2,16 @@ import { fetchApi } from '@libs/fetch';
 import { Plugin } from '@/types/plugin';
 import { defaultCover } from '@libs/defaultCover';
 import { NovelStatus } from '@libs/novelStatus';
+import { ContentType } from '@libs/pluginMetadata';
 
 class OPhimPlugin implements Plugin.PluginBase {
   id = 'yuneko.ophim';
-  name = '🎞 OPhim';
+  name = 'OPhim';
   icon = 'src/vi/ophim/icon.png';
   site = 'https://ophim17.cc';
-  version = '1.0.0';
+  version = '1.0.1';
   apiUrl = 'https://ophim1.com/v1/api';
+  contentType = ContentType.VIDEO;
 
   imageRequestInit: Plugin.ImageRequestInit = {
     headers: {

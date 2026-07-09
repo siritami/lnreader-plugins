@@ -6,16 +6,18 @@ import { NovelStatus } from '@libs/novelStatus';
 import { encodeHtmlEntities, createVolumePage } from '@libs/utils';
 import { isUrlAbsolute } from '@libs/isAbsoluteUrl';
 import { storage } from '@libs/storage';
+import { ContentType } from '@libs/pluginMetadata';
 
 import filters from './filters';
 
 class AnimeVietsubPlugin implements Plugin.PluginBase {
   id = 'animevietsub';
-  name = '🎞 AnimeVietsub';
+  name = 'AnimeVietsub';
   icon = 'src/vi/animevietsub/icon.png';
   site = 'https://animevietsub.love';
-  version = '1.0.38';
+  version = '1.0.39';
   filters = filters;
+  contentType = ContentType.VIDEO;
 
   customJS = 'src/vi/animevietsub/player.js';
 

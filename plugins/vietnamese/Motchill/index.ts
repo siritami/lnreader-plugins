@@ -3,13 +3,15 @@ import { Plugin } from '@/types/plugin';
 import { load as loadCheerio } from 'cheerio';
 import { defaultCover } from '@libs/defaultCover';
 import { NovelStatus } from '@libs/novelStatus';
+import { ContentType } from '@libs/pluginMetadata';
 
 class MotchillPlugin implements Plugin.PluginBase {
   id = 'yuneko.motchill';
-  name = '🎞 Motchill';
+  name = 'Motchill';
   icon = 'src/vi/motchill/icon.png';
   site = 'https://envasion.net';
-  version = '1.0.0';
+  version = '1.0.1';
+  contentType = ContentType.VIDEO;
 
   imageRequestInit: Plugin.ImageRequestInit = {
     headers: {

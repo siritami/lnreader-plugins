@@ -3,13 +3,15 @@ import { Plugin } from '@/types/plugin';
 import { load as loadCheerio } from 'cheerio';
 import { defaultCover } from '@libs/defaultCover';
 import { NovelStatus } from '@libs/novelStatus';
+import { ContentType } from '@libs/pluginMetadata';
 
 class YeuAnimePlugin implements Plugin.PluginBase {
   id = 'yuneko.yeuanime';
-  name = '🎞 Yêu Anime';
+  name = 'Yêu Anime';
   icon = 'src/vi/yeuanime/icon.png';
   site = 'https://yeuanime.xyz';
-  version = '1.0.1';
+  version = '1.0.2';
+  contentType = ContentType.VIDEO;
 
   imageRequestInit: Plugin.ImageRequestInit = {
     headers: {

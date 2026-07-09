@@ -11,6 +11,7 @@ import {
 import { Buffer } from '@libs/utils';
 import { storage } from '@libs/storage';
 import { ctr } from '@libs/aes';
+import { ContentType, ContentWarning } from '@libs/pluginMetadata';
 
 const SITE = 'https://hentaiz.bike';
 const STORAGE_URL = 'https://storage.haiten.org';
@@ -449,10 +450,12 @@ const yearOptions: { label: string; value: string }[] = [
 
 class HentaiZPlugin implements Plugin.PluginBase {
   id = 'hentaiz';
-  name = '🎞 HentaiZ';
+  name = 'HentaiZ';
   icon = 'src/vi/hentaiz/icon.png';
   site = SITE;
-  version = '1.0.13';
+  version = '1.0.14';
+  contentType = ContentType.VIDEO;
+  contentWarning = ContentWarning.NSFW;
 
   customJS = 'src/vi/hentaiz/player.js';
 

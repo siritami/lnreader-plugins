@@ -70,11 +70,13 @@ https://raw.githubusercontent.com/Yuneko-dev/lnreader-plugins/plugins/v3.0.0/.di
 
 Plugins in this repository make use of new API functions that are not available in the original LNReader. Below is a (potentially incomplete) list:
 
+- `node-html-markdown`
 - `@libs/aes`: added `ctr`, `ecb`, `cbc`, `cfb`, `gcmsiv`, `aeskw`, `aeskwp`, `cmac` and `aessiv`
 - `@libs/utils`: added `utf8ToBytes`, `bytesToUtf8`, `getUserAgent`, `Buffer`, `createVolumePage`, `NodeCrypto` (Used similarly to `import NodeCrypto from "node:crypto"`), `encodeHtmlEntities` and `decodeHtmlEntities`
 - `@libs/fetch`: removed `fetchFile`
 - `@libs/cookie`
 - `@libs/webview`
+- `@libs/pluginMetadata`
 
 ---
 

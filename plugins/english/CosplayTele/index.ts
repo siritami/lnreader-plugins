@@ -6,6 +6,7 @@ import { NovelStatus } from '@libs/novelStatus';
 import { FilterTypes, Filters } from '@libs/filterInputs';
 import { decodeHtmlEntities, encodeHtmlEntities } from '@libs/utils';
 import { isUrlAbsolute } from '@libs/isAbsoluteUrl';
+import { ContentType, ContentWarning } from '@libs/pluginMetadata';
 
 const SITE = 'https://cosplaytele.com';
 
@@ -28,8 +29,7 @@ const topCosplayOptions = [
 
 function cleanTitle(raw: string): string {
   let title = decodeHtmlEntities(raw).trim();
-  title = title.replace(/\s*[“"']?\d+\s+photos?(?:\s+and\s+\d+\s+videos?)?[”"']?\s*$/i, '');
-  title = title.replace(/\s*[“"']?\d+\s+videos?(?:\s+and\s+\d+\s+photos?)?[”"']?\s*$/i, '');
+  title = title.replace(/\s*[“"']?(?:\d+\s+(?:photos?|videos?|gifs?)(?:,\s*|\s+and\s+)?)+[”"']?\s*$/i, '');
   title = title.replace(/[“"”]/g, '').trim();
   return title;
 }
@@ -102,7 +102,10 @@ function extractAuthor($: ReturnType<typeof loadCheerio>): string {
 }
 
 function extractDownloadSummary($: ReturnType<typeof loadCheerio>): string {
-  const urls: string[] = [];
+  const urls: {
+    buttonText: string;
+    url: string;
+  }[] = [];
   const $content = $('.entry-content').first();
 
   $content.find('a.button, a[class*="button"]').each((_, el) => {
@@ -111,12 +114,15 @@ function extractDownloadSummary($: ReturnType<typeof loadCheerio>): string {
     if (!/download/i.test(text)) return;
     const href = ($a.attr('href') || '').trim();
     if (href && href !== '#') {
-      urls.push(href);
+      urls.push({
+        buttonText: text,
+        url: href,
+      });
     }
   });
 
   if (!urls.length) return '';
-  return `Download link:\n${urls.join('\n')}`;
+  return `## Download link:\n${urls.map(u => `- [${u.buttonText}](${u.url})`).join('\n')}`;
 }
 
 function collectPhotoUrls($: ReturnType<typeof loadCheerio>): string[] {
@@ -154,10 +160,12 @@ function collectVideoEmbeds($: ReturnType<typeof loadCheerio>): string[] {
 
 class CosplayTelePlugin implements Plugin.PluginBase {
   id = 'cosplaytele';
-  name = '🖼️ CosplayTele';
+  name = 'CosplayTele';
   icon = 'src/en/cosplaytele/icon.png';
   site = SITE;
-  version = '1.0.0';
+  version = '1.0.1';
+  contentType = ContentType.IMAGE;
+  contentWarning = ContentWarning.NSFW;
 
   customJS = 'src/en/cosplaytele/custom.js';
 

@@ -3,7 +3,8 @@ import { Plugin } from '@/types/plugin';
 import { Filters, FilterTypes } from '@libs/filterInputs';
 import { defaultCover } from '@libs/defaultCover';
 import { NovelStatus } from '@libs/novelStatus';
-import { encodeHtmlEntities, Buffer, NodeCrypto } from '@libs/utils';
+import { encodeHtmlEntities, Buffer } from '@libs/utils';
+import { ContentType } from '@libs/pluginMetadata';
 import { storage } from '@libs/storage';
 import { load } from 'cheerio';
 
@@ -12,11 +13,12 @@ const API_BASE = SITE + '/api';
 
 class NguonCPlugin implements Plugin.PluginBase {
   id = 'nguonc';
-  name = '🎞 NguonC';
+  name = 'NguonC';
   icon = 'src/vi/nguonc/icon.png';
   site = SITE;
-  version = '1.0.8';
+  version = '1.0.9';
   customJS = 'src/vi/nguonc/player.js';
+  contentType = ContentType.VIDEO;
 
   filters = {
     category: {

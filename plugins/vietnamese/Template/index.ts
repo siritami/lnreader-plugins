@@ -6,6 +6,7 @@ import { defaultCover } from '@libs/defaultCover';
 import { NovelStatus } from '@libs/novelStatus';
 import { storage, localStorage, sessionStorage } from '@libs/storage';
 import { utf8ToBytes, bytesToUtf8, Buffer } from '@libs/utils';
+import { ContentType, ContentWarning } from '@libs/pluginMetadata';
 import test from './utils';
 
 // Thêm file "BROKEN" vào folder để tránh ext này được build
@@ -58,6 +59,12 @@ class TemplatePlugin implements Plugin.PluginBase {
   // Entry point là index.js hoặc index.ts.
   // Sau khi build thì bundle file sẽ được lưu vào đường dẫn customJS
   customJS?: string | undefined = 'src/vi/template/custom.js';
+
+  // Loại nội dung mà plugin này cung cấp
+  contentType?: ContentType | undefined = ContentType.NOVEL;
+
+  // Cảnh báo nội dung mà plugin này có thể chứa
+  contentWarning?: ContentWarning | undefined = ContentWarning.SAFE;
 
   // Hàm này được gọi khi người dùng mở trang đầu của Plugin. Có thể apply các bộ lọc đã được định nghĩa.
   // Giống như việc bạn xem trang đầu tiên của Web vậy, và nó có chia trang.
