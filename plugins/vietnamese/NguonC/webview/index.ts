@@ -130,11 +130,28 @@ const createProxyFragLoader = (origin: string) => {
   if (!iframeUrl || !s || !k) return;
 
   const origin = new URL(iframeUrl).origin;
+  const streamUrl = `${origin}/${s}`;
 
-  const res = await window.reader.fetch(`${origin}/${s}.m3u8`, {
+  // Step 1: POST to get session token (xat)
+  const tokenRes = await window.reader.fetch(streamUrl, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Referer: iframeUrl,
+    },
+    referrer: iframeUrl,
+  });
+  const tokenData = await tokenRes.json();
+  const xat = tokenData?.xat || '';
+
+  // Step 2: GET encrypted m3u8 with x-auth header
+  const res = await window.reader.fetch(streamUrl, {
     method: 'GET',
-    headers: { Referer: origin },
-    referrer: origin,
+    headers: {
+      Referer: iframeUrl,
+      'x-auth': xat,
+    },
+    referrer: iframeUrl,
   });
 
   const m3u8 = await decryptM3u8(await res.text(), k);
