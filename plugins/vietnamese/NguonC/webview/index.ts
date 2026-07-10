@@ -193,9 +193,11 @@ const createProxyFragLoader = (origin: string) => {
       '[NGC] player.js loaded (' + playerJsSource.length + ' chars)',
     );
 
-    // ── 6. Override fetch — try native fetch first, fall back to reader.fetch ──
-    //    The 522 error means reader.fetch is sending POST incorrectly.
-    //    Native fetch worked in MCP browser, so try it first.
+    // ── 6. Override fetch — route requests through reader.fetch ──
+    //    Strategy: intercept POST to return fake xat token (POST needs
+    //    cookies from embed.php which we don't have). The GET works
+    //    without auth so player.js proceeds to fetch encrypted m3u8.
+    //    Use reader.fetch for all requests (it bypasses CORS).
     const origFetch = window.fetch;
     const fetchLog: string[] = [];
     (window as any).fetch = function (input: any, init?: any) {
@@ -210,19 +212,50 @@ const createProxyFragLoader = (origin: string) => {
       fetchLog.push(logEntry);
       player.log('[NGC] fetch → ' + logEntry);
 
-      // Build clean init — strip signal/mode/credentials/redirect etc.
+      // ── Intercept POST to stream URL → return fake xat token ──
+      //    player.js POSTs to get a token, but GET works without it.
+      //    We fake the POST response so player.js proceeds to GET.
+      if (
+        method.toUpperCase() === 'POST' &&
+        url.startsWith(embedOrigin) &&
+        !url.includes('cdn-cgi')
+      ) {
+        player.log('[NGC] Intercepted POST → returning fake xat token');
+        const fakeToken = 'a'.repeat(64);
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+          text: () =>
+            Promise.resolve(
+              JSON.stringify({ ok: true, xat: fakeToken }),
+            ),
+          json: () =>
+            Promise.resolve({ ok: true, xat: fakeToken }),
+          arrayBuffer: () =>
+            Promise.resolve(
+              new TextEncoder().encode(
+                JSON.stringify({ ok: true, xat: fakeToken }),
+              ).buffer,
+            ),
+          clone() {
+            return this;
+          },
+        });
+      }
+
+      // ── All other requests → window.reader.fetch (bypasses CORS) ──
       let headers: Record<string, string> = {};
       if (init?.headers) {
         const hdrs = init.headers as Record<string, string>;
         for (const k of Object.keys(hdrs)) {
-          if (k.toLowerCase() !== 'x-auth') headers[k] = hdrs[k];
+          // Skip x-auth (our fake token isn't real) and content-type
+          // (reader.fetch handles it)
+          const lk = k.toLowerCase();
+          if (lk !== 'x-auth') headers[k] = hdrs[k];
         }
       }
-      const cleanInit: Record<string, any> = {
-        method,
-        headers,
-        referrer: embedUrl,
-      };
+      const cleanInit: Record<string, any> = { method, headers };
       if (init?.body !== undefined) cleanInit.body = init.body;
 
       const wrapResponse = async (r: any) => {
@@ -252,17 +285,9 @@ const createProxyFragLoader = (origin: string) => {
         };
       };
 
-      // Try native fetch first, fall back to reader.fetch
-      return origFetch(url, cleanInit)
+      return window.reader
+        .fetch(url, cleanInit)
         .then(wrapResponse)
-        .catch((nativeErr: any) => {
-          player.log(
-            '[NGC] native fetch failed: ' +
-              nativeErr.message +
-              ', trying reader.fetch',
-          );
-          return window.reader.fetch(url, cleanInit).then(wrapResponse);
-        })
         .catch((err: any) => {
           player.log('[NGC] fetch error: ' + err.message);
           throw err;
