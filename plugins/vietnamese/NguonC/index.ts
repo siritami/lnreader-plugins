@@ -17,7 +17,7 @@ class NguonCPlugin implements Plugin.PluginBase {
   name = 'NguonC';
   icon = 'src/vi/nguonc/icon.png';
   site = SITE;
-  version = '1.0.26';
+  version = '1.0.27';
   customJS = 'src/vi/nguonc/player.js';
   contentType = ContentType.VIDEO;
 

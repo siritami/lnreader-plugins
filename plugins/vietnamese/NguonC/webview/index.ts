@@ -4,11 +4,32 @@
 /**
  * NguonC - WebView Video Player
  *
- * Loads the embed page's player.js and lets it handle decryption natively.
- * Captures the decrypted m3u8 blob URL and plays via LNReaderPlayer.playHls().
- *
- * Fallback: playIframe if player.js fails.
+ * Fetches encrypted m3u8 via reader.fetch (bypasses CORS),
+ * decrypts AES-GCM with PBKDF2-derived key, plays via playHls.
  */
+
+// ── Helpers ──
+
+const hexToBytes = (hex: string) => {
+  const bytes = new Uint8Array(hex.length / 2);
+  for (let i = 0; i < hex.length; i += 2) {
+    bytes[i / 2] = parseInt(hex.substring(i, i + 2), 16);
+  }
+  return bytes;
+};
+
+const b64Decode = (b64: string) => {
+  const bin = atob(b64);
+  const bytes = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) {
+    bytes[i] = bin.charCodeAt(i);
+  }
+  return bytes;
+};
+
+const textToBytes = (s: string) => new TextEncoder().encode(s);
+
+// ── Fragment Loader ──
 
 const createProxyFragLoader = (origin: string) => {
   return class ProxyFragLoader {
@@ -72,6 +93,59 @@ const createProxyFragLoader = (origin: string) => {
   };
 };
 
+// ── AES-GCM Decryption with PBKDF2 key derivation ──
+
+async function tryDecrypt(
+  encryptedBytes: Uint8Array,
+  ivBytes: Uint8Array,
+  password: string,
+  salt: Uint8Array,
+  iterations: number,
+  hash: string,
+): Promise<string | null> {
+  try {
+    // Import raw password as PBKDF2 key material
+    const keyMaterial = await crypto.subtle.importKey(
+      'raw',
+      textToBytes(password),
+      'PBKDF2',
+      false,
+      ['deriveKey'],
+    );
+
+    // Derive AES-GCM key via PBKDF2
+    const aesKey = await crypto.subtle.deriveKey(
+      {
+        name: 'PBKDF2',
+        salt,
+        iterations,
+        hash,
+      },
+      keyMaterial,
+      { name: 'AES-GCM', length: 256 },
+      false,
+      ['decrypt'],
+    );
+
+    // Decrypt
+    const decrypted = await crypto.subtle.decrypt(
+      { name: 'AES-GCM', iv: ivBytes },
+      aesKey,
+      encryptedBytes,
+    );
+
+    const text = new TextDecoder().decode(decrypted);
+    if (text.includes('#EXTINF') || text.includes('#EXTM3U')) {
+      return text;
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+// ── Main ──
+
 (async () => {
   console.log('[NGC] Webview script loaded');
   const player = window.LNReaderPlayer;
@@ -91,267 +165,238 @@ const createProxyFragLoader = (origin: string) => {
   try {
     const embedOrigin = new URL(embedUrl).origin;
 
-    // ── 1. Set up DOM for player.js ──
-    const playerDiv = document.createElement('div');
-    playerDiv.id = 'player';
-    playerDiv.setAttribute('data-obf', dataObf);
-    playerDiv.style.display = 'none';
-    document.body.appendChild(playerDiv);
-
-    // ── 2. Set globals BEFORE player.js runs ──
+    // ── 1. Parse data-obf to get streamURL + key material ──
     const streamData = JSON.parse(atob(dataObf));
-    (window as any).streamURL = streamData.sUb;
-    (window as any).videoHash = streamData.hD;
-    (window as any).devtoolsDetector = {
-      launch() {},
-      addListener() {},
-      detect() {
-        return false;
-      },
-    };
+    const streamURL: string = streamData.sUb; // base64({h, t})
+    const videoHash: string = streamData.hD;
 
-    // ── 3. Mock JWPlayer (player.js needs it to not crash) ──
-    const mockJwp: any = function () {
-      return {
-        setup() {},
-        on() {},
-        once() {},
-        play() {},
-        pause() {},
-        stop() {},
-        getPlaylistItem() {
-          return {};
-        },
-        getPosition() {
-          return 0;
-        },
-        getDuration() {
-          return 0;
-        },
-        getState() {
-          return 'idle';
-        },
-        remove() {},
-        setVolume() {},
-        setMute() {},
-        fullscreen() {},
-        getAudioTracks() {
-          return [];
-        },
-        getCurrentAudioTrack() {
-          return 0;
-        },
-        setCurrentAudioTrack() {},
-        getCaptionsList() {
-          return [];
-        },
-        getCurrentCaption() {
-          return 0;
-        },
-        setCaptions() {},
-      };
-    };
-    mockJwp.defaults = {};
-    (window as any).jwplayer = mockJwp;
+    // Decode inner JSON to get the hex key
+    const innerData = JSON.parse(atob(streamURL));
+    const hexKey: string = innerData.t; // 64-char hex
+    const hash: string = innerData.h; // same as videoHash
 
-    // ── 4. Hook URL.createObjectURL to capture decrypted m3u8 blob ──
-    const origCreateObjectURL = URL.createObjectURL;
-    let capturedM3u8Url: string | null = null;
+    player.log('[NGC] videoHash: ' + videoHash);
+    player.log('[NGC] hexKey: ' + hexKey);
 
-    URL.createObjectURL = function (blob: any) {
-      const url = origCreateObjectURL.call(URL, blob);
-      if (blob instanceof Blob && !capturedM3u8Url) {
-        blob
-          .text()
-          .then((text: string) => {
-            if (
-              text.includes('#EXTINF') ||
-              text.includes('#EXTM3U') ||
-              text.includes('#EXT-X-VERSION')
-            ) {
-              capturedM3u8Url = url;
-              player.log(
-                '[NGC] Captured decrypted m3u8 (' + text.length + ' chars)',
-              );
-              player.playHls(url, {
-                fLoader: createProxyFragLoader(embedOrigin),
-              });
-              player.log('[NGC] playHls called');
-            }
-          })
-          .catch(() => {});
+    // ── 2. Fetch encrypted m3u8 via reader.fetch ──
+    const m3u8Url = `${embedOrigin}/${streamURL}`;
+    player.log('[NGC] GET encrypted m3u8...');
+    const resp = await window.reader.fetch(m3u8Url, { method: 'GET' });
+    const encryptedText = await resp.text();
+    player.log('[NGC] Got ' + encryptedText.length + ' chars');
+    player.log('[NGC] Preview: ' + encryptedText.substring(0, 150));
+
+    // ── 3. Parse #ENC-AESGCM header ──
+    let ivHex = '';
+    let encryptedData = '';
+    for (const line of encryptedText.split('\n')) {
+      const trimmed = line.trim();
+      if (trimmed.startsWith('#ENC-AESGCM')) {
+        const m = trimmed.match(/iv=([a-fA-F0-9]+)/);
+        if (m) ivHex = m[1];
+      } else if (trimmed && !trimmed.startsWith('#')) {
+        encryptedData = trimmed;
       }
-      return url;
-    } as typeof URL.createObjectURL;
+    }
 
-    // ── 5. Fetch player.js from embed origin ──
-    player.log('[NGC] Fetching player.js...');
-    const playerJsUrl = embedOrigin + '/player.js?ver=1.7';
-    const resp = await window.reader.fetch(playerJsUrl, { method: 'GET' });
-    const playerJsSource = await resp.text();
+    if (!ivHex || !encryptedData) {
+      throw new Error('Invalid encrypted m3u8 format');
+    }
+
+    const ivBytes = hexToBytes(ivHex);
+    const encryptedBytes = b64Decode(encryptedData);
     player.log(
-      '[NGC] player.js loaded (' + playerJsSource.length + ' chars)',
+      '[NGC] IV: ' +
+        ivHex.length +
+        ' hex, encrypted: ' +
+        encryptedBytes.length +
+        ' bytes',
     );
 
-    // ── 6. Override fetch — route requests through reader.fetch ──
-    //    Strategy: intercept POST to return fake xat token (POST needs
-    //    cookies from embed.php which we don't have). The GET works
-    //    without auth so player.js proceeds to fetch encrypted m3u8.
-    //    Use reader.fetch for all requests (it bypasses CORS).
-    const origFetch = window.fetch;
-    const fetchLog: string[] = [];
-    (window as any).fetch = function (input: any, init?: any) {
-      let url =
-        typeof input === 'string' ? input : input?.url || String(input);
-      // Convert relative URLs to absolute
-      if (!url.startsWith('http')) {
-        url = embedOrigin + (url.startsWith('/') ? url : '/' + url);
-      }
-      const method = init?.method || 'GET';
-      const logEntry = method + ' ' + url.substring(0, 120);
-      fetchLog.push(logEntry);
-      player.log('[NGC] fetch → ' + logEntry);
+    // ── 4. Try PBKDF2 decryption with brute-force parameters ──
+    // Common passwords: hexKey, videoHash
+    // Common salts: hexKey bytes, videoHash bytes, empty, hexKey-as-hex-bytes
+    const passwords = [hexKey, videoHash];
+    const iterationsList = [1, 100, 1000, 10000, 100000];
+    const hashAlgos: Array<{ name: string; label: string }> = [
+      { name: 'SHA-1', label: 'SHA-1' },
+      { name: 'SHA-256', label: 'SHA-256' },
+      { name: 'SHA-384', label: 'SHA-384' },
+      { name: 'SHA-512', label: 'SHA-512' },
+    ];
 
-      // ── Intercept POST to stream URL → return fake xat token ──
-      //    player.js POSTs to get a token, but GET works without it.
-      //    We fake the POST response so player.js proceeds to GET.
-      if (
-        method.toUpperCase() === 'POST' &&
-        url.startsWith(embedOrigin) &&
-        !url.includes('cdn-cgi')
-      ) {
-        player.log('[NGC] Intercepted POST → returning fake xat token');
-        const fakeToken = 'a'.repeat(64);
-        return Promise.resolve({
-          ok: true,
-          status: 200,
-          headers: { 'content-type': 'application/json' },
-          text: () =>
-            Promise.resolve(
-              JSON.stringify({ ok: true, xat: fakeToken }),
-            ),
-          json: () =>
-            Promise.resolve({ ok: true, xat: fakeToken }),
-          arrayBuffer: () =>
-            Promise.resolve(
-              new TextEncoder().encode(
-                JSON.stringify({ ok: true, xat: fakeToken }),
-              ).buffer,
-            ),
-          clone() {
-            return this;
-          },
-        });
-      }
+    // Salt candidates
+    const saltCandidates: Array<{ name: string; bytes: Uint8Array }> = [
+      { name: 'hexKey', bytes: hexToBytes(hexKey) },
+      { name: 'hexKey-text', bytes: textToBytes(hexKey) },
+      { name: 'videoHash', bytes: hexToBytes(videoHash) },
+      { name: 'videoHash-text', bytes: textToBytes(videoHash) },
+      { name: 'empty', bytes: new Uint8Array(0) },
+    ];
 
-      // ── All other requests → window.reader.fetch (bypasses CORS) ──
-      let headers: Record<string, string> = {};
-      if (init?.headers) {
-        const hdrs = init.headers as Record<string, string>;
-        for (const k of Object.keys(hdrs)) {
-          // Skip x-auth (our fake token isn't real) and content-type
-          // (reader.fetch handles it)
-          const lk = k.toLowerCase();
-          if (lk !== 'x-auth') headers[k] = hdrs[k];
-        }
-      }
-      const cleanInit: Record<string, any> = { method, headers };
-      if (init?.body !== undefined) cleanInit.body = init.body;
-
-      const wrapResponse = async (r: any) => {
-        const status = r.status ?? 200;
-        const ok = r.ok !== undefined ? r.ok : status >= 200 && status < 300;
-        const respHeaders: Record<string, string> = {};
-        if (r.headers?.forEach) {
-          r.headers.forEach((v: string, k: string) => {
-            respHeaders[k] = v;
-          });
-        }
-        const body = await r.text();
-        player.log(
-          '[NGC] fetch ← ' + status + ' (' + body.length + ' chars)',
-        );
-        return {
-          ok,
-          status,
-          headers: respHeaders,
-          text: () => Promise.resolve(body),
-          json: () => Promise.resolve(JSON.parse(body)),
-          arrayBuffer: () =>
-            Promise.resolve(new TextEncoder().encode(body).buffer),
-          clone() {
-            return this;
-          },
-        };
-      };
-
-      return window.reader
-        .fetch(url, cleanInit)
-        .then(wrapResponse)
-        .catch((err: any) => {
-          player.log('[NGC] fetch error: ' + err.message);
-          throw err;
-        });
-    };
-
-    // ── 7. Inject player.js via <script> tag (global scope, like real embed) ──
-    //    eval() runs in local scope which breaks the obfuscated rotation IIFE.
-    //    A <script> tag runs in global scope, matching real embed page behavior.
-    player.log('[NGC] Injecting player.js via <script> tag...');
-    await new Promise<void>((resolve, reject) => {
-      const s = document.createElement('script');
-      s.textContent = playerJsSource;
-      s.onload = () => {
-        player.log('[NGC] player.js script loaded OK');
-        resolve();
-      };
-      s.onerror = (e) => {
-        player.log('[NGC] player.js script load error');
-        reject(new Error('script tag onerror'));
-      };
-      document.head.appendChild(s);
-    });
-
-    // ── 8. Fire DOMContentLoaded so player.js listeners trigger ──
-    //    In the real embed page player.js is <script defer> and the DOM
-    //    is ready when it runs. Here the DOM is already loaded, so
-    //    any DOMContentLoaded handlers registered by player.js would
-    //    never fire. Dispatch the event to kick them off.
-    player.log('[NGC] Dispatching DOMContentLoaded...');
-    document.dispatchEvent(new Event('DOMContentLoaded'));
-
-    // ── 9. Wait for decryption (poll for captured blob URL) ──
-    let attempts = 0;
-    const maxWaitMs = 25000;
-    const pollMs = 500;
-    while (!capturedM3u8Url && attempts * pollMs < maxWaitMs) {
-      await new Promise((r) => setTimeout(r, pollMs));
-      attempts++;
-      if (attempts % 4 === 0) {
-        player.log(
-          '[NGC] Waiting... (' +
-            (attempts * pollMs / 1000).toFixed(1) +
-            's, fetches: ' +
-            fetchLog.length +
-            ')',
-        );
-      }
-    }
-
-    // ── 10. Cleanup ──
-    (window as any).fetch = origFetch;
-    URL.createObjectURL = origCreateObjectURL;
-
-    if (capturedM3u8Url) {
-      player.log('[NGC] Decryption succeeded via player.js');
-    } else {
-      player.log(
-        '[NGC] Timeout (' + fetchLog.length + ' fetch calls). Falling back to iframe',
+    // Try direct hex key (no PBKDF2) first
+    player.log('[NGC] Trying direct hex key...');
+    const directKeyBytes = hexToBytes(hexKey);
+    try {
+      const cryptoKey = await crypto.subtle.importKey(
+        'raw',
+        directKeyBytes,
+        { name: 'AES-GCM' },
+        false,
+        ['decrypt'],
       );
-      player.playIframe(embedUrl);
+      const decrypted = await crypto.subtle.decrypt(
+        { name: 'AES-GCM', iv: ivBytes },
+        cryptoKey,
+        encryptedBytes,
+      );
+      const text = new TextDecoder().decode(decrypted);
+      if (text.includes('#EXTINF') || text.includes('#EXTM3U')) {
+        player.log('[NGC] Decrypted with direct key!');
+        playDecryptedM3u8(text, embedOrigin, player);
+        return;
+      }
+    } catch {
+      // Try with 32-byte truncated key
+      try {
+        const key32 = directKeyBytes.slice(0, 32);
+        const cryptoKey = await crypto.subtle.importKey(
+          'raw',
+          key32,
+          { name: 'AES-GCM' },
+          false,
+          ['decrypt'],
+        );
+        const decrypted = await crypto.subtle.decrypt(
+          { name: 'AES-GCM', iv: ivBytes },
+          cryptoKey,
+          encryptedBytes,
+        );
+        const text = new TextDecoder().decode(decrypted);
+        if (text.includes('#EXTINF') || text.includes('#EXTM3U')) {
+          player.log('[NGC] Decrypted with truncated key!');
+          playDecryptedM3u8(text, embedOrigin, player);
+          return;
+        }
+      } catch {}
     }
+
+    // Try PBKDF2 combinations
+    let totalAttempts = 0;
+    for (const pw of passwords) {
+      for (const salt of saltCandidates) {
+        for (const iter of iterationsList) {
+          for (const hashAlgo of hashAlgos) {
+            totalAttempts++;
+            const result = await tryDecrypt(
+              encryptedBytes,
+              ivBytes,
+              pw,
+              salt.bytes,
+              iter,
+              hashAlgo.name,
+            );
+            if (result) {
+              player.log(
+                `[NGC] Decrypted! pw=${pw.substring(0, 8)}... salt=${salt.name} iter=${iter} hash=${hashAlgo.label}`,
+              );
+              playDecryptedM3u8(result, embedOrigin, player);
+              return;
+            }
+          }
+        }
+      }
+    }
+
+    // Also try HMAC-SHA256 derived key (like AnimeVietsub)
+    player.log('[NGC] Trying HMAC-SHA256 derived key...');
+    for (const pw of passwords) {
+      try {
+        const keyMaterial = await crypto.subtle.importKey(
+          'raw',
+          textToBytes(pw),
+          { name: 'HMAC', hash: 'SHA-256' },
+          false,
+          ['sign'],
+        );
+        const gcmKeyBuf = await crypto.subtle.sign(
+          'HMAC',
+          keyMaterial,
+          textToBytes(videoHash),
+        );
+        const gcmKey = await crypto.subtle.importKey(
+          'raw',
+          gcmKeyBuf,
+          { name: 'AES-GCM' },
+          false,
+          ['decrypt'],
+        );
+        const decrypted = await crypto.subtle.decrypt(
+          { name: 'AES-GCM', iv: ivBytes },
+          gcmKey,
+          encryptedBytes,
+        );
+        const text = new TextDecoder().decode(decrypted);
+        if (text.includes('#EXTINF') || text.includes('#EXTM3U')) {
+          player.log('[NGC] Decrypted with HMAC-SHA256 derived key!');
+          playDecryptedM3u8(text, embedOrigin, player);
+          return;
+        }
+      } catch {}
+    }
+
+    // Try AES-CBC instead of AES-GCM
+    player.log('[NGC] Trying AES-CBC...');
+    for (const pw of passwords) {
+      const keyBytes = hexToBytes(pw);
+      for (const len of [16, 32]) {
+        try {
+          const cryptoKey = await crypto.subtle.importKey(
+            'raw',
+            keyBytes.slice(0, len),
+            { name: 'AES-CBC' },
+            false,
+            ['decrypt'],
+          );
+          const decrypted = await crypto.subtle.decrypt(
+            { name: 'AES-CBC', iv: ivBytes },
+            cryptoKey,
+            encryptedBytes,
+          );
+          const text = new TextDecoder().decode(decrypted);
+          if (text.includes('#EXTINF') || text.includes('#EXTM3U')) {
+            player.log('[NGC] Decrypted with AES-CBC!');
+            playDecryptedM3u8(text, embedOrigin, player);
+            return;
+          }
+        } catch {}
+      }
+    }
+
+    player.log(
+      '[NGC] All ' +
+        totalAttempts +
+        ' decryption attempts failed. Falling back to iframe.',
+    );
+    player.playIframe(embedUrl);
   } catch (err: any) {
     player.log('[NGC] Error: ' + (err?.message || err));
     if (embedUrl) player.playIframe(embedUrl);
   }
 })();
+
+function playDecryptedM3u8(
+  m3u8Text: string,
+  origin: string,
+  player: any,
+) {
+  player.log('[NGC] Playing decrypted m3u8 (' + m3u8Text.length + ' chars)');
+  const blob = new Blob([m3u8Text], {
+    type: 'application/vnd.apple.mpegurl',
+  });
+  const url = URL.createObjectURL(blob);
+  player.playHls(url, {
+    fLoader: createProxyFragLoader(origin),
+  });
+  player.log('[NGC] playHls called');
+}
