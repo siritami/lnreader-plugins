@@ -125,7 +125,6 @@ const createProxyFragLoader = (origin: string) => {
   if (!container || !window.LNReaderPlayer) return;
 
   const player = window.LNReaderPlayer;
-  player.log('[NGC] customJS loaded, container found');
 
   const iframeUrl = container.getAttribute('data-iframe');
   const s = container.getAttribute('data-s');
@@ -139,27 +138,12 @@ const createProxyFragLoader = (origin: string) => {
   const streamUrl = `${origin}/${s}`;
 
   try {
-    // Step 1: POST to get session token (xat)
-    player.log('[NGC] POST to get token');
-    const tokenRes = await window.reader.fetch(streamUrl, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Referer: iframeUrl,
-      },
-      referrer: iframeUrl,
-    });
-    const tokenData = await tokenRes.json();
-    const xat = tokenData?.xat || '';
-    player.log('[NGC] Got xat: ' + (xat ? xat.substring(0, 8) + '...' : 'EMPTY'));
-
-    // Step 2: GET encrypted m3u8 with x-auth header
-    player.log('[NGC] GET encrypted m3u8 from: ' + streamUrl);
+    // Fetch encrypted m3u8 (GET without x-auth — server accepts plain GET)
+    player.log('[NGC] GET encrypted m3u8');
     const res = await window.reader.fetch(streamUrl, {
       method: 'GET',
       headers: {
         'Referer': iframeUrl,
-        'x-auth': xat,
       },
       referrer: iframeUrl,
     });
@@ -167,6 +151,7 @@ const createProxyFragLoader = (origin: string) => {
     player.log('[NGC] GET status: ' + res.status);
     const text = await res.text();
     player.log('[NGC] Response length: ' + text.length);
+
     const m3u8 = await decryptM3u8(text, k);
     player.log('[NGC] Decrypted m3u8, length: ' + m3u8.length);
 
@@ -178,6 +163,6 @@ const createProxyFragLoader = (origin: string) => {
     });
     player.log('[NGC] playHls called');
   } catch (err: any) {
-    player.log('[NGC] Error: ' + (err?.message || err) + ' | name: ' + (err?.name || ''));
+    player.log('[NGC] Error: ' + (err?.message || err));
   }
 })();
