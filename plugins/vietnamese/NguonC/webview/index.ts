@@ -4,9 +4,9 @@
 /**
  * NguonC - WebView Video Player
  *
- * Decrypts AES-GCM m3u8 using HMAC-SHA256 key derivation.
- * Key = HMAC-SHA256(key="stream-derive-v1", data=videoHash)[0:32]
- * Then AES-GCM decrypt with that key + IV.
+ * Decryption: HMAC-SHA256(key="stream-derive-v1", data=videoHash)[0:32] → AES-GCM key
+ * Then AES-GCM decrypt with that key + IV from the #ENC-AESGCM header.
+ * Fallback: iframe if decryption fails.
  */
 
 const hexToBytes = (hex: string) => {
@@ -26,13 +26,6 @@ const b64Decode = (b64: string) => {
   return bytes;
 };
 
-const textToBytes = (s: string) => new TextEncoder().encode(s);
-
-
-
-// ── AES-GCM Decryption with HMAC-SHA256 key derivation ──
-// Key = HMAC-SHA256(key="stream-derive-v1", data=videoHash)[0:32]
-
 async function decryptM3u8(
   encryptedBytes: Uint8Array,
   ivBytes: Uint8Array,
@@ -40,7 +33,6 @@ async function decryptM3u8(
 ): Promise<string | null> {
   try {
     const enc = new TextEncoder();
-    // Step 1: HMAC-SHA256 with key "stream-derive-v1"
     const hmacKey = await crypto.subtle.importKey(
       'raw',
       enc.encode('stream-derive-v1'),
@@ -48,13 +40,11 @@ async function decryptM3u8(
       false,
       ['sign'],
     );
-    // Step 2: Sign videoHash → 32-byte digest
     const hmacResult = await crypto.subtle.sign(
       'HMAC',
       hmacKey,
       enc.encode(videoHash),
     );
-    // Step 3: First 32 bytes = AES-GCM key
     const aesKey = await crypto.subtle.importKey(
       'raw',
       new Uint8Array(hmacResult).slice(0, 32),
@@ -62,20 +52,16 @@ async function decryptM3u8(
       false,
       ['decrypt'],
     );
-    // Step 4: AES-GCM decrypt
     const decrypted = await crypto.subtle.decrypt(
       { name: 'AES-GCM', iv: ivBytes },
       aesKey,
       encryptedBytes,
     );
     return new TextDecoder().decode(decrypted);
-  } catch (e) {
-    console.error('[NGC] Decrypt error:', e);
+  } catch {
     return null;
   }
 }
-
-// ── Fragment Loader (passes Referer via reader.fetch) ──
 
 function createProxyFragLoader(origin: string) {
   return class {
@@ -93,43 +79,28 @@ function createProxyFragLoader(origin: string) {
   };
 }
 
-// ── Main ──
-
 (async () => {
   const player = window.LNReaderPlayer;
   if (!player) return;
 
   const container = document.getElementById('nguonc-player-container');
-  if (!container) {
-    player.playIframe('');
-    return;
-  }
-
-  const embedUrl = container.getAttribute('data-iframe');
-  const dataObf = container.getAttribute('data-obf');
+  const embedUrl = container?.getAttribute('data-iframe') || '';
+  const dataObf = container?.getAttribute('data-obf') || '';
 
   if (!embedUrl || !dataObf) {
-    player.playIframe('');
+    player.playIframe(embedUrl);
     return;
   }
 
   try {
     const embedOrigin = new URL(embedUrl).origin;
-
-    // ── 1. Parse data-obf → videoHash ──
     const streamData = JSON.parse(atob(dataObf));
-    const streamURL: string = streamData.sUb;
-    const videoHash: string = streamData.hD;
-    player.log('[NGC] videoHash: ' + videoHash);
+    const m3u8Url = `${embedOrigin}/${streamData.sUb}`;
 
-    // ── 2. Fetch encrypted m3u8 via reader.fetch ──
-    const m3u8Url = `${embedOrigin}/${streamURL}`;
-    player.log('[NGC] Fetching encrypted m3u8...');
+    player.log('[NGC] Fetching m3u8...');
     const resp = await window.reader.fetch(m3u8Url, { method: 'GET' });
     const encryptedText = await resp.text();
-    player.log('[NGC] Got ' + encryptedText.length + ' chars');
 
-    // ── 3. Parse #ENC-AESGCM header ──
     let ivHex = '';
     let encryptedData = '';
     for (const line of encryptedText.split('\n')) {
@@ -142,35 +113,21 @@ function createProxyFragLoader(origin: string) {
       }
     }
 
-    if (!ivHex || !encryptedData) {
-      throw new Error('Invalid encrypted m3u8 format');
-    }
+    if (!ivHex || !encryptedData) throw new Error('Invalid m3u8 format');
 
-    const ivBytes = hexToBytes(ivHex);
-    const encryptedBytes = b64Decode(encryptedData);
-    player.log('[NGC] IV: ' + ivHex.length + ' hex, data: ' + encryptedBytes.length + ' bytes');
+    const m3u8Text = await decryptM3u8(
+      b64Decode(encryptedData),
+      hexToBytes(ivHex),
+      streamData.hD,
+    );
 
-    // ── 4. Decrypt via HMAC-SHA256 key derivation ──
-    // Key = HMAC-SHA256(key="stream-derive-v1", data=videoHash)[0:32]
-    player.log('[NGC] Decrypting...');
-    const m3u8Text = await decryptM3u8(encryptedBytes, ivBytes, videoHash);
+    if (!m3u8Text) throw new Error('Decryption failed');
 
-    if (!m3u8Text) {
-      throw new Error('Decryption failed');
-    }
-
-    player.log('[NGC] Decrypted! ' + m3u8Text.length + ' chars');
-
-    // ── 5. Create blob URL and play via hls.js ──
+    player.log('[NGC] Playing decrypted m3u8 (' + m3u8Text.length + ' chars)');
     const blob = new Blob([m3u8Text], { type: 'application/vnd.apple.mpegurl' });
-    const blobUrl = URL.createObjectURL(blob);
-
-    player.log('[NGC] Playing via hls.js...');
-    player.playHls(blobUrl, {
-      fLoader: createProxyFragLoader(embedOrigin),
-    });
+    player.playHls(URL.createObjectURL(blob), { fLoader: createProxyFragLoader(embedOrigin) });
   } catch (err: any) {
     player.log('[NGC] Error: ' + (err?.message || err));
-    player.playIframe(embedUrl || '');
+    player.playIframe(embedUrl);
   }
 })();

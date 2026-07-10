@@ -17,7 +17,7 @@ class NguonCPlugin implements Plugin.PluginBase {
   name = 'NguonC';
   icon = 'src/vi/nguonc/icon.png';
   site = SITE;
-  version = '1.0.28';
+  version = '1.0.29';
   customJS = 'src/vi/nguonc/player.js';
   contentType = ContentType.VIDEO;
 
@@ -306,7 +306,7 @@ class NguonCPlugin implements Plugin.PluginBase {
   }): Promise<string> {
     const metas: string[] = [
       '<meta name="lnreader-chapter-type" content="video">',
-      '<meta name="lnreader-debug-mode" content="true">',
+      '<meta name="lnreader-debug-mode" content="false">',
       '<meta id="no-cache-marker"/>',
       '<meta id="no-prefetch-marker"/>',
     ];
