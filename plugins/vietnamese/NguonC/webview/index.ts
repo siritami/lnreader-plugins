@@ -196,6 +196,8 @@ const createProxyFragLoader = (origin: string) => {
     // ── 6. Override fetch → window.reader.fetch ──
     //    player.js uses native fetch which may be CORS-blocked.
     //    Redirect to window.reader.fetch with absolute URLs.
+    //    Only pass method/headers/body — strip signal, mode, credentials etc.
+    //    that reader.fetch doesn't support (signal causes "aborted without reason").
     const origFetch = window.fetch;
     const fetchLog: string[] = [];
     (window as any).fetch = function (input: any, init?: any) {
@@ -219,8 +221,12 @@ const createProxyFragLoader = (origin: string) => {
         }
       }
 
+      // Only pass safe options — strip signal/mode/credentials/redirect etc.
+      const safeInit: Record<string, any> = { method, headers };
+      if (init?.body !== undefined) safeInit.body = init.body;
+
       return window.reader
-        .fetch(url, { ...init, headers })
+        .fetch(url, safeInit)
         .then(async (r: any) => {
           // Wrap into a minimal Response-like object so player.js .ok/.text() work
           const status = r.status ?? 200;
