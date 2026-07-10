@@ -256,9 +256,23 @@ const createProxyFragLoader = (origin: string) => {
         });
     };
 
-    // ── 7. Eval player.js ──
-    player.log('[NGC] Executing player.js...');
-    eval(playerJsSource);
+    // ── 7. Inject player.js via <script> tag (global scope, like real embed) ──
+    //    eval() runs in local scope which breaks the obfuscated rotation IIFE.
+    //    A <script> tag runs in global scope, matching real embed page behavior.
+    player.log('[NGC] Injecting player.js via <script> tag...');
+    await new Promise<void>((resolve, reject) => {
+      const s = document.createElement('script');
+      s.textContent = playerJsSource;
+      s.onload = () => {
+        player.log('[NGC] player.js script loaded OK');
+        resolve();
+      };
+      s.onerror = (e) => {
+        player.log('[NGC] player.js script load error');
+        reject(new Error('script tag onerror'));
+      };
+      document.head.appendChild(s);
+    });
 
     // ── 8. Fire DOMContentLoaded so player.js listeners trigger ──
     //    In the real embed page player.js is <script defer> and the DOM
@@ -266,24 +280,22 @@ const createProxyFragLoader = (origin: string) => {
     //    any DOMContentLoaded handlers registered by player.js would
     //    never fire. Dispatch the event to kick them off.
     player.log('[NGC] Dispatching DOMContentLoaded...');
-    setTimeout(() => {
-      document.dispatchEvent(new Event('DOMContentLoaded'));
-    }, 0);
+    document.dispatchEvent(new Event('DOMContentLoaded'));
 
     // ── 9. Wait for decryption (poll for captured blob URL) ──
     let attempts = 0;
-    const maxWaitMs = 20000;
+    const maxWaitMs = 25000;
     const pollMs = 500;
     while (!capturedM3u8Url && attempts * pollMs < maxWaitMs) {
       await new Promise((r) => setTimeout(r, pollMs));
       attempts++;
       if (attempts % 4 === 0) {
         player.log(
-          '[NGC] Waiting for decryption... (' +
+          '[NGC] Waiting... (' +
             (attempts * pollMs / 1000).toFixed(1) +
-            's, fetchLog: ' +
+            's, fetches: ' +
             fetchLog.length +
-            ' calls)',
+            ')',
         );
       }
     }
