@@ -52,6 +52,7 @@ const decryptM3u8 = async (raw: string, key: string) => {
   console.log('[NGC] ivBytes length: ' + ivBytes.length);
   console.log('[NGC] encryptedBytes length: ' + encryptedBytes.length);
 
+  // AES-GCM: auth tag (last 16 bytes) is part of ciphertext
   const cryptoKey = await crypto.subtle.importKey(
     'raw',
     keyBytes,
@@ -60,8 +61,9 @@ const decryptM3u8 = async (raw: string, key: string) => {
     ['decrypt'],
   );
 
+  // Try decrypt without explicit tagLength (let browser auto-detect)
   const decrypted = await crypto.subtle.decrypt(
-    { name: 'AES-GCM', iv: ivBytes, tagLength: 128 },
+    { name: 'AES-GCM', iv: ivBytes },
     cryptoKey,
     encryptedBytes,
   );
@@ -150,14 +152,13 @@ const createProxyFragLoader = (origin: string) => {
   const streamUrl = `${origin}/${s}`;
 
   try {
-    // Fetch encrypted m3u8 (GET without x-auth — server accepts plain GET)
+    // Fetch encrypted m3u8 — use native fetch (window.reader.fetch may corrupt response)
     player.log('[NGC] GET encrypted m3u8');
-    const res = await window.reader.fetch(streamUrl, {
+    const res = await fetch(streamUrl, {
       method: 'GET',
       headers: {
         'Referer': iframeUrl,
       },
-      referrer: iframeUrl,
     });
 
     player.log('[NGC] GET status: ' + res.status);
