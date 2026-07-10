@@ -36,10 +36,21 @@ const decryptM3u8 = async (raw: string, key: string) => {
     throw new Error('Định dạng tệp mã hóa không hợp lệ.');
   }
 
+  console.log('[NGC] IV length: ' + ivHex.length + ' hex');
+  console.log('[NGC] Key length: ' + key.length);
+  console.log('[NGC] Encrypted data b64 length: ' + encryptedData.length);
+
   const isHexKey = key.length === 64 && /^[0-9a-fA-F]+$/.test(key);
+  console.log('[NGC] isHexKey: ' + isHexKey);
   const keyBytes = isHexKey
     ? hexToBytes(key)
     : new TextEncoder().encode(key).slice(0, 32);
+
+  const ivBytes = hexToBytes(ivHex);
+  const encryptedBytes = b64Decode(encryptedData);
+  console.log('[NGC] keyBytes length: ' + keyBytes.length);
+  console.log('[NGC] ivBytes length: ' + ivBytes.length);
+  console.log('[NGC] encryptedBytes length: ' + encryptedBytes.length);
 
   const cryptoKey = await crypto.subtle.importKey(
     'raw',
@@ -50,9 +61,9 @@ const decryptM3u8 = async (raw: string, key: string) => {
   );
 
   const decrypted = await crypto.subtle.decrypt(
-    { name: 'AES-GCM', iv: hexToBytes(ivHex), tagLength: 128 },
+    { name: 'AES-GCM', iv: ivBytes, tagLength: 128 },
     cryptoKey,
-    b64Decode(encryptedData),
+    encryptedBytes,
   );
 
   return new TextDecoder().decode(decrypted);
@@ -152,6 +163,8 @@ const createProxyFragLoader = (origin: string) => {
     player.log('[NGC] GET status: ' + res.status);
     const text = await res.text();
     player.log('[NGC] Response length: ' + text.length);
+    player.log('[NGC] First 100: ' + text.substring(0, 100));
+    player.log('[NGC] Key: ' + k.substring(0, 16) + '... len=' + k.length);
 
     const m3u8 = await decryptM3u8(text, k);
     player.log('[NGC] Decrypted m3u8, length: ' + m3u8.length);
