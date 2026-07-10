@@ -7,40 +7,17 @@ import { encodeHtmlEntities, Buffer } from '@libs/utils';
 import { ContentType } from '@libs/pluginMetadata';
 import { storage } from '@libs/storage';
 import { load } from 'cheerio';
-import { NodeCrypto } from '@libs/utils';
+
 
 const SITE = 'https://phim.nguonc.com';
 const API_BASE = SITE + '/api';
-
-function hexToBytes(hex: string): Uint8Array {
-  const bytes = new Uint8Array(hex.length / 2);
-  for (let i = 0; i < hex.length; i += 2) {
-    bytes[i / 2] = parseInt(hex.substring(i, i + 2), 16);
-  }
-  return bytes;
-}
-
-function decryptAesGcm(
-  encrypted: Uint8Array,
-  key: Uint8Array,
-  iv: Uint8Array,
-): string {
-  // GCM: last 16 bytes are the auth tag
-  const tagLength = 16;
-  const tag = encrypted.slice(encrypted.length - tagLength);
-  const data = encrypted.slice(0, encrypted.length - tagLength);
-  const decipher = (NodeCrypto as any).createDecipheriv('aes-256-gcm', key, iv);
-  decipher.setAuthTag(tag);
-  const decrypted = Buffer.concat([decipher.update(Buffer.from(data)), decipher.final()]);
-  return decrypted.toString();
-}
 
 class NguonCPlugin implements Plugin.PluginBase {
   id = 'nguonc';
   name = 'NguonC';
   icon = 'src/vi/nguonc/icon.png';
   site = SITE;
-  version = '1.0.14';
+  version = '1.0.15';
   customJS = 'src/vi/nguonc/player.js';
   contentType = ContentType.VIDEO;
 
@@ -306,8 +283,8 @@ class NguonCPlugin implements Plugin.PluginBase {
     throw new Error('Không tìm thấy dữ liệu tập phim này');
   }
 
-  async getM3u8DataFromEmbed(embedUrl: string) {
-    const html = await fetchText(embedUrl);
+  async getM3u8DataFromEmbed(url: string) {
+    const html = await fetchText(url);
     const $ = load(html);
     const div = $('#player');
     const obf = JSON.parse(
@@ -317,8 +294,7 @@ class NguonCPlugin implements Plugin.PluginBase {
       hD: string;
       kX?: string;
     };
-
-    const streamPath = obf.sUb;
+    let streamPath = obf.sUb;
     let encryptionKey = obf.kX || '';
     try {
       const sub = JSON.parse(
@@ -330,61 +306,7 @@ class NguonCPlugin implements Plugin.PluginBase {
     } catch {
       // sUb is not base64 JSON, use as-is (old format)
     }
-
-    const origin = new URL(embedUrl).origin;
-    const streamUrl = `${origin}/${streamPath}`;
-
-    // Step 1: POST to get session token
-    const tokenRes = await fetchApi(streamUrl, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Referer: embedUrl,
-      },
-    });
-    const tokenData = await tokenRes.json();
-    const xat = tokenData?.xat || '';
-
-    // Step 2: GET encrypted m3u8 with x-auth header
-    const m3u8Res = await fetchApi(streamUrl, {
-      method: 'GET',
-      headers: {
-        Referer: embedUrl,
-        'x-auth': xat,
-      },
-    });
-    const encryptedRaw = await m3u8Res.text();
-
-    // Step 3: Decrypt AES-GCM
-    let ivHex = '';
-    let encryptedData = '';
-    for (const rawLine of encryptedRaw.split('\n')) {
-      const line = rawLine.trim();
-      if (line.startsWith('#ENC-AESGCM')) {
-        const m = line.match(/iv=([a-fA-F0-9]+)/);
-        if (m) ivHex = m[1];
-      } else if (line && !line.startsWith('#')) {
-        encryptedData = line;
-      }
-    }
-
-    if (!ivHex || !encryptedData) {
-      throw new Error('Encrypted m3u8 format invalid');
-    }
-
-    const isHexKey =
-      encryptionKey.length === 64 && /^[0-9a-fA-F]+$/.test(encryptionKey);
-    const keyBytes = isHexKey
-      ? hexToBytes(encryptionKey)
-      : new TextEncoder().encode(encryptionKey).slice(0, 32);
-
-    const m3u8Content = decryptAesGcm(
-      Buffer.from(encryptedData, 'base64'),
-      keyBytes,
-      hexToBytes(ivHex),
-    );
-
-    return { m3u8: m3u8Content, origin };
+    return { sUb: streamPath, hD: obf.hD, kX: encryptionKey };
   }
 
   // ---------- buildPlayerHtml ----------
@@ -410,10 +332,11 @@ class NguonCPlugin implements Plugin.PluginBase {
       );
     } else {
       metas.push('<meta name="lnreader-video-mode" content="lazy">');
-      const data = await this.getM3u8DataFromEmbed(opts.embed!);
+      const iframeObf = await this.getM3u8DataFromEmbed(opts.embed!);
       const attrs: string[] = ['id="nguonc-player-container"'];
-      attrs.push(`data-origin="${encodeHtmlEntities(data.origin)}"`);
-      attrs.push(`data-m3u8="${encodeHtmlEntities(Buffer.from(data.m3u8).toString('base64'))}"`);
+      attrs.push(`data-iframe="${encodeHtmlEntities(opts.embed)}"`);
+      attrs.push(`data-s="${encodeHtmlEntities(iframeObf?.sUb)}"`);
+      attrs.push(`data-k="${encodeHtmlEntities(iframeObf?.kX)}"`);
       metas.push(`<div ${attrs.join(' ')} style="display:none;"></div>`);
     }
 
