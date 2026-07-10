@@ -7,7 +7,7 @@ import { encodeHtmlEntities, Buffer } from '@libs/utils';
 import { ContentType } from '@libs/pluginMetadata';
 import { storage } from '@libs/storage';
 import { load } from 'cheerio';
-import { gcm } from '@libs/aes';
+import { NodeCrypto } from '@libs/utils';
 
 const SITE = 'https://phim.nguonc.com';
 const API_BASE = SITE + '/api';
@@ -25,9 +25,14 @@ function decryptAesGcm(
   key: Uint8Array,
   iv: Uint8Array,
 ): string {
-  const cipher = gcm(key, iv);
-  const decrypted = cipher.decrypt(encrypted);
-  return new TextDecoder().decode(decrypted);
+  // GCM: last 16 bytes are the auth tag
+  const tagLength = 16;
+  const tag = encrypted.slice(encrypted.length - tagLength);
+  const data = encrypted.slice(0, encrypted.length - tagLength);
+  const decipher = (NodeCrypto as any).createDecipheriv('aes-256-gcm', key, iv);
+  decipher.setAuthTag(tag);
+  const decrypted = Buffer.concat([decipher.update(Buffer.from(data)), decipher.final()]);
+  return decrypted.toString();
 }
 
 class NguonCPlugin implements Plugin.PluginBase {
@@ -35,7 +40,7 @@ class NguonCPlugin implements Plugin.PluginBase {
   name = 'NguonC';
   icon = 'src/vi/nguonc/icon.png';
   site = SITE;
-  version = '1.0.13';
+  version = '1.0.14';
   customJS = 'src/vi/nguonc/player.js';
   contentType = ContentType.VIDEO;
 
