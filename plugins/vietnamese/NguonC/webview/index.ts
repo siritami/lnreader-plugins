@@ -121,6 +121,7 @@ const createProxyFragLoader = (origin: string) => {
 };
 
 (async () => {
+  console.log('[NGC] Script loaded');
   const container = document.getElementById('nguonc-player-container');
   if (!container || !window.LNReaderPlayer) return;
 
