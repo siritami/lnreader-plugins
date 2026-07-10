@@ -124,41 +124,57 @@ const createProxyFragLoader = (origin: string) => {
   const container = document.getElementById('nguonc-player-container');
   if (!container || !window.LNReaderPlayer) return;
 
+  const player = window.LNReaderPlayer;
+  player.log('[NGC] customJS loaded, container found');
+
   const iframeUrl = container.getAttribute('data-iframe');
   const s = container.getAttribute('data-s');
   const k = container.getAttribute('data-k');
-  if (!iframeUrl || !s || !k) return;
+  if (!iframeUrl || !s || !k) {
+    player.log('[NGC] Missing data attributes');
+    return;
+  }
 
   const origin = new URL(iframeUrl).origin;
   const streamUrl = `${origin}/${s}`;
 
-  // Step 1: POST to get session token (xat)
-  const tokenRes = await window.reader.fetch(streamUrl, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Referer: iframeUrl,
-    },
-    referrer: iframeUrl,
-  });
-  const tokenData = await tokenRes.json();
-  const xat = tokenData?.xat || '';
+  try {
+    // Step 1: POST to get session token (xat)
+    player.log('[NGC] POST to get token: ' + streamUrl);
+    const tokenRes = await window.reader.fetch(streamUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Referer: iframeUrl,
+      },
+      referrer: iframeUrl,
+    });
+    const tokenData = await tokenRes.json();
+    const xat = tokenData?.xat || '';
+    player.log('[NGC] Got xat: ' + (xat ? 'yes' : 'no'));
 
-  // Step 2: GET encrypted m3u8 with x-auth header
-  const res = await window.reader.fetch(streamUrl, {
-    method: 'GET',
-    headers: {
-      Referer: iframeUrl,
-      'x-auth': xat,
-    },
-    referrer: iframeUrl,
-  });
+    // Step 2: GET encrypted m3u8 with x-auth header
+    player.log('[NGC] GET encrypted m3u8');
+    const res = await window.reader.fetch(streamUrl, {
+      method: 'GET',
+      headers: {
+        Referer: iframeUrl,
+        'x-auth': xat,
+      },
+      referrer: iframeUrl,
+    });
 
-  const m3u8 = await decryptM3u8(await res.text(), k);
-  const blob = new Blob([m3u8], { type: 'application/vnd.apple.mpegurl' });
-  const url = URL.createObjectURL(blob);
+    const m3u8 = await decryptM3u8(await res.text(), k);
+    player.log('[NGC] Decrypted m3u8, length: ' + m3u8.length);
 
-  window.LNReaderPlayer.playHls(url, {
-    fLoader: createProxyFragLoader(origin),
-  });
+    const blob = new Blob([m3u8], { type: 'application/vnd.apple.mpegurl' });
+    const url = URL.createObjectURL(blob);
+
+    player.playHls(url, {
+      fLoader: createProxyFragLoader(origin),
+    });
+    player.log('[NGC] playHls called');
+  } catch (err: any) {
+    player.log('[NGC] Error: ' + (err?.message || err));
+  }
 })();
