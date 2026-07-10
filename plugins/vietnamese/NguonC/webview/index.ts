@@ -197,6 +197,7 @@ const createProxyFragLoader = (origin: string) => {
     //    player.js uses native fetch which may be CORS-blocked.
     //    Redirect to window.reader.fetch with absolute URLs.
     const origFetch = window.fetch;
+    const fetchLog: string[] = [];
     (window as any).fetch = function (input: any, init?: any) {
       let url =
         typeof input === 'string' ? input : input?.url || String(input);
@@ -204,32 +205,90 @@ const createProxyFragLoader = (origin: string) => {
       if (!url.startsWith('http')) {
         url = embedOrigin + (url.startsWith('/') ? url : '/' + url);
       }
-      // Remove x-auth header (not needed, and reader.fetch may not support it)
+      const method = init?.method || 'GET';
+      const logEntry = method + ' ' + url.substring(0, 120);
+      fetchLog.push(logEntry);
+      player.log('[NGC] fetch → ' + logEntry);
+
+      // Build headers — remove x-auth (not needed, reader.fetch may not support it)
+      let headers: Record<string, string> = {};
       if (init?.headers) {
-        const h: Record<string, string> = {};
         const hdrs = init.headers as Record<string, string>;
         for (const k of Object.keys(hdrs)) {
-          if (k.toLowerCase() !== 'x-auth') h[k] = hdrs[k];
+          if (k.toLowerCase() !== 'x-auth') headers[k] = hdrs[k];
         }
-        init = { ...init, headers: h };
       }
-      return window.reader.fetch(url, init);
+
+      return window.reader
+        .fetch(url, { ...init, headers })
+        .then(async (r: any) => {
+          // Wrap into a minimal Response-like object so player.js .ok/.text() work
+          const status = r.status ?? 200;
+          const ok = r.ok ?? (status >= 200 && status < 300);
+          const respHeaders: Record<string, string> = {};
+          if (r.headers?.forEach) {
+            r.headers.forEach((v: string, k: string) => {
+              respHeaders[k] = v;
+            });
+          }
+          const body = await r.text();
+          player.log(
+            '[NGC] fetch ← ' + status + ' (' + body.length + ' chars)',
+          );
+          return {
+            ok,
+            status,
+            headers: respHeaders,
+            text: () => Promise.resolve(body),
+            json: () => Promise.resolve(JSON.parse(body)),
+            arrayBuffer: () =>
+              Promise.resolve(
+                new TextEncoder().encode(body).buffer,
+              ),
+            clone() {
+              return this;
+            },
+          };
+        })
+        .catch((err: any) => {
+          player.log('[NGC] fetch error: ' + err.message);
+          throw err;
+        });
     };
 
     // ── 7. Eval player.js ──
     player.log('[NGC] Executing player.js...');
     eval(playerJsSource);
 
-    // ── 8. Wait for decryption (poll for captured blob URL) ──
+    // ── 8. Fire DOMContentLoaded so player.js listeners trigger ──
+    //    In the real embed page player.js is <script defer> and the DOM
+    //    is ready when it runs. Here the DOM is already loaded, so
+    //    any DOMContentLoaded handlers registered by player.js would
+    //    never fire. Dispatch the event to kick them off.
+    player.log('[NGC] Dispatching DOMContentLoaded...');
+    setTimeout(() => {
+      document.dispatchEvent(new Event('DOMContentLoaded'));
+    }, 0);
+
+    // ── 9. Wait for decryption (poll for captured blob URL) ──
     let attempts = 0;
-    const maxWaitMs = 15000;
+    const maxWaitMs = 20000;
     const pollMs = 500;
     while (!capturedM3u8Url && attempts * pollMs < maxWaitMs) {
       await new Promise((r) => setTimeout(r, pollMs));
       attempts++;
+      if (attempts % 4 === 0) {
+        player.log(
+          '[NGC] Waiting for decryption... (' +
+            (attempts * pollMs / 1000).toFixed(1) +
+            's, fetchLog: ' +
+            fetchLog.length +
+            ' calls)',
+        );
+      }
     }
 
-    // ── 9. Cleanup ──
+    // ── 10. Cleanup ──
     (window as any).fetch = origFetch;
     URL.createObjectURL = origCreateObjectURL;
 
@@ -237,7 +296,7 @@ const createProxyFragLoader = (origin: string) => {
       player.log('[NGC] Decryption succeeded via player.js');
     } else {
       player.log(
-        '[NGC] Timeout waiting for player.js decryption, falling back to iframe',
+        '[NGC] Timeout (' + fetchLog.length + ' fetch calls). Falling back to iframe',
       );
       player.playIframe(embedUrl);
     }
