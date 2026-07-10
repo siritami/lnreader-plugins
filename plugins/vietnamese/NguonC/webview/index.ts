@@ -1,75 +1,14 @@
 /* eslint-disable */
 /// <reference types="webview" />
 
-const hexToBytes = (hex: string) => {
-  const bytes = new Uint8Array(hex.length / 2);
-  for (let i = 0; i < hex.length; i += 2) {
-    bytes[i / 2] = parseInt(hex.substring(i, i + 2), 16);
-  }
-  return bytes;
-};
-
-const b64Decode = (b64: string) => {
-  const bin = atob(b64);
-  const bytes = new Uint8Array(bin.length);
-  for (let i = 0; i < bin.length; i++) {
-    bytes[i] = bin.charCodeAt(i);
-  }
-  return bytes;
-};
-
-const decryptM3u8 = async (raw: string, key: string) => {
-  let ivHex = '';
-  let encryptedData = '';
-
-  for (const rawLine of raw.split('\n')) {
-    const line = rawLine.trim();
-    if (line.startsWith('#ENC-AESGCM')) {
-      const m = line.match(/iv=([a-fA-F0-9]+)/);
-      if (m) ivHex = m[1];
-    } else if (line && !line.startsWith('#')) {
-      encryptedData = line;
-    }
-  }
-
-  if (!ivHex || !encryptedData) {
-    throw new Error('Định dạng tệp mã hóa không hợp lệ.');
-  }
-
-  console.log('[NGC] IV length: ' + ivHex.length + ' hex');
-  console.log('[NGC] Key length: ' + key.length);
-  console.log('[NGC] Encrypted data b64 length: ' + encryptedData.length);
-
-  const isHexKey = key.length === 64 && /^[0-9a-fA-F]+$/.test(key);
-  console.log('[NGC] isHexKey: ' + isHexKey);
-  const keyBytes = isHexKey
-    ? hexToBytes(key)
-    : new TextEncoder().encode(key).slice(0, 32);
-
-  const ivBytes = hexToBytes(ivHex);
-  const encryptedBytes = b64Decode(encryptedData);
-  console.log('[NGC] keyBytes length: ' + keyBytes.length);
-  console.log('[NGC] ivBytes length: ' + ivBytes.length);
-  console.log('[NGC] encryptedBytes length: ' + encryptedBytes.length);
-
-  // AES-GCM: auth tag (last 16 bytes) is part of ciphertext
-  const cryptoKey = await crypto.subtle.importKey(
-    'raw',
-    keyBytes,
-    { name: 'AES-GCM' },
-    false,
-    ['decrypt'],
-  );
-
-  // Try decrypt without explicit tagLength (let browser auto-detect)
-  const decrypted = await crypto.subtle.decrypt(
-    { name: 'AES-GCM', iv: ivBytes },
-    cryptoKey,
-    encryptedBytes,
-  );
-
-  return new TextDecoder().decode(decrypted);
-};
+/**
+ * NguonC - WebView Video Player
+ *
+ * Loads the embed page's player.js and lets it handle decryption natively.
+ * Captures the decrypted m3u8 blob URL and plays via LNReaderPlayer.playHls().
+ *
+ * Fallback: playIframe if player.js fails.
+ */
 
 const createProxyFragLoader = (origin: string) => {
   return class ProxyFragLoader {
@@ -113,18 +52,18 @@ const createProxyFragLoader = (origin: string) => {
           headers: { Referer: origin },
           referrer: origin,
         })
-        .then(resp => {
+        .then((resp: any) => {
           if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
           this.stats.loading.first = performance.now();
           return resp.arrayBuffer();
         })
-        .then(buf => {
+        .then((buf: any) => {
           this.stats.loading.end = performance.now();
           this.stats.loaded = buf.byteLength;
           this.stats.total = buf.byteLength;
           cbs.onSuccess({ data: buf }, this.stats, ctx, null);
         })
-        .catch(err => {
+        .catch((err: any) => {
           if (err.name === 'AbortError') return;
           this.stats.loading.end = performance.now();
           cbs.onError({ code: 0, text: err.message }, ctx, null, this.stats);
@@ -134,50 +73,176 @@ const createProxyFragLoader = (origin: string) => {
 };
 
 (async () => {
-  console.log('[NGC] Script loaded');
-  const container = document.getElementById('nguonc-player-container');
-  if (!container || !window.LNReaderPlayer) return;
-
+  console.log('[NGC] Webview script loaded');
   const player = window.LNReaderPlayer;
+  if (!player) return;
 
-  const iframeUrl = container.getAttribute('data-iframe');
-  const s = container.getAttribute('data-s');
-  const k = container.getAttribute('data-k');
-  if (!iframeUrl || !s || !k) {
+  const container = document.getElementById('nguonc-player-container');
+  if (!container) return;
+
+  const embedUrl = container.getAttribute('data-iframe');
+  const dataObf = container.getAttribute('data-obf');
+
+  if (!embedUrl || !dataObf) {
     player.log('[NGC] Missing data attributes');
     return;
   }
 
-  const origin = new URL(iframeUrl).origin;
-  const streamUrl = `${origin}/${s}`;
-
   try {
-    // Fetch encrypted m3u8 — use native fetch (window.reader.fetch may corrupt response)
-    player.log('[NGC] GET encrypted m3u8');
-    const res = await fetch(streamUrl, {
-      method: 'GET',
-      headers: {
-        'Referer': iframeUrl,
+    const embedOrigin = new URL(embedUrl).origin;
+
+    // ── 1. Set up DOM for player.js ──
+    const playerDiv = document.createElement('div');
+    playerDiv.id = 'player';
+    playerDiv.setAttribute('data-obf', dataObf);
+    playerDiv.style.display = 'none';
+    document.body.appendChild(playerDiv);
+
+    // ── 2. Set globals BEFORE player.js runs ──
+    const streamData = JSON.parse(atob(dataObf));
+    (window as any).streamURL = streamData.sUb;
+    (window as any).videoHash = streamData.hD;
+    (window as any).devtoolsDetector = {
+      launch() {},
+      addListener() {},
+      detect() {
+        return false;
       },
-    });
+    };
 
-    player.log('[NGC] GET status: ' + res.status);
-    const text = await res.text();
-    player.log('[NGC] Response length: ' + text.length);
-    player.log('[NGC] First 100: ' + text.substring(0, 100));
-    player.log('[NGC] Key: ' + k.substring(0, 16) + '... len=' + k.length);
+    // ── 3. Mock JWPlayer (player.js needs it to not crash) ──
+    const mockJwp: any = function () {
+      return {
+        setup() {},
+        on() {},
+        once() {},
+        play() {},
+        pause() {},
+        stop() {},
+        getPlaylistItem() {
+          return {};
+        },
+        getPosition() {
+          return 0;
+        },
+        getDuration() {
+          return 0;
+        },
+        getState() {
+          return 'idle';
+        },
+        remove() {},
+        setVolume() {},
+        setMute() {},
+        fullscreen() {},
+        getAudioTracks() {
+          return [];
+        },
+        getCurrentAudioTrack() {
+          return 0;
+        },
+        setCurrentAudioTrack() {},
+        getCaptionsList() {
+          return [];
+        },
+        getCurrentCaption() {
+          return 0;
+        },
+        setCaptions() {},
+      };
+    };
+    mockJwp.defaults = {};
+    (window as any).jwplayer = mockJwp;
 
-    const m3u8 = await decryptM3u8(text, k);
-    player.log('[NGC] Decrypted m3u8, length: ' + m3u8.length);
+    // ── 4. Hook URL.createObjectURL to capture decrypted m3u8 blob ──
+    const origCreateObjectURL = URL.createObjectURL;
+    let capturedM3u8Url: string | null = null;
 
-    const blob = new Blob([m3u8], { type: 'application/vnd.apple.mpegurl' });
-    const url = URL.createObjectURL(blob);
+    URL.createObjectURL = function (blob: any) {
+      const url = origCreateObjectURL.call(URL, blob);
+      if (blob instanceof Blob && !capturedM3u8Url) {
+        blob
+          .text()
+          .then((text: string) => {
+            if (
+              text.includes('#EXTINF') ||
+              text.includes('#EXTM3U') ||
+              text.includes('#EXT-X-VERSION')
+            ) {
+              capturedM3u8Url = url;
+              player.log(
+                '[NGC] Captured decrypted m3u8 (' + text.length + ' chars)',
+              );
+              player.playHls(url, {
+                fLoader: createProxyFragLoader(embedOrigin),
+              });
+              player.log('[NGC] playHls called');
+            }
+          })
+          .catch(() => {});
+      }
+      return url;
+    } as typeof URL.createObjectURL;
 
-    player.playHls(url, {
-      fLoader: createProxyFragLoader(origin),
-    });
-    player.log('[NGC] playHls called');
+    // ── 5. Fetch player.js from embed origin ──
+    player.log('[NGC] Fetching player.js...');
+    const playerJsUrl = embedOrigin + '/player.js?ver=1.7';
+    const resp = await window.reader.fetch(playerJsUrl, { method: 'GET' });
+    const playerJsSource = await resp.text();
+    player.log(
+      '[NGC] player.js loaded (' + playerJsSource.length + ' chars)',
+    );
+
+    // ── 6. Override fetch → window.reader.fetch ──
+    //    player.js uses native fetch which may be CORS-blocked.
+    //    Redirect to window.reader.fetch with absolute URLs.
+    const origFetch = window.fetch;
+    (window as any).fetch = function (input: any, init?: any) {
+      let url =
+        typeof input === 'string' ? input : input?.url || String(input);
+      // Convert relative URLs to absolute
+      if (!url.startsWith('http')) {
+        url = embedOrigin + (url.startsWith('/') ? url : '/' + url);
+      }
+      // Remove x-auth header (not needed, and reader.fetch may not support it)
+      if (init?.headers) {
+        const h: Record<string, string> = {};
+        const hdrs = init.headers as Record<string, string>;
+        for (const k of Object.keys(hdrs)) {
+          if (k.toLowerCase() !== 'x-auth') h[k] = hdrs[k];
+        }
+        init = { ...init, headers: h };
+      }
+      return window.reader.fetch(url, init);
+    };
+
+    // ── 7. Eval player.js ──
+    player.log('[NGC] Executing player.js...');
+    eval(playerJsSource);
+
+    // ── 8. Wait for decryption (poll for captured blob URL) ──
+    let attempts = 0;
+    const maxWaitMs = 15000;
+    const pollMs = 500;
+    while (!capturedM3u8Url && attempts * pollMs < maxWaitMs) {
+      await new Promise((r) => setTimeout(r, pollMs));
+      attempts++;
+    }
+
+    // ── 9. Cleanup ──
+    (window as any).fetch = origFetch;
+    URL.createObjectURL = origCreateObjectURL;
+
+    if (capturedM3u8Url) {
+      player.log('[NGC] Decryption succeeded via player.js');
+    } else {
+      player.log(
+        '[NGC] Timeout waiting for player.js decryption, falling back to iframe',
+      );
+      player.playIframe(embedUrl);
+    }
   } catch (err: any) {
     player.log('[NGC] Error: ' + (err?.message || err));
+    if (embedUrl) player.playIframe(embedUrl);
   }
 })();

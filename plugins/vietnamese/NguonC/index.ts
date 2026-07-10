@@ -17,7 +17,7 @@ class NguonCPlugin implements Plugin.PluginBase {
   name = 'NguonC';
   icon = 'src/vi/nguonc/icon.png';
   site = SITE;
-  version = '1.0.20';
+  version = '1.0.21';
   customJS = 'src/vi/nguonc/player.js';
   contentType = ContentType.VIDEO;
 
@@ -287,26 +287,15 @@ class NguonCPlugin implements Plugin.PluginBase {
     const html = await fetchText(url);
     const $ = load(html);
     const div = $('#player');
+    const dataObf = div.attr('data-obf')!;
     const obf = JSON.parse(
-      Buffer.from(div.attr('data-obf')!, 'base64').toString(),
+      Buffer.from(dataObf, 'base64').toString(),
     ) as {
       sUb: string;
       hD: string;
       kX?: string;
     };
-    let streamPath = obf.sUb;
-    let encryptionKey = obf.kX || '';
-    try {
-      const sub = JSON.parse(
-        Buffer.from(obf.sUb, 'base64').toString(),
-      ) as { h: string; t: string };
-      if (sub.t) {
-        encryptionKey = sub.t;
-      }
-    } catch {
-      // sUb is not base64 JSON, use as-is (old format)
-    }
-    return { sUb: streamPath, hD: obf.hD, kX: encryptionKey };
+    return { hD: obf.hD, dataObf };
   }
 
   // ---------- buildPlayerHtml ----------
@@ -335,8 +324,7 @@ class NguonCPlugin implements Plugin.PluginBase {
       const iframeObf = await this.getM3u8DataFromEmbed(opts.embed!);
       const attrs: string[] = ['id="nguonc-player-container"'];
       attrs.push(`data-iframe="${encodeHtmlEntities(opts.embed)}"`);
-      attrs.push(`data-s="${encodeHtmlEntities(iframeObf?.sUb)}"`);
-      attrs.push(`data-k="${encodeHtmlEntities(iframeObf?.kX)}"`);
+      attrs.push(`data-obf="${encodeHtmlEntities(iframeObf?.dataObf || '')}"`);
       metas.push(`<div ${attrs.join(' ')} style="display:none;"></div>`);
     }
 
