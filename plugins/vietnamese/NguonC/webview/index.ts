@@ -193,11 +193,9 @@ const createProxyFragLoader = (origin: string) => {
       '[NGC] player.js loaded (' + playerJsSource.length + ' chars)',
     );
 
-    // ── 6. Override fetch → window.reader.fetch ──
-    //    player.js uses native fetch which may be CORS-blocked.
-    //    Redirect to window.reader.fetch with absolute URLs.
-    //    Only pass method/headers/body — strip signal, mode, credentials etc.
-    //    that reader.fetch doesn't support (signal causes "aborted without reason").
+    // ── 6. Override fetch — try native fetch first, fall back to reader.fetch ──
+    //    The 522 error means reader.fetch is sending POST incorrectly.
+    //    Native fetch worked in MCP browser, so try it first.
     const origFetch = window.fetch;
     const fetchLog: string[] = [];
     (window as any).fetch = function (input: any, init?: any) {
@@ -212,7 +210,7 @@ const createProxyFragLoader = (origin: string) => {
       fetchLog.push(logEntry);
       player.log('[NGC] fetch → ' + logEntry);
 
-      // Build headers — remove x-auth (not needed, reader.fetch may not support it)
+      // Build clean init — strip signal/mode/credentials/redirect etc.
       let headers: Record<string, string> = {};
       if (init?.headers) {
         const hdrs = init.headers as Record<string, string>;
@@ -220,41 +218,50 @@ const createProxyFragLoader = (origin: string) => {
           if (k.toLowerCase() !== 'x-auth') headers[k] = hdrs[k];
         }
       }
+      const cleanInit: Record<string, any> = {
+        method,
+        headers,
+        referrer: embedUrl,
+      };
+      if (init?.body !== undefined) cleanInit.body = init.body;
 
-      // Only pass safe options — strip signal/mode/credentials/redirect etc.
-      const safeInit: Record<string, any> = { method, headers };
-      if (init?.body !== undefined) safeInit.body = init.body;
+      const wrapResponse = async (r: any) => {
+        const status = r.status ?? 200;
+        const ok = r.ok !== undefined ? r.ok : status >= 200 && status < 300;
+        const respHeaders: Record<string, string> = {};
+        if (r.headers?.forEach) {
+          r.headers.forEach((v: string, k: string) => {
+            respHeaders[k] = v;
+          });
+        }
+        const body = await r.text();
+        player.log(
+          '[NGC] fetch ← ' + status + ' (' + body.length + ' chars)',
+        );
+        return {
+          ok,
+          status,
+          headers: respHeaders,
+          text: () => Promise.resolve(body),
+          json: () => Promise.resolve(JSON.parse(body)),
+          arrayBuffer: () =>
+            Promise.resolve(new TextEncoder().encode(body).buffer),
+          clone() {
+            return this;
+          },
+        };
+      };
 
-      return window.reader
-        .fetch(url, safeInit)
-        .then(async (r: any) => {
-          // Wrap into a minimal Response-like object so player.js .ok/.text() work
-          const status = r.status ?? 200;
-          const ok = r.ok ?? (status >= 200 && status < 300);
-          const respHeaders: Record<string, string> = {};
-          if (r.headers?.forEach) {
-            r.headers.forEach((v: string, k: string) => {
-              respHeaders[k] = v;
-            });
-          }
-          const body = await r.text();
+      // Try native fetch first, fall back to reader.fetch
+      return origFetch(url, cleanInit)
+        .then(wrapResponse)
+        .catch((nativeErr: any) => {
           player.log(
-            '[NGC] fetch ← ' + status + ' (' + body.length + ' chars)',
+            '[NGC] native fetch failed: ' +
+              nativeErr.message +
+              ', trying reader.fetch',
           );
-          return {
-            ok,
-            status,
-            headers: respHeaders,
-            text: () => Promise.resolve(body),
-            json: () => Promise.resolve(JSON.parse(body)),
-            arrayBuffer: () =>
-              Promise.resolve(
-                new TextEncoder().encode(body).buffer,
-              ),
-            clone() {
-              return this;
-            },
-          };
+          return window.reader.fetch(url, cleanInit).then(wrapResponse);
         })
         .catch((err: any) => {
           player.log('[NGC] fetch error: ' + err.message);
