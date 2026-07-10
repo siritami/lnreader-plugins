@@ -16,7 +16,7 @@ class NguonCPlugin implements Plugin.PluginBase {
   name = 'NguonC';
   icon = 'src/vi/nguonc/icon.png';
   site = SITE;
-  version = '1.0.9';
+  version = '1.0.11';
   customJS = 'src/vi/nguonc/player.js';
   contentType = ContentType.VIDEO;
 
@@ -291,9 +291,21 @@ class NguonCPlugin implements Plugin.PluginBase {
     ) as {
       sUb: string;
       hD: string;
-      kX: string;
+      kX?: string;
     };
-    return obf;
+    let streamPath = obf.sUb;
+    let encryptionKey = obf.kX || '';
+    try {
+      const sub = JSON.parse(
+        Buffer.from(obf.sUb, 'base64').toString(),
+      ) as { h: string; t: string };
+      if (sub.t) {
+        encryptionKey = sub.t;
+      }
+    } catch {
+      // sUb is not base64 JSON, use as-is (old format)
+    }
+    return { sUb: streamPath, hD: obf.hD, kX: encryptionKey };
   }
 
   // ---------- buildPlayerHtml ----------

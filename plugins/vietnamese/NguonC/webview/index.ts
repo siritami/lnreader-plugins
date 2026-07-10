@@ -1,48 +1,32 @@
 /* eslint-disable */
 /// <reference types="webview" />
 
-function hexToBytes(hexString: string) {
-  const bytes = new Uint8Array(hexString.length / 2);
-  for (let i = 0; i < hexString.length; i += 2) {
-    bytes[i / 2] = parseInt(hexString.substr(i, 2), 16);
+const hexToBytes = (hex: string) => {
+  const bytes = new Uint8Array(hex.length / 2);
+  for (let i = 0; i < hex.length; i += 2) {
+    bytes[i / 2] = parseInt(hex.substring(i, i + 2), 16);
   }
   return bytes;
-}
-function base64ToBytes(base64String: string) {
-  const binaryString = atob(base64String);
-  const bytes = new Uint8Array(binaryString.length);
-  for (let i = 0; i < binaryString.length; i++) {
-    bytes[i] = binaryString.charCodeAt(i);
-  }
-  return bytes;
-}
+};
 
-async function initPlayer() {
-  const container = document.getElementById('nguonc-player-container');
-  if (!container || !window.LNReaderPlayer) return;
-  const iframeUrl = container.getAttribute('data-iframe');
-  const s = container.getAttribute('data-s');
-  const h = container.getAttribute('data-h');
-  const k = container.getAttribute('data-k');
-  if (!iframeUrl) return;
-  const urlObj = new URL(iframeUrl);
-  const req = await window.reader.fetch(`${urlObj.origin}/${s}.m3u8`, {
-    method: 'GET',
-    headers: {
-      Referer: urlObj.origin,
-    },
-    referrer: urlObj.origin,
-  });
-  const m3u8Content = await req.text();
-  const lines = m3u8Content.split('\n');
+const b64Decode = (b64: string) => {
+  const bin = atob(b64);
+  const bytes = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) {
+    bytes[i] = bin.charCodeAt(i);
+  }
+  return bytes;
+};
+
+const decryptM3u8 = async (raw: string, key: string) => {
   let ivHex = '';
   let encryptedData = '';
 
-  for (let line of lines) {
-    line = line.trim();
+  for (const rawLine of raw.split('\n')) {
+    const line = rawLine.trim();
     if (line.startsWith('#ENC-AESGCM')) {
-      const ivMatch = line.match(/iv=([a-fA-F0-9]+)/);
-      if (ivMatch) ivHex = ivMatch[1];
+      const m = line.match(/iv=([a-fA-F0-9]+)/);
+      if (m) ivHex = m[1];
     } else if (line && !line.startsWith('#')) {
       encryptedData = line;
     }
@@ -52,55 +36,34 @@ async function initPlayer() {
     throw new Error('Định dạng tệp mã hóa không hợp lệ.');
   }
 
-  const ivBytes = hexToBytes(ivHex);
-  const encryptedBytes = base64ToBytes(encryptedData);
+  const isHexKey = key.length === 64 && /^[0-9a-fA-F]+$/.test(key);
+  const keyBytes = isHexKey
+    ? hexToBytes(key)
+    : new TextEncoder().encode(key).slice(0, 32);
 
-  const ciphertext = encryptedBytes.slice(0, -16);
-  const authTag = encryptedBytes.slice(-16);
-
-  const encryptionKey = k;
-  if (!encryptionKey) {
-    throw new Error('Thiếu khóa xác thực mã hóa.');
-  }
-
-  const textEncoder = new TextEncoder();
-  const keyBytes = textEncoder.encode(encryptionKey).slice(0, 32);
   const cryptoKey = await crypto.subtle.importKey(
     'raw',
     keyBytes,
-    {
-      name: 'AES-GCM',
-    },
+    { name: 'AES-GCM' },
     false,
     ['decrypt'],
   );
 
-  const encryptedBuffer = new Uint8Array(ciphertext.length + authTag.length);
-  encryptedBuffer.set(ciphertext);
-  encryptedBuffer.set(authTag, ciphertext.length);
-
-  const algorithm = {
-    name: 'AES-GCM',
-    iv: ivBytes,
-    tagLength: 128,
-  };
-
-  const decryptedBuffer = await crypto.subtle.decrypt(
-    algorithm,
+  const decrypted = await crypto.subtle.decrypt(
+    { name: 'AES-GCM', iv: hexToBytes(ivHex), tagLength: 128 },
     cryptoKey,
-    encryptedBuffer,
+    b64Decode(encryptedData),
   );
-  const textDecoder = new TextDecoder();
-  const m3u8 = textDecoder.decode(decryptedBuffer);
-  const blob = new Blob([m3u8], {
-    type: 'application/vnd.apple.mpegurl',
-  });
-  const url = URL.createObjectURL(blob);
-  let ProxyFragLoader = function (config: any) {
-    // @ts-ignore
-    this._config = config;
-    // @ts-ignore
-    this.stats = {
+
+  return new TextDecoder().decode(decrypted);
+};
+
+const createProxyFragLoader = (origin: string) => {
+  return class ProxyFragLoader {
+    private _config: any;
+    private context: any = null;
+    private _controller: AbortController | null = null;
+    stats = {
       aborted: false,
       loaded: 0,
       retry: 0,
@@ -111,55 +74,74 @@ async function initPlayer() {
       parsing: { start: 0, end: 0 },
       buffering: { start: 0, first: 0, end: 0 },
     };
-    // @ts-ignore
-    this.context = null;
-    // @ts-ignore
-    this._controller = null;
-  };
-  ProxyFragLoader.prototype.destroy = function () {
-    this.abort();
-  };
-  ProxyFragLoader.prototype.abort = function () {
-    if (this._controller) {
-      this._controller.abort();
-      this._controller = null;
+
+    constructor(config: any) {
+      this._config = config;
+    }
+
+    destroy() {
+      this.abort();
+    }
+
+    abort() {
+      if (this._controller) {
+        this._controller.abort();
+        this._controller = null;
+      }
+    }
+
+    load(ctx: any, _cfg: any, cbs: any) {
+      this.context = ctx;
+      this.stats.loading.start = performance.now();
+
+      window.reader
+        .fetch(ctx.url, {
+          method: 'GET',
+          headers: { Referer: origin },
+          referrer: origin,
+        })
+        .then(resp => {
+          if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+          this.stats.loading.first = performance.now();
+          return resp.arrayBuffer();
+        })
+        .then(buf => {
+          this.stats.loading.end = performance.now();
+          this.stats.loaded = buf.byteLength;
+          this.stats.total = buf.byteLength;
+          cbs.onSuccess({ data: buf }, this.stats, ctx, null);
+        })
+        .catch(err => {
+          if (err.name === 'AbortError') return;
+          this.stats.loading.end = performance.now();
+          cbs.onError({ code: 0, text: err.message }, ctx, null, this.stats);
+        });
     }
   };
-  // @ts-ignore
-  ProxyFragLoader.prototype.load = function (ctx, cfg, cbs) {
-    this.context = ctx;
-    var self = this;
-    self.stats.loading.start = performance.now();
-    window.reader
-      .fetch(ctx.url, {
-        method: 'GET',
-        headers: {
-          Referer: urlObj.origin,
-        },
-        referrer: urlObj.origin,
-      })
-      .then(function (resp) {
-        if (!resp.ok) throw new Error('HTTP ' + resp.status);
-        self.stats.loading.first = performance.now();
-        return resp.arrayBuffer();
-      })
-      .then(function (buf) {
-        self.stats.loading.end = performance.now();
-        self.stats.loaded = buf.byteLength;
-        self.stats.total = buf.byteLength;
+};
 
-        cbs.onSuccess({ data: buf }, self.stats, ctx, null);
-      })
-      .catch(function (err) {
-        if (err.name === 'AbortError') return;
-        self.stats.loading.end = performance.now();
-        cbs.onError({ code: 0, text: err.message }, ctx, null, self.stats);
-      });
-  };
+(async () => {
+  const container = document.getElementById('nguonc-player-container');
+  if (!container || !window.LNReaderPlayer) return;
+
+  const iframeUrl = container.getAttribute('data-iframe');
+  const s = container.getAttribute('data-s');
+  const k = container.getAttribute('data-k');
+  if (!iframeUrl || !s || !k) return;
+
+  const origin = new URL(iframeUrl).origin;
+
+  const res = await window.reader.fetch(`${origin}/${s}.m3u8`, {
+    method: 'GET',
+    headers: { Referer: origin },
+    referrer: origin,
+  });
+
+  const m3u8 = await decryptM3u8(await res.text(), k);
+  const blob = new Blob([m3u8], { type: 'application/vnd.apple.mpegurl' });
+  const url = URL.createObjectURL(blob);
 
   window.LNReaderPlayer.playHls(url, {
-    fLoader: ProxyFragLoader,
+    fLoader: createProxyFragLoader(origin),
   });
-}
-
-initPlayer();
+})();
