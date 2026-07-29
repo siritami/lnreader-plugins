@@ -21,18 +21,74 @@ function showError(msg: string) {
   log('ERROR: ' + msg);
 }
 
+/** Create a custom HLS.js fragment loader that uses window.reader.fetch (bypasses CORS) */
+function createReaderFLoader(referer: string) {
+  return class {
+    stats = {
+      aborted: false,
+      loaded: 0,
+      retry: 0,
+      total: 0,
+      chunkCount: 0,
+      bwEstimate: 0,
+      loading: { start: 0, first: 0, end: 0 },
+      parsing: { start: 0, end: 0 },
+      buffering: { start: 0, first: 0, end: 0 },
+    };
+    constructor() {}
+    destroy() {}
+    abort() {}
+    load(ctx: any, _cfg: any, cbs: any) {
+      this.stats.loading.start = performance.now();
+      window.reader
+        .fetch(ctx.url, {
+          method: 'GET',
+          headers: { Referer: referer },
+          referrer: referer,
+        })
+        .then((resp: any) => {
+          if (!resp.ok) throw new Error('HTTP ' + resp.status);
+          this.stats.loading.first = performance.now();
+          return resp.arrayBuffer();
+        })
+        .then((buf: any) => {
+          this.stats.loading.end = performance.now();
+          this.stats.loaded = buf.byteLength;
+          this.stats.total = buf.byteLength;
+          cbs.onSuccess({ data: buf }, this.stats, ctx, null);
+        })
+        .catch((err: any) => {
+          this.stats.loading.end = performance.now();
+          cbs.onError({ code: 0, text: err.message }, ctx, null, this.stats);
+        });
+    }
+  };
+}
+
 /** Play a URL through LNReaderPlayer based on its extension */
 function playUrl(url: string, player: LNReaderPlayerAPI) {
+  // Derive referer from the m3u8 URL origin so CDN accepts the request
+  let referer = '';
+  try {
+    referer = new URL(url).origin + '/';
+  } catch {
+    referer = 'https://yanhh3d.love/';
+  }
+
   if (/\.m3u8(\?|$)/i.test(url)) {
     log('Playing HLS: ' + url);
-    player.playHls(url);
+    player.playHls(url, {
+      fLoader: createReaderFLoader(referer),
+    } as any);
   } else if (/\.(mp4|webm|mkv)(\?|$)/i.test(url)) {
     log('Playing direct: ' + url);
     player.playDirect(url);
   } else {
     // fbcdn URLs without extension — treat as HLS
     log('Playing as HLS (no ext): ' + url);
-    player.playHls(url);
+    player.playHls(url, {
+      fLoader: createReaderFLoader(referer),
+    } as any);
   }
 }
 
