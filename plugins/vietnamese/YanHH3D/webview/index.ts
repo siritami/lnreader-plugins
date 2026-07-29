@@ -4,10 +4,8 @@
 /**
  * YanHH3D - WebView Video Player (customJS)
  *
- * Fetches the m3u8 manifest through window.reader.fetch (bypasses CORS/Referer
- * restrictions on fbcdn.cloud), rewrites relative segment URLs to absolute,
- * then feeds the rewritten manifest to HLS.js via a blob URL.
- * A custom fLoader also uses window.reader.fetch for segment loading.
+ * Uses window.reader.fetch (bypasses CORS) for BOTH manifest and segment
+ * loading via custom HLS.js loaders. No URL rewriting needed.
  *
  * Container data attributes:
  *   data-m3u8  → default (highest) m3u8 URL
@@ -24,21 +22,11 @@ function showError(msg: string) {
   log('ERROR: ' + msg);
 }
 
-/** Rewrite relative URLs in an m3u8 manifest to absolute URLs */
-function rewriteManifestUrls(manifest: string, baseUrl: string): string {
-  const origin = new URL(baseUrl).origin;
-  const baseDir = baseUrl.substring(0, baseUrl.lastIndexOf('/') + 1);
-  return manifest.replace(/^(?!#)(?!https?:\/\/)\S+$/gm, line => {
-    // Relative path — resolve against the directory of the manifest
-    if (line.startsWith('/')) {
-      return origin + line;
-    }
-    return baseDir + line;
-  });
-}
-
-/** Create a custom HLS.js loader that uses window.reader.fetch for everything */
-function createReaderLoader(referer: string) {
+/**
+ * Create a custom HLS.js loader (works for both fLoader and pLoader)
+ * that proxies ALL requests through window.reader.fetch with Referer header.
+ */
+function createProxyLoader(referer: string) {
   return class {
     stats = {
       aborted: false,
@@ -86,27 +74,8 @@ function createReaderLoader(referer: string) {
   };
 }
 
-/** Fetch m3u8 manifest via window.reader.fetch, rewrite URLs, return blob URL */
-async function fetchAndRewriteM3u8(
-  m3u8Url: string,
-  referer: string,
-): Promise<string> {
-  log('Fetching manifest via reader.fetch: ' + m3u8Url);
-  const resp = await window.reader.fetch(m3u8Url, {
-    method: 'GET',
-    headers: { Referer: referer },
-    referrer: referer,
-  });
-  if (!resp.ok) throw new Error('Manifest fetch failed: HTTP ' + resp.status);
-  const text = await resp.text();
-  log('Manifest fetched (' + text.length + ' chars)');
-  const rewritten = rewriteManifestUrls(text, m3u8Url);
-  const blob = new Blob([rewritten], { type: 'application/vnd.apple.mpegurl' });
-  return URL.createObjectURL(blob);
-}
-
-/** Play an m3u8 URL through LNReaderPlayer */
-async function playM3u8(url: string, player: LNReaderPlayerAPI) {
+/** Play an m3u8 URL through LNReaderPlayer with proxy loaders */
+function playM3u8(url: string, player: LNReaderPlayerAPI) {
   let referer = '';
   try {
     referer = new URL(url).origin + '/';
@@ -114,26 +83,18 @@ async function playM3u8(url: string, player: LNReaderPlayerAPI) {
     referer = 'https://yanhh3d.love/';
   }
 
-  try {
-    // Fetch manifest ourselves to bypass CORS/Referer restrictions
-    const blobUrl = await fetchAndRewriteM3u8(url, referer);
-    log('Playing from blob: ' + blobUrl);
-    player.playHls(blobUrl, {
-      fLoader: createReaderLoader(referer),
-    } as any);
-  } catch (err: any) {
-    log('Fetch failed, trying direct: ' + (err?.message || err));
-    // Last resort: try direct URL with custom loader
-    player.playHls(url, {
-      fLoader: createReaderLoader(referer),
-    } as any);
-  }
+  const loader = createProxyLoader(referer);
+  log('Playing HLS via proxy loader: ' + url);
+  player.playHls(url, {
+    fLoader: loader,
+    pLoader: loader,
+  } as any);
 }
 
 /** Play a URL based on its format */
-async function playUrl(url: string, player: LNReaderPlayerAPI) {
+function playUrl(url: string, player: LNReaderPlayerAPI) {
   if (/\.m3u8(\?|$)/i.test(url) || !/\.(mp4|webm|mkv)(\?|$)/i.test(url)) {
-    await playM3u8(url, player);
+    playM3u8(url, player);
   } else {
     log('Playing direct: ' + url);
     player.playDirect(url);
@@ -246,7 +207,7 @@ async function initPlayer() {
     return;
   }
 
-  await playUrl(bestUrl, player);
+  playUrl(bestUrl, player);
 
   if (servers.length > 1) {
     setTimeout(() => {

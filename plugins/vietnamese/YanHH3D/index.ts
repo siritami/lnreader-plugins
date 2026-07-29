@@ -14,7 +14,7 @@ class YanHH3DPlugin implements Plugin.PluginBase {
   name = 'YanHH3D';
   icon = 'src/vi/yanhh3d/icon.png';
   site = 'https://yanhh3d.love';
-  version = '1.1.0';
+  version = '1.2.0';
   filters = filters;
   contentType = ContentType.VIDEO;
 
