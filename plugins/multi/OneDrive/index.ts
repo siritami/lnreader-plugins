@@ -63,7 +63,7 @@ class OneDrivePlugin implements Plugin.PluginBase {
   name = 'OneDrive';
   icon = 'src/multi/onedrive/icon.png';
   site = 'https://onedrive.live.com';
-  version = '7.0.0';
+  version = '8.0.0';
   contentType = ContentType.VIDEO;
 
   pluginSettings: Plugin.PluginSettings = {
@@ -76,6 +76,11 @@ class OneDrivePlugin implements Plugin.PluginBase {
       value: '',
       label: 'OneDrive folder path',
       type: 'Text',
+    },
+    logout: {
+      value: false,
+      label: 'Logout and clear Microsoft tokens',
+      type: 'Switch',
     },
   };
 
@@ -91,6 +96,13 @@ class OneDrivePlugin implements Plugin.PluginBase {
       );
     }
     return folder.replace(/^\/+|\/+$/g, '');
+  }
+
+  private clearAuthentication(): void {
+    storage.delete('accessToken');
+    storage.delete('refreshToken');
+    storage.delete('deviceCode');
+    storage.delete('logout');
   }
 
   private async requestToken(refreshToken: string): Promise<string> {
@@ -173,6 +185,10 @@ class OneDrivePlugin implements Plugin.PluginBase {
   }
 
   private async accessToken(): Promise<string> {
+    if (storage.get('logout') === true) {
+      this.clearAuthentication();
+      throw new Error('Microsoft tokens cleared. Retry the plugin to sign in again.');
+    }
     const accessToken = this.setting('accessToken').trim();
     if (accessToken) return accessToken;
     const refreshToken = this.setting('refreshToken').trim();
