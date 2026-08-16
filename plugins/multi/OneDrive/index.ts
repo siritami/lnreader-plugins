@@ -75,6 +75,11 @@ class OneDrivePlugin implements Plugin.PluginBase {
       label: 'OneDrive folder path',
       type: 'Text',
     },
+    logout: {
+      value: false,
+      label: 'Logout from Microsoft account',
+      type: 'Switch',
+    },
   };
 
   private setting(name: string): string {
@@ -82,7 +87,20 @@ class OneDrivePlugin implements Plugin.PluginBase {
   }
 
   private get folder(): string {
-    return this.setting('folder').trim().replace(/^\/+|\/+$/g, '');
+    const folder = this.setting('folder').trim();
+    if (/\\{2,}/.test(folder)) {
+      throw new Error(
+        'Invalid OneDrive folder path. Use one slash or one backslash between folder names.',
+      );
+    }
+    return folder.replace(/\\/g, '/').replace(/^\/+|\/+$/g, '');
+  }
+
+  private logout(): void {
+    storage.delete('accessToken');
+    storage.delete('refreshToken');
+    storage.delete('deviceCode');
+    storage.delete('logout');
   }
 
   private async requestToken(refreshToken: string): Promise<string> {
@@ -165,6 +183,10 @@ class OneDrivePlugin implements Plugin.PluginBase {
   }
 
   private async accessToken(): Promise<string> {
+    if (storage.get('logout') === true) {
+      this.logout();
+      throw new Error('Logged out from Microsoft. Start the plugin to sign in again.');
+    }
     const accessToken = this.setting('accessToken').trim();
     if (accessToken) return accessToken;
     const refreshToken = this.setting('refreshToken').trim();
