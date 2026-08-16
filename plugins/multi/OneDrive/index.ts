@@ -61,7 +61,7 @@ class OneDrivePlugin implements Plugin.PluginBase {
   name = 'OneDrive';
   icon = 'src/multi/onedrive/icon.png';
   site = 'https://onedrive.live.com';
-  version = '4.0.0';
+  version = '5.0.0';
   contentType = ContentType.VIDEO;
 
   pluginSettings: Plugin.PluginSettings = {
@@ -215,11 +215,30 @@ class OneDrivePlugin implements Plugin.PluginBase {
   private async selectedFolderChildrenUrl(): Promise<string> {
     let childrenUrl = this.rootChildrenUrl();
     for (const segment of this.folder.split('/').filter(Boolean)) {
-      const folder = (await this.children(childrenUrl)).find(
-        item => item.folder && item.name.toLowerCase() === segment.toLowerCase(),
+      const expectedName = segment.trim().toLowerCase();
+      const listedItems = await this.children(childrenUrl);
+      let folder = listedItems.find(
+        item => item.folder && item.name.trim().toLowerCase() === expectedName,
       );
+
       if (!folder) {
-        throw new Error(`OneDrive folder not found: ${this.folder}`);
+        const searchUrl = childrenUrl.includes('/root/children')
+          ? `https://graph.microsoft.com/v1.0/me/drive/root/search(q='${encodeURIComponent(segment)}')`
+          : `${childrenUrl.replace(/\/children$/, '')}/search(q='${encodeURIComponent(segment)}')`;
+        folder = (await this.children(searchUrl)).find(
+          item => item.folder && item.name.trim().toLowerCase() === expectedName,
+        );
+      }
+
+      if (!folder) {
+        const availableFolders = listedItems
+          .filter(item => item.folder)
+          .map(item => item.name)
+          .slice(0, 20);
+        const suffix = availableFolders.length
+          ? ` Available root folders: ${availableFolders.join(', ')}`
+          : '';
+        throw new Error(`OneDrive folder not found: ${segment}.${suffix}`);
       }
       childrenUrl = `https://graph.microsoft.com/v1.0/me/drive/items/${encodeURIComponent(folder.id)}/children`;
     }
