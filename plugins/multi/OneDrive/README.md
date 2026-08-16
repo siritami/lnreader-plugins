@@ -1,13 +1,3 @@
-# OneDrive Video Plugin
-
-This plugin reads video files from OneDrive through Microsoft Graph and supports:
-
-- `.mp4`
-- `.mkv`
-- `.ts`
-
-It uses OAuth 2.0 device-code login. No rclone installation, rclone RC endpoint, client secret, or redirect URI is required.
-
 ## 1. Quick start: normal users
 
 Most users do not need to create a Microsoft Entra application. The plugin includes a default public client ID.
@@ -68,6 +58,22 @@ Novel covers are selected in this order:
 5. The default LNReader cover if no image or thumbnail is available.
 
 Chapter names use the original video filenames without the extension, such as `Ep1`.
+
+### Important: re-login after creating a root folder
+
+If you create a new folder directly in the OneDrive root after the plugin has already been authorized, the folder may not appear immediately. The existing Microsoft Graph session can continue using an older drive listing or account context.
+
+To refresh the account and root-folder list:
+
+1. Enable **Logout and clear Microsoft tokens** in the plugin settings.
+2. Reload the plugin once so the stored access token, refresh token, and device code are cleared.
+3. Complete Microsoft device-code login again with the same OneDrive account.
+4. Enter the new root folder name, for example `Anime`.
+5. Reload the plugin and tap **Retry** if necessary.
+
+Use the exact folder name and make sure it is under **My files** in the same OneDrive account used during device login.
+
+---
 
 ## 2. Advanced: create a Microsoft Entra application
 
