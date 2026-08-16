@@ -61,7 +61,7 @@ class OneDrivePlugin implements Plugin.PluginBase {
   name = 'OneDrive';
   icon = 'src/multi/onedrive/icon.png';
   site = 'https://onedrive.live.com';
-  version = '2.0.0';
+  version = '3.0.0';
   contentType = ContentType.VIDEO;
 
   pluginSettings: Plugin.PluginSettings = {
