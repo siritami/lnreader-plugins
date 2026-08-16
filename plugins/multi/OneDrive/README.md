@@ -23,8 +23,6 @@ Most users do not need to create a Microsoft Entra application. The plugin inclu
 9. Accept the requested Microsoft Graph permissions.
 10. Return to LNReader and retry the plugin.
 
-Signing in to <https://onedrive.live.com> alone does not authorize the plugin. Complete the device-code login separately.
-
 If the default client ID is blocked, unavailable, or you need your own application, follow the advanced setup below.
 
 ### OneDrive folder path
@@ -47,6 +45,8 @@ The plugin treats each item in this folder as follows:
 - Child folders are displayed as novels.
 - Videos inside a child folder become chapters of that novel.
 - Videos inside nested child folders are also included in the parent novel.
+- A video directly in the selected folder uses its OneDrive thumbnail as its cover.
+- Direct video names and chapter names do not include the `.mp4`, `.mkv`, or `.ts` extension.
 
 For example, with the folder path `Videos`:
 

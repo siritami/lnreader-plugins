@@ -75,11 +75,6 @@ class OneDrivePlugin implements Plugin.PluginBase {
       label: 'OneDrive folder path',
       type: 'Text',
     },
-    logout: {
-      value: false,
-      label: 'Logout from Microsoft account',
-      type: 'Switch',
-    },
   };
 
   private setting(name: string): string {
@@ -94,13 +89,6 @@ class OneDrivePlugin implements Plugin.PluginBase {
       );
     }
     return folder.replace(/\\/g, '/').replace(/^\/+|\/+$/g, '');
-  }
-
-  private logout(): void {
-    storage.delete('accessToken');
-    storage.delete('refreshToken');
-    storage.delete('deviceCode');
-    storage.delete('logout');
   }
 
   private async requestToken(refreshToken: string): Promise<string> {
@@ -183,10 +171,6 @@ class OneDrivePlugin implements Plugin.PluginBase {
   }
 
   private async accessToken(): Promise<string> {
-    if (storage.get('logout') === true) {
-      this.logout();
-      throw new Error('Logged out from Microsoft. Start the plugin to sign in again.');
-    }
     const accessToken = this.setting('accessToken').trim();
     if (accessToken) return accessToken;
     const refreshToken = this.setting('refreshToken').trim();
@@ -267,6 +251,10 @@ class OneDrivePlugin implements Plugin.PluginBase {
     return result.value?.[0]?.large?.url || result.value?.[0]?.medium?.url;
   }
 
+  private videoDisplayName(name: string): string {
+    return name.replace(/\.(mp4|mkv|ts)$/i, '');
+  }
+
   private async folderCoverUrl(folder: FolderEntry): Promise<string> {
     const contents = await this.listFolderContents(
       `https://graph.microsoft.com/v1.0/me/drive/items/${encodeURIComponent(folder.item.id)}/children`,
@@ -318,11 +306,13 @@ class OneDrivePlugin implements Plugin.PluginBase {
           cover: await this.folderCoverUrl(folder),
         })),
       )),
-      ...contents.videos.map(({ item, path }) => ({
-        name: path,
-        path: this.pathFor(item, path, 'video'),
-        cover: defaultCover,
-      })),
+      ...(await Promise.all(
+        contents.videos.map(async ({ item, path }) => ({
+          name: this.videoDisplayName(item.name),
+          path: this.pathFor(item, path, 'video'),
+          cover: (await this.videoThumbnailUrl(item)) || defaultCover,
+        })),
+      )),
     ];
   }
 
@@ -365,10 +355,16 @@ class OneDrivePlugin implements Plugin.PluginBase {
 
     return {
       path: novelPath,
-      name,
-      cover: defaultCover,
+      name: this.videoDisplayName(name),
+      cover: (await this.videoThumbnailUrl({ id, name })) || defaultCover,
       status: NovelStatus.Ongoing,
-      chapters: [{ name, path: this.pathFor({ id, name }, path, 'video'), chapterNumber: 1 }],
+      chapters: [
+        {
+          name: this.videoDisplayName(name),
+          path: this.pathFor({ id, name }, path, 'video'),
+          chapterNumber: 1,
+        },
+      ],
     };
   }
 
