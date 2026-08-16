@@ -61,7 +61,7 @@ class OneDrivePlugin implements Plugin.PluginBase {
   name = 'OneDrive';
   icon = 'src/multi/onedrive/icon.png';
   site = 'https://onedrive.live.com';
-  version = '3.0.0';
+  version = '4.0.0';
   contentType = ContentType.VIDEO;
 
   pluginSettings: Plugin.PluginSettings = {
@@ -209,12 +209,21 @@ class OneDrivePlugin implements Plugin.PluginBase {
   }
 
   private rootChildrenUrl(): string {
-    return this.folder
-      ? `https://graph.microsoft.com/v1.0/me/drive/root:/${this.folder
-          .split('/')
-          .map(encodeURIComponent)
-          .join('/')}:\/children`
-      : 'https://graph.microsoft.com/v1.0/me/drive/root/children';
+    return 'https://graph.microsoft.com/v1.0/me/drive/root/children';
+  }
+
+  private async selectedFolderChildrenUrl(): Promise<string> {
+    let childrenUrl = this.rootChildrenUrl();
+    for (const segment of this.folder.split('/').filter(Boolean)) {
+      const folder = (await this.children(childrenUrl)).find(
+        item => item.folder && item.name.toLowerCase() === segment.toLowerCase(),
+      );
+      if (!folder) {
+        throw new Error(`OneDrive folder not found: ${this.folder}`);
+      }
+      childrenUrl = `https://graph.microsoft.com/v1.0/me/drive/items/${encodeURIComponent(folder.id)}/children`;
+    }
+    return childrenUrl;
   }
 
   private async listFolderContents(
@@ -291,7 +300,10 @@ class OneDrivePlugin implements Plugin.PluginBase {
     videos: VideoEntry[];
     folders: FolderEntry[];
   }> {
-    return this.listFolderContents(this.rootChildrenUrl(), this.folder);
+    return this.listFolderContents(
+      await this.selectedFolderChildrenUrl(),
+      this.folder,
+    );
   }
 
   async popularNovels(pageNo: number): Promise<Plugin.NovelItem[]> {
