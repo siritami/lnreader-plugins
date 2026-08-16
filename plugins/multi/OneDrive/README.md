@@ -14,7 +14,7 @@ Most users do not need to create a Microsoft Entra application. The plugin inclu
 
 1. Open the OneDrive plugin settings in LNReader.
 2. Leave **Microsoft Entra application client ID** unchanged.
-3. Leave **OneDrive folder path** empty to scan the OneDrive root, or enter a relative folder path such as `Videos`.
+3. Leave **OneDrive folder path** empty to scan the OneDrive root, or enter a folder path.
 4. Save the settings and open or reload the OneDrive plugin.
 5. The plugin starts Microsoft device-code login before loading the video list.
 6. Open <https://microsoft.com/devicelogin>.
@@ -34,10 +34,9 @@ Examples:
 - Leave empty to scan the root folder.
 - `Videos`
 - `Anime/Season 1`
-- `Anime\\Season 1`
 - `Movies/Action`
 
-Use one forward slash (`/`) or one backslash (`\\`) between folder names. Both `Anime/Season 1` and `Anime\\Season 1` are accepted. Do not use consecutive backslashes (`\\\\`), a local Windows path, a URL, or the `onedrive:` prefix.
+Use forward slashes (`/`) between folder names. Do not use backslashes, a local Windows path, a URL, or the `onedrive:` prefix.
 
 The plugin treats each item in this folder as follows:
 

@@ -83,12 +83,12 @@ class OneDrivePlugin implements Plugin.PluginBase {
 
   private get folder(): string {
     const folder = this.setting('folder').trim();
-    if (/\\{2,}/.test(folder)) {
+    if (folder.includes('\\')) {
       throw new Error(
-        'Invalid OneDrive folder path. Use one slash or one backslash between folder names.',
+        'Invalid OneDrive folder path. Use forward slashes (/) between folder names.',
       );
     }
-    return folder.replace(/\\/g, '/').replace(/^\/+|\/+$/g, '');
+    return folder.replace(/^\/+|\/+$/g, '');
   }
 
   private async requestToken(refreshToken: string): Promise<string> {
