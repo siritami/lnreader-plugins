@@ -10,6 +10,8 @@ type GraphItem = {
   name: string;
   size?: number;
   folder?: { childCount?: number };
+  package?: Record<string, unknown>;
+  remoteItem?: { id?: string; parentReference?: { driveId?: string } };
   file?: { mimeType?: string };
   parentReference?: { path?: string };
   '@microsoft.graph.downloadUrl'?: string;
@@ -61,7 +63,7 @@ class OneDrivePlugin implements Plugin.PluginBase {
   name = 'OneDrive';
   icon = 'src/multi/onedrive/icon.png';
   site = 'https://onedrive.live.com';
-  version = '6.0.0';
+  version = '7.0.0';
   contentType = ContentType.VIDEO;
 
   pluginSettings: Plugin.PluginSettings = {
@@ -220,18 +222,36 @@ class OneDrivePlugin implements Plugin.PluginBase {
   }
 
   private async selectedFolderChildrenUrl(): Promise<string> {
+    const pathSegments = this.folder.split('/').filter(Boolean);
+    const encodedPath = pathSegments.map(encodeURIComponent).join('/');
+
+    try {
+      const folder = await this.graph<GraphItem>(
+        `https://graph.microsoft.com/v1.0/me/drive/root:/${encodedPath}`,
+      );
+      if (folder.folder || folder.package) {
+        return `https://graph.microsoft.com/v1.0/me/drive/items/${encodeURIComponent(folder.id)}/children`;
+      }
+    } catch {
+      // Fall back to resolving each folder by its children/search results.
+    }
+
     let childrenUrl = this.rootChildrenUrl();
-    for (const segment of this.folder.split('/').filter(Boolean)) {
+    for (const segment of pathSegments) {
       const expectedName = this.normalizeFolderName(segment);
       const listedItems = await this.children(childrenUrl);
       let folder = listedItems.find(
-        item => item.folder && this.normalizeFolderName(item.name) === expectedName,
+        item =>
+          (item.folder || item.package) &&
+          this.normalizeFolderName(item.name) === expectedName,
       );
 
       if (!folder) {
-        const searchUrl = `https://graph.microsoft.com/v1.0/me/drive/search(q='${encodeURIComponent(segment)}')`;
+        const searchUrl = `https://graph.microsoft.com/v1.0/me/drive/root/search(q='${encodeURIComponent(segment)}')`;
         folder = (await this.children(searchUrl)).find(
-          item => item.folder && this.normalizeFolderName(item.name) === expectedName,
+          item =>
+            (item.folder || item.package) &&
+            this.normalizeFolderName(item.name) === expectedName,
         );
       }
 

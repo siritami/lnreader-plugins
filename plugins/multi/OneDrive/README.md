@@ -36,7 +36,7 @@ Examples:
 - `Anime/Season 1`
 - `Movies/Action`
 
-Use forward slashes (`/`) between folder names. Do not use backslashes, a local Windows path, a URL, or the `onedrive:` prefix.
+Use forward slashes (`/`) between folder names. The plugin resolves this using Microsoft Graph's `me/drive/root:/{path}` endpoint. Do not use backslashes, a local Windows path, a URL, or the `onedrive:` prefix.
 
 The plugin treats each item in this folder as follows:
 
