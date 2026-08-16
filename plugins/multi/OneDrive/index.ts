@@ -15,9 +15,26 @@ type GraphItem = {
   '@microsoft.graph.downloadUrl'?: string;
 };
 
+type VideoEntry = {
+  item: GraphItem;
+  path: string;
+};
+
+type FolderEntry = {
+  item: GraphItem;
+  path: string;
+};
+
 type GraphChildrenResponse = {
   value: GraphItem[];
   '@odata.nextLink'?: string;
+};
+
+type GraphThumbnailsResponse = {
+  value?: Array<{
+    large?: { url?: string };
+    medium?: { url?: string };
+  }>;
 };
 
 type TokenResponse = {
@@ -49,7 +66,7 @@ class OneDrivePlugin implements Plugin.PluginBase {
 
   pluginSettings: Plugin.PluginSettings = {
     clientId: {
-      value: '',
+      value: '440009a4-c67b-4d15-8426-92308c3d9ae8',
       label: 'Microsoft Entra application client ID',
       type: 'Text',
     },
@@ -169,8 +186,9 @@ class OneDrivePlugin implements Plugin.PluginBase {
     return data;
   }
 
-  private pathFor(item: GraphItem, path: string): string {
+  private pathFor(item: GraphItem, path: string, type: 'video' | 'folder'): string {
     const params = new URLSearchParams();
+    params.set('type', type);
     params.set('id', item.id);
     params.set('path', path);
     params.set('name', item.name);
@@ -184,35 +202,106 @@ class OneDrivePlugin implements Plugin.PluginBase {
     return items;
   }
 
-  private async listVideos(): Promise<Array<{ item: GraphItem; path: string }>> {
-    const root = this.folder
+  private rootChildrenUrl(): string {
+    return this.folder
       ? `https://graph.microsoft.com/v1.0/me/drive/root:/${this.folder
           .split('/')
           .map(encodeURIComponent)
           .join('/')}:\/children`
       : 'https://graph.microsoft.com/v1.0/me/drive/root/children';
-    const videos: Array<{ item: GraphItem; path: string }> = [];
-    const walk = async (url: string, parentPath: string): Promise<void> => {
-      for (const item of await this.children(url)) {
-        const path = parentPath ? `${parentPath}/${item.name}` : item.name;
-        if (item.folder) {
-          await walk(`https://graph.microsoft.com/v1.0/me/drive/items/${item.id}/children`, path);
-        } else if (/\.(mp4|mkv|ts)$/i.test(item.name)) {
-          videos.push({ item, path });
-        }
+  }
+
+  private async listFolderContents(
+    url: string,
+    parentPath: string,
+  ): Promise<{ videos: VideoEntry[]; folders: FolderEntry[] }> {
+    const videos: VideoEntry[] = [];
+    const folders: FolderEntry[] = [];
+    for (const item of await this.children(url)) {
+      const path = parentPath ? `${parentPath}/${item.name}` : item.name;
+      if (item.folder) {
+        folders.push({ item, path });
+      } else if (/\.(mp4|mkv|ts)$/i.test(item.name)) {
+        videos.push({ item, path });
       }
-    };
-    await walk(root, this.folder);
+    }
+    return { videos, folders };
+  }
+
+  private async itemDownloadUrl(item: GraphItem): Promise<string | undefined> {
+    if (item['@microsoft.graph.downloadUrl']) {
+      return item['@microsoft.graph.downloadUrl'];
+    }
+    const details = await this.graph<GraphItem>(
+      `https://graph.microsoft.com/v1.0/me/drive/items/${encodeURIComponent(item.id)}`,
+    );
+    return details['@microsoft.graph.downloadUrl'];
+  }
+
+  private async videoThumbnailUrl(item: GraphItem): Promise<string | undefined> {
+    const result = await this.graph<GraphThumbnailsResponse>(
+      `https://graph.microsoft.com/v1.0/me/drive/items/${encodeURIComponent(item.id)}/thumbnails`,
+    );
+    return result.value?.[0]?.large?.url || result.value?.[0]?.medium?.url;
+  }
+
+  private async folderCoverUrl(folder: FolderEntry): Promise<string> {
+    const contents = await this.listFolderContents(
+      `https://graph.microsoft.com/v1.0/me/drive/items/${encodeURIComponent(folder.item.id)}/children`,
+      folder.path,
+    );
+    const cover = (await this.children(
+      `https://graph.microsoft.com/v1.0/me/drive/items/${encodeURIComponent(folder.item.id)}/children`,
+    )).find(item => /^cover\.(png|jpe?g|webp)$/i.test(item.name));
+    if (cover) return (await this.itemDownloadUrl(cover)) || defaultCover;
+    const firstVideo = contents.videos[0];
+    if (firstVideo) return (await this.videoThumbnailUrl(firstVideo.item)) || defaultCover;
+    return defaultCover;
+  }
+
+  private async listVideosRecursively(
+    url: string,
+    parentPath: string,
+  ): Promise<VideoEntry[]> {
+    const videos: VideoEntry[] = [];
+    const contents = await this.listFolderContents(url, parentPath);
+    videos.push(...contents.videos);
+    for (const folder of contents.folders) {
+      videos.push(
+        ...(await this.listVideosRecursively(
+          `https://graph.microsoft.com/v1.0/me/drive/items/${folder.item.id}/children`,
+          folder.path,
+        )),
+      );
+    }
     return videos;
+  }
+
+  private async listRootContents(): Promise<{
+    videos: VideoEntry[];
+    folders: FolderEntry[];
+  }> {
+    return this.listFolderContents(this.rootChildrenUrl(), this.folder);
   }
 
   async popularNovels(pageNo: number): Promise<Plugin.NovelItem[]> {
     if (pageNo > 1) return [];
-    return (await this.listVideos()).map(({ item, path }) => ({
-      name: path,
-      path: this.pathFor(item, path),
-      cover: defaultCover,
-    }));
+    await this.accessToken();
+    const contents = await this.listRootContents();
+    return [
+      ...(await Promise.all(
+        contents.folders.map(async folder => ({
+          name: folder.item.name,
+          path: this.pathFor(folder.item, folder.path, 'folder'),
+          cover: await this.folderCoverUrl(folder),
+        })),
+      )),
+      ...contents.videos.map(({ item, path }) => ({
+        name: path,
+        path: this.pathFor(item, path, 'video'),
+        cover: defaultCover,
+      })),
+    ];
   }
 
   async searchNovels(searchTerm: string, pageNo: number): Promise<Plugin.NovelItem[]> {
@@ -226,12 +315,38 @@ class OneDrivePlugin implements Plugin.PluginBase {
   async parseNovel(novelPath: string): Promise<Plugin.SourceNovel> {
     const params = new URLSearchParams(novelPath.split('?')[1] || '');
     const name = params.get('name') || 'Video';
+    const type = params.get('type') || 'video';
+    const id = params.get('id');
+    const path = params.get('path') || name;
+    if (!id) throw new Error('Invalid OneDrive item ID.');
+
+    if (type === 'folder') {
+      const videos = await this.listVideosRecursively(
+        `https://graph.microsoft.com/v1.0/me/drive/items/${encodeURIComponent(id)}/children`,
+        path,
+      );
+      return {
+        path: novelPath,
+        name,
+        cover: await this.folderCoverUrl({
+          item: { id, name, folder: {} },
+          path,
+        }),
+        status: NovelStatus.Ongoing,
+        chapters: videos.map(({ item, path: videoPath }, index) => ({
+          name: item.name.replace(/\.(mp4|mkv|ts)$/i, ''),
+          path: this.pathFor(item, videoPath, 'video'),
+          chapterNumber: index + 1,
+        })),
+      };
+    }
+
     return {
       path: novelPath,
       name,
       cover: defaultCover,
       status: NovelStatus.Ongoing,
-      chapters: [{ name, path: novelPath, chapterNumber: 1 }],
+      chapters: [{ name, path: this.pathFor({ id, name }, path, 'video'), chapterNumber: 1 }],
     };
   }
 
