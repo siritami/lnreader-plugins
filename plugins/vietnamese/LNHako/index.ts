@@ -16,7 +16,7 @@ class HakoPlugin implements Plugin.PluginBase {
   id = 'ln.hako.vn';
   name = 'Hako Novel';
   icon = 'src/vi/hakolightnovel/icon.png';
-  version = '1.2.21';
+  version = '1.2.22';
   filters = filters;
 
   customCSS = 'src/vi/hakolightnovel/custom.css';
@@ -453,7 +453,13 @@ class HakoPlugin implements Plugin.PluginBase {
     $('a').each((_, el) => {
       // console.log('Processing link:', $(el).attr('href'), $(el).html());
       const href = $(el).attr('href');
-      if (href && href.startsWith('/')) {
+      if (href && $(el).closest('.ln-comment-page').length) {
+        $(el).attr(
+          'data-comment-page-url',
+          new URL(href, this.site).toString(),
+        );
+        $(el).attr('href', '#comment-page');
+      } else if (href && href.startsWith('/')) {
         if ($(el).attr('target')) {
           $(el).remove();
         } else {
@@ -500,7 +506,6 @@ class HakoPlugin implements Plugin.PluginBase {
       commentSection.find('.do-reply').remove();
       commentSection.find('.my-auto').remove();
       commentSection.find('.fas.fa-chevron-down').remove();
-      commentSection.find('.ln-comment-page').remove();
       commentSection.find('.comment_see_more').remove();
       commentSection.find('.leading-tight').remove();
 
