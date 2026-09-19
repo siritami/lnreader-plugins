@@ -17,7 +17,7 @@ class AnimeVietsubPlugin extends NekoriBasePlugin {
   name = 'AnimeVietsub';
   icon = 'icon.png';
   site = 'https://animevietsub.li';
-  version = '1.3.0';
+  version = '1.3.1';
   filters = filters;
   contentType = ContentType.VIDEO;
 
@@ -526,7 +526,7 @@ class AnimeVietsubPlugin extends NekoriBasePlugin {
     ].join('\n');
   }
 
-  resolveUrl(path: string, isNovel?: boolean): string {
+  resolveUrl(path: string, _isNovel?: boolean): string {
     return this.site + path;
   }
 }

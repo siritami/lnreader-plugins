@@ -144,10 +144,34 @@ async function initPlayer() {
 
   try {
     const resolvedMedia = await resolveMedia(config);
+    // Never hand the core player a blob m3u8 that is not real media.
+    if (resolvedMedia.type === 'sources' && resolvedMedia.sources) {
+      const file = resolvedMedia.sources[0].file || '';
+      const isBlob = file.indexOf('blob:') === 0;
+      const isData = file.indexOf('data:') === 0;
+      if (isBlob || isData) {
+        // blob is OK only if decrypt already validated playable segment URLs.
+        // If playHls fails later, core player shows an error banner.
+        debugLog('Resolved HLS blob (' + file.slice(0, 24) + '…)');
+      }
+    }
     renderMedia(resolvedMedia, config);
   } catch (error: any) {
+    debugLog('Pipeline error: ' + (error && error.message));
     showError(error.message || 'Lỗi không xác định.');
     console.error('[AVS] Pipeline Error:', error);
+    if (config.iframeSrc) {
+      debugLog('Fallback: nhúng iframe sau lỗi m3u8.');
+      renderMedia({ type: 'iframe', iframeUrl: config.iframeSrc }, config);
+    } else if (config.ajaxHash && config.ajaxSite) {
+      debugLog('Fallback: thử iframe từ ajax hash…');
+      try {
+        const fb = await fetchAjaxPlayer({ ...config, mode: 'embed' });
+        renderMedia(fb, config);
+      } catch (e2: any) {
+        debugLog('Ajax embed fallback fail: ' + (e2 && e2.message));
+      }
+    }
   }
 }
 

@@ -1,5 +1,5 @@
 import { b64urlDecode, descramble, stringUnshuffle } from './crypto';
-import { nativeFetch } from './fetch';
+import { nativeFetch, nativeFetchBuffer } from './fetch';
 import type { ResolvedMedia } from './types';
 import { cleanupIframe, debugLog } from './utils';
 
@@ -68,14 +68,6 @@ function hexToBytes(hex: string): Uint8Array {
   return out;
 }
 
-function bytesToHex(bytes: Uint8Array): string {
-  let s = '';
-  for (let i = 0; i < bytes.length; i++) {
-    s += bytes[i].toString(16).padStart(2, '0');
-  }
-  return s;
-}
-
 function parseEnvelope(b64: string): {
   cn: string;
   sk: string;
@@ -96,7 +88,7 @@ function parseEnvelope(b64: string): {
     const payloadLen = (bytes[5] << 8) | bytes[6];
     const payload = bytes.subarray(7, 7 + payloadLen);
     let str = '';
-    for (let i = 0; i < payload.length; i++) str += String.fromCharCode(payload[i]);
+    for (const b of payload) str += String.fromCharCode(b);
     str = decodeURIComponent(escape(str));
     return JSON.parse(str);
   } catch {
@@ -192,7 +184,21 @@ function buildM3u8Blob(headerLines: string[], segmentUrls: string[]): string {
 }
 
 function looksPlayableUrl(url: string): boolean {
-  return /^https?:\/\//.test(url) && !/googleusercontent\.com\/.*=d$/i.test(url);
+  if (!/^https?:\/\//i.test(url)) return false;
+  // Known anti-scraper decoys from old url-cipher path.
+  if (/googleusercontent\.com\//i.test(url)) return false;
+  if (/lh3\.googleusercontent|lh6\.googleusercontent/i.test(url)) return false;
+  return true;
+}
+
+function looksLikeMediaUrl(url: string): boolean {
+  if (!looksPlayableUrl(url)) return false;
+  return (
+    /\.(ts|m4s|mp4|m3u8|mpd|webm|mkv)(\?|$)/i.test(url) ||
+    /\/hls\//i.test(url) ||
+    /stream\.googleapis/i.test(url) ||
+    /googlevideo\.com/i.test(url)
+  );
 }
 
 function looksLikeM3u8(text: string): boolean {
@@ -200,20 +206,21 @@ function looksLikeM3u8(text: string): boolean {
     typeof text === 'string' &&
     text.includes('#EXTM3U') &&
     text.includes('#EXTINF') &&
-    !text.includes('data:video/mp2t;base64,Rx//EP') &&
-    (text.includes('/hls/') ||
-      text.includes('/chunks/') ||
-      text.includes('.ts') ||
-      text.includes('.mp4') ||
-      text.includes('stream.googleapis') ||
-      text.includes('googlevideo'))
+    !text.includes('data:video/mp2t;base64,Rx//EP')
   );
+}
+
+function extractMediaUrls(m3u8Text: string): string[] {
+  return m3u8Text
+    .split('\n')
+    .map(l => l.trim())
+    .filter(l => l && !l.startsWith('#') && looksLikeMediaUrl(l));
 }
 
 async function hmacSha256(key: Uint8Array, data: string): Promise<Uint8Array> {
   const k = await crypto.subtle.importKey(
     'raw',
-    key as unknown as BufferSource,
+    key as never,
     { name: 'HMAC', hash: 'SHA-256' },
     false,
     ['sign'],
@@ -221,7 +228,7 @@ async function hmacSha256(key: Uint8Array, data: string): Promise<Uint8Array> {
   const buf = await crypto.subtle.sign(
     'HMAC',
     k,
-    new TextEncoder().encode(data) as unknown as BufferSource,
+    new TextEncoder().encode(data) as never,
   );
   return new Uint8Array(buf);
 }
@@ -234,7 +241,7 @@ async function aesCtrDecrypt(
 ): Promise<Uint8Array> {
   const subtleKey = await crypto.subtle.importKey(
     'raw',
-    key as unknown as BufferSource,
+    key as never,
     { name: 'AES-CTR' },
     false,
     ['decrypt'],
@@ -242,11 +249,11 @@ async function aesCtrDecrypt(
   const out = await crypto.subtle.decrypt(
     {
       name: 'AES-CTR',
-      counter: counter as unknown as BufferSource,
+      counter: counter as never,
       length,
     },
     subtleKey,
-    data as unknown as BufferSource,
+    data as never,
   );
   return new Uint8Array(out);
 }
@@ -348,7 +355,7 @@ async function decryptLegacyM3u8(
         const hmacData = new TextEncoder().encode(hmac.data);
         const hmacKey = await crypto.subtle.importKey(
           'raw',
-          cnBytes as unknown as BufferSource,
+          cnBytes as never,
           { name: 'HMAC', hash: 'SHA-256' },
           false,
           ['sign'],
@@ -356,19 +363,19 @@ async function decryptLegacyM3u8(
         const gcmKeyBuf = await crypto.subtle.sign(
           'HMAC',
           hmacKey,
-          hmacData as unknown as BufferSource,
+          hmacData as never,
         );
         const gcmKey = await crypto.subtle.importKey(
           'raw',
-          gcmKeyBuf as unknown as BufferSource,
+          gcmKeyBuf as never,
           { name: 'AES-GCM' },
           false,
           ['decrypt'],
         );
         const rawResult = await crypto.subtle.decrypt(
-          { name: 'AES-GCM', iv: iv as unknown as BufferSource },
+          { name: 'AES-GCM', iv: iv as never },
           gcmKey,
-          encryptedBlob as unknown as BufferSource,
+          encryptedBlob as never,
         );
         const rawBytes = new Uint8Array(rawResult);
         let m3u8Body = new TextDecoder().decode(rawBytes);
@@ -559,7 +566,51 @@ type SiteRuntime = {
   fLoader?: any;
   decrypt?: any;
   g6?: () => any;
+  keysSeen: string[];
 };
+
+function bytesHex(u: Uint8Array, max = 32): string {
+  let s = '';
+  for (let i = 0; i < Math.min(u.length, max); i++) {
+    s += u[i].toString(16).padStart(2, '0');
+  }
+  return s + (u.length > max ? '…' : '');
+}
+
+function installCryptoProbe(keysSeen: string[]) {
+  const subtle = window.crypto && (window.crypto as any).subtle;
+  if (!subtle || (subtle as any).__avsProbed) return;
+  const origImport = subtle.importKey.bind(subtle);
+  (subtle as any).__avsProbed = true;
+  (subtle as any).importKey = async function (
+    format: any,
+    keyData: any,
+    algo: any,
+    extractable: any,
+    usages: any,
+  ) {
+    try {
+      let preview = '';
+      if (typeof keyData === 'string') preview = keyData.slice(0, 64);
+      else if (keyData instanceof ArrayBuffer) {
+        preview = bytesHex(new Uint8Array(keyData));
+      } else if (ArrayBuffer.isView(keyData)) {
+        const u = new Uint8Array(
+          (keyData as any).buffer,
+          (keyData as any).byteOffset,
+          (keyData as any).byteLength,
+        );
+        preview = bytesHex(u);
+      }
+      const algoName = (algo && algo.name) || String(algo);
+      const rec = algoName + ':' + preview;
+      if (keysSeen.length < 40) keysSeen.push(rec);
+    } catch {
+      //
+    }
+    return origImport(format, keyData, algo, extractable, usages);
+  };
+}
 
 async function loadSiteDecryptRuntime(
   token: string,
@@ -567,6 +618,10 @@ async function loadSiteDecryptRuntime(
   expV: string,
 ): Promise<SiteRuntime> {
   const w = window as any;
+  const keysBefore = new Set(Object.getOwnPropertyNames(window));
+  const keysSeen: string[] = [];
+  installCryptoProbe(keysSeen);
+
   w._avsExpV = expV || '1.15.7';
   w._avsCryptoHarden = true;
   w._avsCryptoHardenShadow = true;
@@ -598,7 +653,9 @@ async function loadSiteDecryptRuntime(
 
   for (const url of files) {
     try {
-      const res = await nativeFetch(url, { Referer: 'https://storage.googleapiscdn.com/' });
+      const res = await nativeFetch(url, {
+        Referer: 'https://storage.googleapiscdn.com/',
+      });
       if (res.status !== 200 || !res.text) {
         debugLog('Runtime script fail ' + url + ' status=' + res.status);
         continue;
@@ -611,48 +668,104 @@ async function loadSiteDecryptRuntime(
     }
   }
 
+  const newKeys = Object.getOwnPropertyNames(window).filter(k => !keysBefore.has(k));
+  const interesting = newKeys
+    .filter(k => /avs|loader|decrypt|hls|session|key/i.test(k))
+    .slice(0, 40);
+  debugLog('Runtime APIs: pLoader=' + typeof w.AvsPlaylistLoader +
+    ' fLoader=' + typeof w.AvsEncryptedLoader +
+    ' decrypt=' + typeof w._avsDecryptM3u8 +
+    ' g6=' + typeof w._avsG6Diag);
+  debugLog('New keys: ' + interesting.join(','));
+
   return {
     pLoader: w.AvsPlaylistLoader,
     fLoader: w.AvsEncryptedLoader,
     decrypt: w._avsDecryptM3u8,
     g6: w._avsG6Diag,
+    keysSeen,
   };
 }
 
-function makeStaticLoader(payload: string) {
-  function StaticLoader(_config?: any) {
+type LoaderProbe = {
+  url: string;
+  status?: number;
+  len?: number;
+  note?: string;
+};
+
+/**
+ * Inner hls.js loader that uses reader.fetch. Logs every URL the site
+ * wrapper hands us — including G6 rewrites from placeholders → CDN.
+ */
+function makeReaderLoader(probes: LoaderProbe[], referer: string, extraHeaders?: Record<string, string>) {
+  function ReaderLoader(_config?: any) {
     //
   }
-  StaticLoader.prototype.load = function (
+  ReaderLoader.prototype.load = function (
     context: any,
     _config: any,
     callbacks: any,
   ) {
-    const self: any = this;
-    setTimeout(() => {
-      if (self._aborted) return;
-      callbacks.onSuccess(
-        { loaded: 1, total: 1 },
-        payload,
-        { status: 200, url: context && context.url },
-        context,
-      );
-    }, 0);
+    const url = (context && context.url) || '';
+    const rec: LoaderProbe = { url: url.slice(0, 200) };
+    probes.push(rec);
+    debugLog('Loader GET ' + rec.url);
+
+    const headers: Record<string, string> = {
+      Referer: referer,
+      'X-Client-Env': 'f728f44d',
+      ...(extraHeaders || {}),
+    };
+
+    nativeFetch(url, headers)
+      .then(res => {
+        rec.status = res.status;
+        rec.len = (res.text || '').length;
+        rec.note = 'ok';
+        if (this._aborted) return;
+        if (res.status >= 200 && res.status < 300) {
+          callbacks.onSuccess(
+            { loaded: rec.len || 1, total: rec.len || 1 },
+            res.text,
+            { status: res.status, url, responseHeaders: res.headers },
+            context,
+          );
+        } else {
+          callbacks.onError(
+            { code: res.status, text: 'HTTP ' + res.status },
+            context,
+            { status: res.status, url },
+            { loaded: 0 },
+          );
+        }
+      })
+      .catch((e: any) => {
+        rec.note = String(e && e.message).slice(0, 80);
+        if (this._aborted) return;
+        callbacks.onError(
+          { code: 0, text: rec.note },
+          context,
+          { status: 0, url },
+          { loaded: 0 },
+        );
+      });
   };
-  StaticLoader.prototype.abort = function () {
+  ReaderLoader.prototype.abort = function () {
     (this as any)._aborted = true;
   };
-  StaticLoader.prototype.destroy = function () {
+  ReaderLoader.prototype.destroy = function () {
     //
   };
-  return StaticLoader;
+  return ReaderLoader;
 }
 
-function invokeLoader(
+function invokeLoaderWith(
   LoaderCtor: any,
-  payload: string,
+  InnerLoader: any,
   context: any,
-  timeoutMs = 8000,
+  label: string,
+  timeoutMs = 5000,
 ): Promise<string | null> {
   return new Promise(resolve => {
     let settled = false;
@@ -663,22 +776,37 @@ function invokeLoader(
       }
     };
     try {
-      const StaticLoader = makeStaticLoader(payload);
-      const inst = new LoaderCtor({ loader: StaticLoader, config: {} });
-      const timer = setTimeout(() => done(null), timeoutMs);
+      const inst = new LoaderCtor({ loader: InnerLoader, config: {}, xhrSetup: undefined });
+      const timer = setTimeout(() => {
+        debugLog(label + ': timeout');
+        done(null);
+      }, timeoutMs);
       inst.load(
         context,
-        { maxRetry: 0, timeout: timeoutMs - 500 },
+        { maxRetry: 0, timeout: timeoutMs - 400, enableWorker: false },
         {
-          onSuccess: (_stats: any, data: any) => {
+          onSuccess: (_s: any, data: any, nd: any, ctx: any) => {
             clearTimeout(timer);
+            const urlNow = (ctx && ctx.url) || (context && context.url) || '';
+            debugLog(
+              label + ': success st=' + (nd && nd.status) +
+                ' type=' + typeof data +
+                ' url=' + String(urlNow).slice(0, 80),
+            );
             if (typeof data === 'string') done(data);
             else if (data instanceof ArrayBuffer) {
               done(new TextDecoder().decode(new Uint8Array(data)));
+            } else if (ArrayBuffer.isView(data)) {
+              done(new TextDecoder().decode(data as any));
             } else done(null);
           },
-          onError: () => {
+          onError: (err: any, ctx: any, nd: any) => {
             clearTimeout(timer);
+            debugLog(
+              label + ': error ' +
+                String(err && (err.message || err.text || err)).slice(0, 80) +
+                ' st=' + (nd && nd.status),
+            );
             done(null);
           },
           onProgress: () => {
@@ -687,10 +815,22 @@ function invokeLoader(
         },
       );
     } catch (e: any) {
-      debugLog('invokeLoader throw: ' + (e && e.message));
+      debugLog(label + ': throw ' + (e && e.message));
       done(null);
     }
   });
+}
+
+function finishWithUrls(headerLines: string[], urls: string[]): ResolvedMedia {
+  const playable = urls.filter(looksLikeMediaUrl);
+  debugLog('Playable media urls: ' + playable.length + '/' + urls.length);
+  if (!playable.length) {
+    throw new ShieldDecryptUnsupportedError('Không có URL media hợp lệ.');
+  }
+  return {
+    type: 'sources',
+    sources: [{ file: buildM3u8Blob(headerLines, playable), type: 'hls' }],
+  };
 }
 
 async function decryptShieldM3u8(
@@ -700,121 +840,174 @@ async function decryptShieldM3u8(
   avsSid: string | null,
   playerUrl: string,
 ): Promise<ResolvedMedia> {
-  const envHeader =
-    m3u8Headers['x-envelope'] ||
-    m3u8Headers['x-avs-envelope'] ||
-    '';
+  const envHeader = m3u8Headers['x-envelope'] || m3u8Headers['x-avs-envelope'] || '';
   const env = envHeader ? parseEnvelope(envHeader) : null;
   const parsed = parsePlaylistSegments(m3u8Text);
+  const envHash = m3u8Headers['x-client-env'] || ((window as any)._avsProbe && (window as any)._avsProbe.envHash) || 'f728f44d';
+
   debugLog(
-    'Shield playlist: segs=' +
-      parsed.segments.length +
-      ' key=' +
-      (parsed.keyUrl ? 'yes' : 'no'),
+    'Shield playlist: segs=' + parsed.segments.length +
+      ' key=' + (parsed.keyUrl ? 'yes' : 'no') +
+      ' envHash=' + envHash,
   );
+  if (parsed.segments[0]) {
+    debugLog('seg0 fileId=' + parsed.segments[0].fileId + ' i=' + parsed.segments[0].index);
+  }
 
   const expV = ((window as any)._avsExpV as string) || '1.15.7';
+  const probes: LoaderProbe[] = [];
+  const extraHeaders = { 'X-Client-Env': envHash };
 
-  // Path A: site loader runtime + pLoader/fLoader (G6 lives here).
-  try {
-    const runtime = await loadSiteDecryptRuntime(avsToken, avsSid, expV);
-    if (runtime.g6) {
-      try {
-        debugLog('G6: ' + JSON.stringify(runtime.g6()));
-      } catch {
-        //
+  const runtime = await loadSiteDecryptRuntime(avsToken, avsSid, expV);
+  if (runtime.g6) {
+    try {
+      debugLog('G6: ' + JSON.stringify(runtime.g6()));
+    } catch (e: any) {
+      debugLog('G6 err: ' + e.message);
+    }
+  }
+  if (runtime.keysSeen && runtime.keysSeen.length) {
+    debugLog('Crypto keys: ' + runtime.keysSeen.slice(0, 8).join(' | '));
+  }
+
+  const hashMatch = playerUrl.match(/\/player\/([0-9a-f]+)/i);
+  const baseMatch = playerUrl.match(/^(https?:\/\/[^/]+)/);
+  const baseUrl = baseMatch ? baseMatch[1] : '';
+  const playlistUrl =
+    baseUrl + '/playlist/' + (hashMatch ? hashMatch[1] : '') +
+    '/playlist.m3u8?token=' + encodeURIComponent(avsToken);
+
+  const ReaderLoader = makeReaderLoader(probes, playerUrl, extraHeaders);
+
+  // 1) pLoader with reader.fetch (real playlist fetch through site wrapper)
+  if (runtime.pLoader) {
+    debugLog('Invoke pLoader (reader.fetch)…');
+    const viaP = await invokeLoaderWith(
+      runtime.pLoader,
+      ReaderLoader,
+      {
+        url: playlistUrl,
+        responseType: 'text',
+        type: 'manifest',
+        level: 0,
+        frag: { type: 'playlist', level: 0 },
+        headers: m3u8Headers,
+        networkDetails: { responseHeaders: m3u8Headers },
+      },
+      'pLoader',
+      6000,
+    );
+    if (viaP) {
+      debugLog('pLoader out len=' + viaP.length + ' head=' + viaP.slice(0, 80).replace(/\n/g, '|'));
+      const media = extractMediaUrls(viaP);
+      if (media.length >= 3 && !isNewShieldPlaylist(viaP)) {
+        return finishWithUrls(parsed.headers, media);
+      }
+      // still shield-shaped → try fLoader on first rewritten chunk-like line
+      const lines = viaP.split('\n').map(l => l.trim()).filter(l => l && !l.startsWith('#'));
+      if (lines.length && runtime.fLoader) {
+        const target = lines.find(l => looksLikeMediaUrl(l)) || lines[0];
+        debugLog('pLoader still shield; fLoader on: ' + target.slice(0, 100));
+        const viaF = await invokeLoaderWith(
+          runtime.fLoader,
+          ReaderLoader,
+          {
+            url: target,
+            responseType: 'text',
+            frag: { type: 'segment', level: 0, sn: 0, url: target },
+          },
+          'fLoader-fromP',
+          6000,
+        );
+        if (viaF && looksLikeM3u8(viaF)) {
+          const media2 = extractMediaUrls(viaF);
+          if (media2.length) return finishWithUrls(parsed.headers, media2);
+        }
+      }
+    } else {
+      debugLog('pLoader returned null');
+    }
+  } else {
+    debugLog('pLoader missing on window');
+  }
+
+  // 2) fLoader directly on first chunk placeholder URL
+  if (runtime.fLoader && parsed.segments[0]) {
+    const chunkUrl = parsed.segments[0].url;
+    debugLog('Invoke fLoader on chunk placeholder…');
+    try {
+      const buf = await nativeFetchBuffer(chunkUrl, {
+        Referer: playerUrl,
+        'X-Client-Env': envHash,
+      });
+      debugLog('Direct chunk fetch st=' + buf.status + ' bytes=' + buf.bytes.length);
+    } catch (e: any) {
+      debugLog('Direct chunk fetch err: ' + (e && e.message));
+    }
+
+    const viaF = await invokeLoaderWith(
+      runtime.fLoader,
+      ReaderLoader,
+      {
+        url: chunkUrl,
+        responseType: 'arraybuffer',
+        frag: {
+          type: 'segment',
+          level: 0,
+          sn: parsed.segments[0].index,
+          url: chunkUrl,
+        },
+      },
+      'fLoader-chunk',
+      6000,
+    );
+    if (viaF) {
+      const head = viaF.slice(0, 40);
+      debugLog('fLoader-chunk out head=' + head.replace(/[^\x20-\x7e]/g, '.'));
+      if (looksLikeM3u8(viaF)) {
+        const media = extractMediaUrls(viaF);
+        if (media.length) return finishWithUrls(parsed.headers, media);
       }
     }
-    if (runtime.pLoader) {
-      const playlistUrl =
-        playerUrl.replace(/\/player\/.*$/, '') +
-        '/playlist/' +
-        (playerUrl.match(/\/player\/([0-9a-f]+)/i) || [, ''])[1] +
-        '/playlist.m3u8?token=' +
-        encodeURIComponent(avsToken);
-      const viaLoader =
-        (await invokeLoader(runtime.pLoader, m3u8Text, {
-          url: playlistUrl,
-          responseType: 'text',
-          type: 'manifest',
-          level: 0,
-          headers: m3u8Headers,
-          networkDetails: { responseHeaders: m3u8Headers },
-        })) || (await invokeLoader(runtime.pLoader, m3u8Text, {
-          url: playlistUrl,
-          responseType: 'text',
-          type: 'level',
-          level: 0,
-        }));
-      if (viaLoader && looksLikeM3u8(viaLoader) && !isNewShieldPlaylist(viaLoader)) {
-        debugLog('pLoader returned playable m3u8 (' + viaLoader.length + ')');
-        const urls = viaLoader
-          .split('\n')
-          .map(l => l.trim())
-          .filter(l => l && !l.startsWith('#'));
-        return {
-          type: 'sources',
-          sources: [{ file: buildM3u8Blob(parsed.headers, urls), type: 'hls' }],
-        };
-      }
-      if (viaLoader && looksLikeM3u8(viaLoader)) {
-        // May still contain chunks; try G6 on the loader output.
-        const parsed2 = parsePlaylistSegments(viaLoader);
-        if (parsed2.segments.length) {
-          const urls2 = await decryptShieldPlaceholders(
-            parsed2.segments,
-            parsed2.headers,
-            avsToken,
-            env,
-          );
-          if (urls2) {
-            return {
-              type: 'sources',
-              sources: [{ file: buildM3u8Blob(parsed2.headers, urls2), type: 'hls' }],
-            };
+  }
+
+  // 3) site _avsDecryptM3u8
+  if (runtime.decrypt) {
+    debugLog('Invoke _avsDecryptM3u8…');
+    try {
+      const dec = await runtime.decrypt(m3u8Text, avsToken, m3u8Headers);
+      if (typeof dec === 'string') {
+        debugLog('decrypt out len=' + dec.length + ' head=' + dec.slice(0, 70).replace(/\n/g, '|'));
+        if (looksLikeM3u8(dec)) {
+          const media = extractMediaUrls(dec);
+          if (media.length >= 1 && !dec.includes('data:video/mp2t;base64,Rx//EP')) {
+            return finishWithUrls(parsed.headers, media);
           }
         }
       }
+    } catch (e: any) {
+      debugLog('decrypt throw: ' + (e && e.message));
     }
-
-    if (runtime.decrypt) {
-      const dec =
-        (await runtime.decrypt(m3u8Text, avsToken, m3u8Headers)) ||
-        (await runtime.decrypt(m3u8Text, { token: avsToken, headers: m3u8Headers }));
-      if (typeof dec === 'string' && looksLikeM3u8(dec)) {
-        const urls = dec
-          .split('\n')
-          .map(l => l.trim())
-          .filter(l => l && !l.startsWith('#'));
-        return {
-          type: 'sources',
-          sources: [{ file: buildM3u8Blob(parsed.headers, urls), type: 'hls' }],
-        };
-      }
-    }
-  } catch (e: any) {
-    debugLog('Site runtime decrypt fail: ' + (e && e.message));
   }
 
-  // Path B: pure JS placeholder decrypt (sessionKey from fake JWT).
+  // 4) pure JS G6-style placeholder decrypt
   if (parsed.segments.length) {
+    debugLog('JS placeholder decrypt probe…');
     const urls = await decryptShieldPlaceholders(
       parsed.segments,
       parsed.headers,
       avsToken,
       env,
     );
-    if (urls && urls.some(looksPlayableUrl)) {
-      debugLog('Placeholder decrypt OK');
-      return {
-        type: 'sources',
-        sources: [{ file: buildM3u8Blob(parsed.headers, urls), type: 'hls' }],
-      };
+    if (urls && urls.some(looksLikeMediaUrl)) {
+      return finishWithUrls(parsed.headers, urls);
     }
+    debugLog('JS placeholder decrypt: no playable urls');
   }
 
+  debugLog('probes=' + JSON.stringify(probes).slice(0, 400));
   throw new ShieldDecryptUnsupportedError(
-    'AVS shield v3: không giải mã được m3u8 (cần loader site).',
+    'AVS shield v3: không giải mã được m3u8.',
   );
 }
 
@@ -909,14 +1102,11 @@ async function fetchPlayerPage(
     }
 
     // Already playable URLs?
-    const urls = m3u8Text
-      .split('\n')
-      .map(l => l.trim())
-      .filter(l => l && !l.startsWith('#'));
-    if (urls.length && urls.some(looksPlayableUrl)) {
+    const mediaUrls = extractMediaUrls(m3u8Text);
+    if (mediaUrls.length) {
       return {
         type: 'sources',
-        sources: [{ file: buildM3u8Blob([], urls), type: 'hls' }],
+        sources: [{ file: buildM3u8Blob([], mediaUrls), type: 'hls' }],
       };
     }
 
