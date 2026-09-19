@@ -317,15 +317,17 @@ async function resolveMedia(config: PlayerConfig): Promise<ResolvedMedia> {
 
 function buildHlsConfig() {
   const Loader = createAvsTsLoader();
+  // docs.md: playHls(url, hlsJsConfig) → raw Hls constructor config.
+  // Core player notes HLS uses hls.js loaders. Replacing loader/pLoader
+  // broke video.js (stats.loading.start). Only fLoader for PNG-strip
+  // segments; default playlist loader reads data:/blob m3u8.
   return {
-    loader: Loader,
-    pLoader: Loader,
     fLoader: Loader,
-    enableWorker: false,
-    lowLatencyMode: false,
     xhrSetup: (xhr: any, url: string) => {
       try {
-        xhr.setRequestHeader('Referer', 'https://stream.googleapiscdn.com/');
+        if (/googleusercontent|stream\.googleapis|lh3\./i.test(String(url))) {
+          xhr.setRequestHeader('Referer', 'https://stream.googleapiscdn.com/');
+        }
       } catch {
         //
       }
@@ -342,7 +344,12 @@ function renderMedia(resolved: ResolvedMedia, config: PlayerConfig) {
   if (resolved.type === 'sources' && resolved.sources) {
     const s = resolved.sources[0];
     const file = (s.file || '').replace(/^&http/, 'http');
-    if (s.type === 'hls' || /\.m3u8(\?|$)/i.test(file) || file.indexOf('blob:') === 0) {
+    if (
+      s.type === 'hls' ||
+      /\.m3u8(\?|$)/i.test(file) ||
+      file.indexOf('blob:') === 0 ||
+      file.indexOf('data:') === 0
+    ) {
       debugLog('[AVS] Playing M3U8: ' + file.slice(0, 80));
       player.playHls(file, buildHlsConfig());
     } else {

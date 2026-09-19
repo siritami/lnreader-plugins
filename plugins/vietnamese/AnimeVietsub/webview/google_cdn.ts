@@ -204,8 +204,11 @@ function buildM3u8Blob(headerLines: string[], segmentUrls: string[]): string {
       ' first=' +
       (segmentUrls[0] || '').slice(0, 70),
   );
-  const blob = new Blob([body], { type: 'application/vnd.apple.mpegurl' });
-  return URL.createObjectURL(blob);
+  // data: URI — default hls.js pLoader can parse the playlist without a
+  // custom loader (custom pLoader broke video.js stats.loading.start).
+  return (
+    'data:application/vnd.apple.mpegurl;charset=utf-8,' + encodeURIComponent(body)
+  );
 }
 
 function looksPlayableUrl(url: string): boolean {
