@@ -949,6 +949,63 @@ function spyObject(obj: any, label: string): any {
  *   context.getResponseHeader('…').split(...)
  * If getResponseHeader is missing, that becomes undefined.split.
  */
+function b64urlEncode(s: string): string {
+  return btoa(s).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+
+/**
+ * avs pLoader does context.getResponseHeader('X-Envelope') then
+ * something like env.split('.')[1]. The live header is USDK binary
+ * base64 (no dots) → parts[1] is undefined → undefined.split.
+ * Return a JWT-shaped string whose payload is the envelope JSON.
+ */
+function shapeEnvelopeHeader(raw: string): string {
+  if (!raw) return '';
+  try {
+    const envJson = parseEnvelope(raw);
+    if (envJson && (envJson.cn || envJson.sk)) {
+      const payload = b64urlEncode(JSON.stringify(envJson));
+      return 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.' + payload + '.sig';
+    }
+  } catch {
+    //
+  }
+  // Already dotted? keep as-is.
+  if (raw.indexOf('.') !== -1) return raw;
+  return raw;
+}
+
+function spyString(value: string, tag: string): any {
+  const str = String(value == null ? '' : value);
+  try {
+    return new Proxy(Object(str) as any, {
+      get(t, p, _r) {
+        if (p === 'split') {
+          return function (...args: any[]) {
+            const r = (str as any).split(...args);
+            debugLog(
+              tag +
+                '.split(' +
+                JSON.stringify(args).slice(0, 40) +
+                ') n=' +
+                r.length +
+                ' [0]=' +
+                String(r[0] || '').slice(0, 20) +
+                ' [1]=' +
+                (r[1] != null ? String(r[1]).slice(0, 24) : 'undefined'),
+            );
+            return r;
+          };
+        }
+        const v = (t as any)[p];
+        return typeof v === 'function' ? v.bind(str) : v;
+      },
+    });
+  } catch {
+    return str;
+  }
+}
+
 function attachContextHeaders(
   context: any,
   headerMap: Record<string, string>,
@@ -956,34 +1013,68 @@ function attachContextHeaders(
   url: string,
 ): any {
   const map = normalizeHeaderMap(headerMap);
+  // Pre-shape envelope for JWT-style parse in pLoader.
+  const envRaw = map['x-envelope'] || map['X-Envelope'] || '';
+  const envShaped = shapeEnvelopeHeader(envRaw);
+  if (envShaped && envShaped !== envRaw) {
+    map['x-envelope'] = envShaped;
+    map['X-Envelope'] = envShaped;
+    map['X-Envelope-USDK'] = envRaw;
+    debugLog('X-Envelope shaped → jwtish len=' + envShaped.length);
+  }
+
   const lookup = (name: any): string => {
     const n = String(name == null ? '' : name);
-    debugLog('ctx.getResponseHeader("' + n + '")');
-    if (!n) return '';
-    if (map[n] != null) return String(map[n]);
+    if (!n) {
+      debugLog('ctx.getResponseHeader("") → ""');
+      return '';
+    }
+    if (map[n] != null) {
+      const v = String(map[n]);
+      debugLog(
+        'ctx.getResponseHeader("' + n + '") → len=' +
+          v.length +
+          ' ' +
+          v.slice(0, 36) +
+          (v.indexOf('.') !== -1 ? '…dotted' : '…'),
+      );
+      return v;
+    }
     const ln = n.toLowerCase();
-    if (map[ln] != null) return String(map[ln]);
+    if (map[ln] != null) {
+      const v = String(map[ln]);
+      debugLog('ctx.getResponseHeader("' + n + '") → lc len=' + v.length + ' ' + v.slice(0, 36));
+      return v;
+    }
     for (const k of Object.keys(map)) {
       const lk = k.toLowerCase();
       if (lk === ln || lk.replace(/-/g, '') === ln.replace(/-/g, '')) {
-        debugLog('  → hdr ' + k);
-        return String(map[k]);
+        const v = String(map[k]);
+        debugLog('ctx.getResponseHeader("' + n + '") → ' + k + ' ' + v.slice(0, 36));
+        return v;
       }
       if (lk.indexOf(ln) !== -1 || ln.indexOf(lk) !== -1) {
-        debugLog('  → fuzzy ' + k);
-        return String(map[k]);
+        const v = String(map[k]);
+        debugLog('ctx.getResponseHeader("' + n + '") → fuzzy ' + k + ' ' + v.slice(0, 36));
+        return v;
       }
     }
-    debugLog('  → missing (keys=' + Object.keys(map).length + ')');
+    debugLog(
+      'ctx.getResponseHeader("' + n + '") → MISSING keys=' +
+        Object.keys(map).filter(k => k === k.toLowerCase()).slice(0, 12).join(','),
+    );
     return '';
   };
+
   const api = {
     status,
     statusText: status >= 200 && status < 300 ? 'OK' : String(status),
     url,
     headers: map,
     responseHeaders: map,
-    getResponseHeader: lookup,
+    getResponseHeader(name: string): any {
+      return spyString(lookup(name), 'hdr[' + String(name) + ']');
+    },
     getAllResponseHeaders(): string {
       const seen = new Set<string>();
       const lines: string[] = [];
@@ -991,7 +1082,8 @@ function attachContextHeaders(
         const lk = k.toLowerCase();
         if (seen.has(lk)) return;
         seen.add(lk);
-        lines.push(lk + ': ' + map[k] + '\r\n');
+        const val = String(map[k]);
+        lines.push(lk + ': ' + (val.length > 80 ? val.slice(0, 40) + '…' : val) + '\r\n');
       });
       return lines.join('');
     },
