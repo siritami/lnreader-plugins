@@ -766,8 +766,9 @@ function buildLoaderStats(loaded: number) {
 }
 
 /**
- * Inner hls.js loader that uses reader.fetch. Logs every URL the site
- * wrapper hands us — including G6 rewrites from placeholders → CDN.
+ * Inner hls.js loader that uses reader.fetch. avs pLoader often reads
+ * headers from the loader *instance* (this.headers / getResponseHeader),
+ * not only from the networkDetails argument.
  */
 function makeReaderLoader(
   probes: LoaderProbe[],
@@ -776,8 +777,31 @@ function makeReaderLoader(
   knownHeadersByMatch?: { match: string; headers: Record<string, string> }[],
 ) {
   function ReaderLoader(_config?: any) {
-    //
+    this._aborted = false;
+    this.status = 0;
+    this.headers = {};
+    this.responseHeaders = {};
+    this.stats = buildLoaderStats(0);
   }
+  ReaderLoader.prototype.getResponseHeader = function (name: string): string {
+    const map = (this as any).headers || (this as any).responseHeaders || {};
+    if (!name) return '';
+    const n = String(name);
+    const v = map[n] != null ? map[n] : map[n.toLowerCase()];
+    return v != null ? String(v) : '';
+  };
+  ReaderLoader.prototype.getAllResponseHeaders = function (): string {
+    const map = (this as any).headers || {};
+    const seen = new Set<string>();
+    const lines: string[] = [];
+    Object.keys(map).forEach((k: string) => {
+      const lk = k.toLowerCase();
+      if (seen.has(lk)) return;
+      seen.add(lk);
+      lines.push(lk + ': ' + map[k] + '\r\n');
+    });
+    return lines.join('');
+  };
   ReaderLoader.prototype.load = function (
     context: any,
     _config: any,
@@ -823,18 +847,27 @@ function makeReaderLoader(
           }
         }
 
+        const normalized = normalizeHeaderMap(merged);
+        // pLoader may read these off the inner loader instance.
+        this.status = res.status;
+        this.headers = normalized;
+        this.responseHeaders = normalized;
+        this.stats = buildLoaderStats((res.text || '').length || 1);
+        this.url = url;
+
         debugLog(
-          'Loader headers keys=' +
-            Object.keys(merged)
+          'Loader hdrKeys=' +
+            Object.keys(normalized)
               .map(k => k.toLowerCase())
               .filter((v, i, a) => a.indexOf(v) === i)
-              .join(','),
+              .join(',') +
+            ' env=' +
+            (normalized['x-envelope'] ? 'yes' : 'no'),
         );
 
         if (res.status >= 200 && res.status < 300) {
           const body = res.text || '';
-          const nd = buildNetworkDetails(res.status, url, merged);
-          // pLoader may expect ArrayBuffer when responseType says so.
+          const nd = buildNetworkDetails(res.status, url, normalized);
           const asBuf =
             context &&
             (context.responseType === 'arraybuffer' ||
@@ -843,7 +876,7 @@ function makeReaderLoader(
             ? new TextEncoder().encode(body).buffer
             : body;
           try {
-            callbacks.onSuccess(buildLoaderStats(body.length || 1), payload, nd, context);
+            callbacks.onSuccess(this.stats, payload, nd, context);
           } catch (e: any) {
             rec.note = String(e && e.message).slice(0, 80);
             debugLog('Loader onSuccess handler threw: ' + rec.note);
@@ -851,14 +884,14 @@ function makeReaderLoader(
               { code: 500, message: rec.note, text: rec.note },
               context,
               nd,
-              buildLoaderStats(body.length || 1),
+              this.stats,
             );
           }
         } else {
           callbacks.onError(
             { code: res.status, text: 'HTTP ' + res.status },
             context,
-            buildNetworkDetails(res.status, url, merged),
+            buildNetworkDetails(res.status, url, normalized),
             buildLoaderStats(0),
           );
         }
@@ -869,18 +902,46 @@ function makeReaderLoader(
         callbacks.onError(
           { code: 0, text: rec.note, message: rec.note },
           context,
-          buildNetworkDetails(0, url, {}),
+          buildNetworkDetails(0, url, this.headers || {}),
           buildLoaderStats(0),
         );
       });
   };
   ReaderLoader.prototype.abort = function () {
-    (this as any)._aborted = true;
+    this._aborted = true;
   };
   ReaderLoader.prototype.destroy = function () {
     //
   };
   return ReaderLoader;
+}
+
+/** Debug: log which properties avs pLoader reads before it crashes. */
+function spyObject(obj: any, label: string): any {
+  try {
+    return new Proxy(obj, {
+      get(t, p, _r) {
+        const key = String(p);
+        if (key === 'then' || key === 'toJSON') return (t as any)[p];
+        const v = (t as any)[p];
+        const kind = typeof v;
+        if (kind === 'function') {
+          debugLog('spy ' + label + '.' + key + '()');
+          return v.bind(t);
+        }
+        const preview =
+          v == null
+            ? String(v)
+            : typeof v === 'object'
+              ? '{' + Object.keys(v).slice(0, 6).join(',') + '}'
+              : String(v).slice(0, 48);
+        debugLog('spy ' + label + '.' + key + ' = ' + preview);
+        return v;
+      },
+    });
+  } catch {
+    return obj;
+  }
 }
 
 function invokeLoaderWith(
@@ -957,7 +1018,8 @@ function invokeLoaderWith(
             debugLog(
               label + ': error ' +
                 String(err && (err.message || err.text || err)).slice(0, 80) +
-                ' st=' + (nd && nd.status),
+                ' st=' + (nd && nd.status) +
+                ' ndKeys=' + (nd && typeof nd === 'object' ? Object.keys(nd).slice(0, 8).join(',') : typeof nd),
             );
             done(null);
           },
@@ -1056,23 +1118,26 @@ async function decryptShieldM3u8(
     const viaP = await invokeLoaderWith(
       runtime.pLoader,
       ReaderLoader,
-      {
-        url: playlistUrl,
-        responseType: 'text',
-        type: 'manifest',
-        level: 0,
-        levelurl: playlistUrl,
-        referer: playerUrl,
-        headers: m3u8Headers,
-        networkDetails: buildNetworkDetails(200, playlistUrl, m3u8Headers || {}),
-        frag: {
-          type: 'playlist',
-          level: 0,
+      spyObject(
+        {
           url: playlistUrl,
-          relurl: playlistUrl,
-          baseurl: baseUrl + '/',
+          responseType: 'text',
+          type: 'manifest',
+          level: 0,
+          levelurl: playlistUrl,
+          referer: playerUrl,
+          headers: m3u8Headers,
+          networkDetails: buildNetworkDetails(200, playlistUrl, m3u8Headers || {}),
+          frag: {
+            type: 'playlist',
+            level: 0,
+            url: playlistUrl,
+            relurl: playlistUrl,
+            baseurl: baseUrl + '/',
+          },
         },
-      },
+        'ctx',
+      ),
       'pLoader',
       6000,
       { envHash },
