@@ -14,8 +14,11 @@ import { cleanupIframe, debugLog } from './utils';
  * 5) Build a data: m3u8 with #EXTM3U / #EXTINF preserved
  */
 
-const AVS_UA =
-  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36';
+export function getAvsUa(): string {
+  return typeof navigator !== 'undefined' && navigator.userAgent
+    ? navigator.userAgent
+    : '';
+}
 
 function bypassHeaders(referer?: string): Record<string, string> {
   const h: Record<string, string> = {
@@ -23,7 +26,7 @@ function bypassHeaders(referer?: string): Record<string, string> {
       'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
     'Accept-Language': 'vi,en-US;q=0.9,en;q=0.8',
     'Upgrade-Insecure-Requests': '1',
-    'User-Agent': AVS_UA,
+    'User-Agent': getAvsUa(),
   };
   if (referer) h.Referer = referer;
   return h;
@@ -73,7 +76,6 @@ function parseEnvelope(envB64: string): { cn: string; sk: string; ts: string; ui
     const payloadLen = ((bytes[5] & 0xff) << 8) | (bytes[6] & 0xff);
     if (bytes.length < 7 + payloadLen + 4) return null;
     const payload = bytes.subarray(7, 7 + payloadLen);
-    // Kotlin: payload.toString(ISO_8859_1) then URLDecoder.decode(..., UTF-8)
     let iso = '';
     for (const b of payload) iso += String.fromCharCode(b);
     const decoded = decodeURIComponent(iso);

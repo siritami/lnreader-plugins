@@ -13,7 +13,7 @@
  */
 import { initUtils, debugLog, showError } from './utils';
 import { fetchAjaxPlayer } from './ajax';
-import { resolveGoogleApisCdn } from './google_cdn';
+import { resolveGoogleApisCdn, getAvsUa } from './google_cdn';
 import type { PlayerConfig, ResolvedMedia } from './types';
 
 const AVS_TS_SYNC = 0x47;
@@ -79,8 +79,7 @@ async function fetchMedia(url: string): Promise<ArrayBuffer> {
       ? undefined
       : {
           Referer: 'https://stream.googleapiscdn.com/',
-          'User-Agent':
-            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36',
+          'User-Agent': getAvsUa(),
         },
   });
   return res.arrayBuffer();
