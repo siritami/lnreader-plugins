@@ -17,7 +17,7 @@ class AnimeVietsubPlugin extends NekoriBasePlugin {
   name = 'AnimeVietsub';
   icon = 'icon.png';
   site = 'https://animevietsub.li';
-  version = '1.6.3';
+  version = '1.6.4';
   filters = filters;
   contentType = ContentType.VIDEO;
 

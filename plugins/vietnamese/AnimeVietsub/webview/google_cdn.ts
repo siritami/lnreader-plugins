@@ -1551,6 +1551,9 @@ function attachContextHeaders(
     status,
     statusText: status >= 200 && status < 300 ? 'OK' : String(status),
     url,
+    // pLoader does responseURL.split(...) — must never be undefined.
+    responseURL: url,
+    finalUrl: url,
     headers: map,
     responseHeaders: map,
     // pLoader onSuccess does responseText.split('\n') after reading headers.
@@ -1570,7 +1573,11 @@ function attachContextHeaders(
       return lines.join('');
     },
   };
-  return Object.assign(context || {}, api);
+  const merged = Object.assign(context || {}, api);
+  if (url) {
+    debugLog('ctx.responseURL set len=' + String(url).length + ' ' + String(url).slice(0, 50));
+  }
+  return merged;
 }
 
 /** Attach playlist body wherever avs pLoader might read it. */
@@ -1580,10 +1587,10 @@ function attachResponseBody(target: any, body: string): any {
   target.response = body;
   target.body = body;
   target.data = body;
-  // avs-loader strings include `text` + `body` + `headers`
   target.text = body;
-  target.responseText = body;
   if (!target.status) target.status = 200;
+  if (!target.responseURL && target.url) target.responseURL = target.url;
+  if (!target.finalUrl && target.url) target.finalUrl = target.url;
   return target;
 }
 
@@ -1599,27 +1606,39 @@ function attachInstanceXhr(
   attachResponseBody(inst, body);
   inst.status = inst.status || 200;
   inst.statusText = inst.statusText || 'OK';
-  inst.url = inst.url || url;
-  inst.responseURL = inst.responseURL || url;
+  const u = url || inst.url || inst.responseURL || '';
+  if (!inst.url && u) inst.url = u;
+  // Always stamp responseURL — pLoader does responseURL.split().
+  inst.responseURL = u || inst.responseURL || '';
+  inst.finalUrl = u || inst.finalUrl || '';
+  if (!inst.responseURL) {
+    debugLog('attachInstanceXhr: responseURL still empty!');
+  }
   inst.headers = map;
   inst.responseHeaders = map;
-  inst.getResponseHeader = function (name: string) {
-    if (!name) return '';
-    const n = String(name);
-    const v = map[n] != null ? map[n] : map[n.toLowerCase()];
-    return v != null ? String(v) : '';
-  };
-  inst.getAllResponseHeaders = function () {
-    const seen = new Set<string>();
-    const lines: string[] = [];
-    Object.keys(map).forEach(k => {
-      const lk = k.toLowerCase();
-      if (seen.has(lk)) return;
-      seen.add(lk);
-      lines.push(lk + ': ' + map[k] + '\r\n');
-    });
-    return lines.join('');
-  };
+  // Keep existing logging getResponseHeader if already attached.
+  if (typeof inst.getResponseHeader !== 'function') {
+    inst.getResponseHeader = function (name: string) {
+      if (!name) return '';
+      const n = String(name);
+      const v = map[n] != null ? map[n] : map[n.toLowerCase()];
+      debugLog('inst.getResponseHeader("' + n + '") → ' + (v != null ? String(v).slice(0, 24) : ''));
+      return v != null ? String(v) : '';
+    };
+  }
+  if (typeof inst.getAllResponseHeaders !== 'function') {
+    inst.getAllResponseHeaders = function () {
+      const seen = new Set<string>();
+      const lines: string[] = [];
+      Object.keys(map).forEach(k => {
+        const lk = k.toLowerCase();
+        if (seen.has(lk)) return;
+        seen.add(lk);
+        lines.push(lk + ': ' + map[k] + '\r\n');
+      });
+      return lines.join('');
+    };
+  }
 }
 
 function invokeLoaderWith(
@@ -1681,7 +1700,22 @@ function invokeLoaderWith(
       attachInstanceXhr(inst, hdrMap, body, (context && context.url) || '');
       if (context) {
         attachResponseBody(context, body);
-        attachInstanceXhr(context, hdrMap, body, context.url || '');
+        // Do not clobber logging getResponseHeader on context.
+        if (!context.responseURL) context.responseURL = context.url || '';
+        if (!context.finalUrl) context.finalUrl = context.url || '';
+        context.headers = hdrMap;
+        context.responseHeaders = hdrMap;
+        if (typeof context.getResponseHeader !== 'function') {
+          attachInstanceXhr(context, hdrMap, body, context.url || '');
+        } else if (!context.responseURL && context.url) {
+          context.responseURL = context.url;
+        }
+        debugLog(
+          'invoke ctx responseURL=' +
+            String(context.responseURL || '').slice(0, 50) +
+            ' text=' +
+            typeof context.text,
+        );
       }
 
       const cb: any = {
