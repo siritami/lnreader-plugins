@@ -667,6 +667,42 @@ async function loadSiteDecryptRuntime(
     base + 'avs-fingerprint.min.js' + q,
   ];
 
+  // Mock JWPlayer + #player so init.js can run without replacing the reader.
+  try {
+    const w2 = window as any;
+    if (typeof w2.jwplayer !== 'function') {
+      const mockPlayer = {
+        on: () => mockPlayer,
+        once: () => mockPlayer,
+        setup: () => mockPlayer,
+        play: () => mockPlayer,
+        pause: () => mockPlayer,
+        remove: () => mockPlayer,
+        getState: () => 'idle',
+        getPosition: () => 0,
+        getDuration: () => 0,
+        getPlaylist: () => [],
+        getPlaylistItem: () => null,
+        getConfig: () => ({ hlsjsConfig: {}, provider: null }),
+        getContainer: () => document.getElementById('avs-player-container'),
+      };
+      const jw: any = function () {
+        return mockPlayer;
+      };
+      jw.defaults = { key: '' };
+      jw.version = '8.0.0-mock';
+      w2.jwplayer = jw;
+    }
+    if (!document.getElementById('player')) {
+      const div = document.createElement('div');
+      div.id = 'player';
+      div.style.cssText = 'width:1px;height:1px;position:absolute;opacity:0;';
+      document.body.appendChild(div);
+    }
+  } catch (e: any) {
+    debugLog('jw mock err: ' + e.message);
+  }
+
   for (const url of files) {
     try {
       const res = await nativeFetch(url, {
@@ -682,6 +718,22 @@ async function loadSiteDecryptRuntime(
     } catch (e: any) {
       debugLog('Runtime eval fail ' + url + ': ' + (e && e.message));
     }
+  }
+
+  // init.js completes pLoader/hls wiring the site player uses.
+  try {
+    const initRes = await nativeFetch(base + 'init.min.js' + q, {
+      Referer: 'https://storage.googleapiscdn.com/',
+    });
+    if (initRes.status === 200 && initRes.text && initRes.text.length > 1000) {
+      // eslint-disable-next-line no-eval
+      (0, eval)(initRes.text);
+      debugLog('Loaded init.min.js (' + initRes.text.length + ')');
+    } else {
+      debugLog('init.min.js skip st=' + initRes.status + ' len=' + (initRes.text || '').length);
+    }
+  } catch (e: any) {
+    debugLog('init.min.js eval fail: ' + (e && e.message));
   }
 
   const newKeys = Object.getOwnPropertyNames(window).filter(k => !keysBefore.has(k));
@@ -1402,6 +1454,9 @@ async function decryptShieldM3u8(
             url: playlistUrl,
             relurl: playlistUrl,
             baseurl: baseUrl + '/',
+            baseURL: baseUrl + '/',
+            base: baseUrl + '/',
+            sn: 0,
           },
         },
         m3u8Headers || {},
@@ -1463,6 +1518,9 @@ async function decryptShieldM3u8(
               url: playlistUrl,
               relurl: playlistUrl,
               baseurl: baseUrl + '/',
+              baseURL: baseUrl + '/',
+              base: baseUrl + '/',
+              sn: 0,
             },
           },
           m3u8Headers || {},
