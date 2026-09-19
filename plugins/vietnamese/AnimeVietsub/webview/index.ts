@@ -13,8 +13,19 @@
  */
 import { initUtils, debugLog, showError } from './utils';
 import { fetchAjaxPlayer } from './ajax';
-import { resolveGoogleApisCdn } from './google_cdn';
+import {
+  resolveGoogleApisCdn,
+  ShieldDecryptUnsupportedError,
+} from './google_cdn';
 import type { PlayerConfig, ResolvedMedia } from './types';
+
+function iframeFallback(config: PlayerConfig): ResolvedMedia | null {
+  if (config.iframeSrc) {
+    debugLog('Fallback: nhúng iframe player.');
+    return { type: 'iframe', iframeUrl: config.iframeSrc };
+  }
+  return null;
+}
 
 function parseConfig(container: HTMLElement): PlayerConfig {
   return {
@@ -57,7 +68,20 @@ async function resolveMedia(config: PlayerConfig): Promise<ResolvedMedia> {
       config.mode === 'm3u8'
     ) {
       debugLog('Resolver: Kích hoạt GoogleApisCdn Decryptor.');
-      return await resolveGoogleApisCdn(config.iframeSrc);
+      try {
+        return await resolveGoogleApisCdn(config.iframeSrc);
+      } catch (e: any) {
+        if (
+          e instanceof ShieldDecryptUnsupportedError ||
+          /AVS_SHIELD_UNSUPPORTED|Giải mã thất bại|Không tìm thấy avsToken|Thiếu thông tin giải mã/.test(
+            e?.message || '',
+          )
+        ) {
+          const fb = iframeFallback(config);
+          if (fb) return fb;
+        }
+        throw e;
+      }
     }
     debugLog('Resolver: Dùng Iframe nhúng trực tiếp.');
     return { type: 'iframe', iframeUrl: config.iframeSrc };
@@ -66,7 +90,20 @@ async function resolveMedia(config: PlayerConfig): Promise<ResolvedMedia> {
   // 4. Ajax Fallback
   if (config.ajaxHash && config.ajaxSite) {
     debugLog('Resolver: Kích hoạt Ajax Fallback.');
-    return await fetchAjaxPlayer(config);
+    try {
+      return await fetchAjaxPlayer(config);
+    } catch (e: any) {
+      if (
+        e instanceof ShieldDecryptUnsupportedError ||
+        /AVS_SHIELD_UNSUPPORTED|Giải mã thất bại|Không tìm thấy avsToken|Thiếu thông tin giải mã|success = false/.test(
+          e?.message || '',
+        )
+      ) {
+        // Prefer site iframe if ajax returned one via a later path; otherwise rethrow.
+        debugLog('Ajax/m3u8 path failed: ' + (e?.message || e));
+      }
+      throw e;
+    }
   }
 
   throw new Error('Thiếu thông tin cấu hình, không thể xác định nguồn phát.');
@@ -81,7 +118,7 @@ function renderMedia(resolved: ResolvedMedia, config: PlayerConfig) {
   if (resolved.type === 'sources' && resolved.sources) {
     const s = resolved.sources[0];
     const file = (s.file || '').replace(/^&http/, 'http');
-    if (s.type === 'hls' || /\\.m3u8(\\?|$)/i.test(file)) {
+    if (s.type === 'hls' || /\.m3u8(\?|$)/i.test(file)) {
       player.log('[AVS] Playing M3U8: ' + file);
       player.playHls(file);
     } else {

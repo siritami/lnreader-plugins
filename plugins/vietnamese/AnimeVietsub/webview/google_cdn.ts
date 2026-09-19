@@ -3,6 +3,48 @@ import { nativeFetch } from './fetch';
 import type { ResolvedMedia } from './types';
 import { cleanupIframe, debugLog } from './utils';
 
+/**
+ * avsToken is intentionally split in the player HTML so scrapers that
+ * regex a single "..." capture get a broken half. Reassemble string
+ * concatenations, then fall back to window._avsSk / a lone literal.
+ */
+export function extractAvsToken(html: string): string | null {
+  const concat = html.match(
+    /const\s+avsToken\s*=\s*((?:"[^"]*"\s*(?:\+\s*)?)+)/,
+  );
+  if (concat) {
+    const parts = concat[1].match(/"([^"]*)"/g);
+    if (parts && parts.length) {
+      const joined = parts.map(p => p.slice(1, -1)).join('');
+      if (joined.length > 20 && joined.includes('.')) return joined;
+    }
+  }
+
+  const single = html.match(/const\s+avsToken\s*=\s*"([^"]+)"/);
+  if (single && single[1] && single[1].includes('.')) return single[1];
+
+  const winLit = html.match(/window\._avsSk\s*=\s*"([^"]+)"/);
+  if (winLit && winLit[1] && winLit[1].includes('.')) return winLit[1];
+
+  return null;
+}
+
+/** Playlist shapes that only the site's own loader/SW can play. */
+export function isLegacyEncryptedPlaylist(m3u8Text: string): boolean {
+  return !!(m3u8Text && /[?&]_t=/.test(m3u8Text) && m3u8Text.includes('#EXTINF'));
+}
+
+export function isNewShieldPlaylist(m3u8Text: string): boolean {
+  return /SAMPLE-AES-CTR|urn:avs:shield|\/chunks\/|seg-key/i.test(m3u8Text);
+}
+
+export class ShieldDecryptUnsupportedError extends Error {
+  constructor() {
+    super('AVS_SHIELD_UNSUPPORTED');
+    this.name = 'ShieldDecryptUnsupportedError';
+  }
+}
+
 export async function resolveGoogleApisCdn(
   playerUrl: string,
 ): Promise<ResolvedMedia> {
@@ -12,7 +54,7 @@ export async function resolveGoogleApisCdn(
   iframe.src = playerUrl;
   (document.body || document.documentElement).appendChild(iframe);
 
-  const cfWait = 1000;
+  const cfWait = 1500;
   debugLog('Đợi CF ' + cfWait + 'ms…');
 
   await new Promise(resolve => setTimeout(resolve, cfWait));
@@ -38,11 +80,10 @@ async function fetchPlayerPage(
     debugLog('Page OK, size=' + html.length);
     cleanupIframe(iframe);
 
-    const tokenMatch = html.match(/const\s+avsToken\s*=\s*"([^"]+)"/);
-    if (!tokenMatch) {
+    const avsToken = extractAvsToken(html);
+    if (!avsToken) {
       throw new Error('Không tìm thấy avsToken trong HTML.');
     }
-    const avsToken = tokenMatch[1];
     debugLog('Token: ' + avsToken.substring(0, 30) + '…');
 
     const hashMatch = playerUrl.match(/\/player\/([0-9a-f]+)/);
@@ -67,6 +108,13 @@ async function fetchPlayerPage(
     const m3u8Text = m3u8Res.text;
     const m3u8Headers = m3u8Res.headers || {};
     debugLog('m3u8 OK, size=' + m3u8Text.length);
+
+    // v1.15.x: playlist is plaintext with SAMPLE-AES-CTR / chunks placeholders.
+    // Real playback is done by avs-loader + service worker inside their iframe.
+    if (isNewShieldPlaylist(m3u8Text)) {
+      debugLog('Detected AVS shield v3 playlist — m3u8 decrypt unsupported.');
+      throw new ShieldDecryptUnsupportedError();
+    }
 
     return await processEncryptedM3u8(m3u8Text, m3u8Headers, avsToken);
   } catch (err: any) {
