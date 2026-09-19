@@ -75,7 +75,7 @@ function parseEnvelope(envB64: string): { cn: string; sk: string; ts: string; ui
     const payload = bytes.subarray(7, 7 + payloadLen);
     // Kotlin: payload.toString(ISO_8859_1) then URLDecoder.decode(..., UTF-8)
     let iso = '';
-    for (let i = 0; i < payload.length; i++) iso += String.fromCharCode(payload[i]);
+    for (const b of payload) iso += String.fromCharCode(b);
     const decoded = decodeURIComponent(iso);
     return JSON.parse(decoded);
   } catch {
