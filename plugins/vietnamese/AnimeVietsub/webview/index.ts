@@ -1,15 +1,15 @@
 /* eslint-disable */
 
 /**
- * AnimeVietsub customJS — follows CloudStream AnimeVietsubProvider.kt
+ * AnimeVietsub customJS player bootstrap.
  *
- * 1. data-m3u8 → playHls (decrypt done in google_cdn)
+ * 1. data-m3u8 → playHls (decrypt already done)
  * 2. data-sources → playHls / playDirect
- * 3. data-iframe → decrypt or embed
- * 4. data-hash → ajax fallback
+ * 3. data-iframe → decrypt googleapiscdn or embed
+ * 4. data-hash → ajax player fallback
  *
- * googleusercontent segments are MPEG-TS in a fake PNG shell
- * (CloudStream interceptor). fLoader strips the shell for hls.js.
+ * lh3.googleusercontent segments are MPEG-TS inside a fake PNG shell;
+ * fLoader strips that shell before hls.js parses the fragment.
  */
 import { initUtils, debugLog, showError } from './utils';
 import { fetchAjaxPlayer } from './ajax';
@@ -21,7 +21,7 @@ const AVS_TS_PACKET = 188;
 const AVS_TS_SYNC_CHAIN = 8;
 const AVS_MAX_PREFIX = 4096;
 
-/** CloudStream findAvsPngPrefixLength + strip. */
+/** Find MPEG-TS sync after a fake PNG header and return the payload from that offset. */
 function stripAvsPng(ab: ArrayBuffer): ArrayBuffer {
   try {
     const u8 = new Uint8Array(ab);
@@ -214,7 +214,7 @@ async function resolveMedia(config: PlayerConfig): Promise<ResolvedMedia> {
   }
   if (config.iframeSrc) {
     if (config.iframeSrc.indexOf('googleapiscdn.com') !== -1 && config.mode === 'm3u8') {
-      debugLog('Resolver: CloudStream googleapis decrypt…');
+      debugLog('Resolver: googleapis m3u8 decrypt…');
       return await resolveGoogleApisCdn(config.iframeSrc);
     }
     return { type: 'iframe', iframeUrl: config.iframeSrc };
@@ -283,7 +283,7 @@ async function initPlayer() {
   } catch (error: any) {
     debugLog('Pipeline error: ' + (error && error.message));
     showError(error.message || 'Lỗi giải mã video.');
-    // Fallback: site iframe player (CloudStream uses this host successfully).
+    // Fallback: site iframe player when decrypt/playback fails.
     if (config.iframeSrc) {
       debugLog('Fallback: site iframe player.');
       renderMedia({ type: 'iframe', iframeUrl: config.iframeSrc }, config);

@@ -4,14 +4,14 @@ import type { ResolvedMedia } from './types';
 import { cleanupIframe, debugLog } from './utils';
 
 /**
- * Port of CloudStream AnimeVietsubProvider.kt (working reference).
+ * Decrypt googleapiscdn player playlists into playable HLS sources.
  *
- * 1) Join split avsToken literals
- * 2) GET player + GET playlist (retry)
- * 3) GCM decrypt concatenated `_t` (envelope cn/sk/ts/uid)
- * 4) url-cipher AES-CTR on `/hls/?e=` → http segment URLs
- *    (googleusercontent = MPEG-TS wrapped in fake PNG — kept as-is)
- * 5) Build data: m3u8 with #EXTINF kept / inserted
+ * 1) Join split avsToken string literals on the player page
+ * 2) GET the player HTML + encrypted playlist (up to 3 attempts)
+ * 3) AES-GCM decrypt the concatenated `_t` fragments (envelope cn/sk/ts/uid)
+ * 4) url-cipher AES-CTR on `/hls/?e=` → real http segment URLs
+ *    (lh3.googleusercontent segments are MPEG-TS wrapped in a fake PNG shell)
+ * 5) Build a data: m3u8 with #EXTM3U / #EXTINF preserved
  */
 
 const AVS_UA =
@@ -29,7 +29,7 @@ function bypassHeaders(referer?: string): Record<string, string> {
   return h;
 }
 
-/** CloudStream extractAvsToken — join all `"…"` chunks after `const avsToken =`. */
+/** Join all `"…"` chunks after `const avsToken =` into one JWT. */
 export function extractAvsToken(html: string): string | null {
   const decl = html.match(
     /const\s+avsToken\s*=\s*((?:"(?:[^"\\]|\\.)*"\s*\+?\s*)+)\s*;/,
@@ -135,7 +135,7 @@ function buildM3u8DataUri(m3u8Text: string): string {
   );
 }
 
-/** CloudStream decryptM3u8SegmentUrls — replace /hls/?e= in place, keep EXTINF. */
+/** Rewrite `/hls/<fileId>.ts?e=` lines to http URLs via HMAC(jtiOdd)+AES-CTR; keep #EXTINF. */
 async function decryptM3u8SegmentUrls(
   intermediateM3u8: string,
   jtiOdd: string,
@@ -214,7 +214,7 @@ async function decryptM3u8SegmentUrls(
   return clean.join('\n');
 }
 
-/** CloudStream processEncryptedM3u8 */
+/** Decrypt an encrypted server playlist using envelope headers + `_t` GCM blob. */
 async function processEncryptedM3u8(
   m3u8Text: string,
   m3u8Headers: Record<string, string>,
@@ -393,7 +393,7 @@ export async function resolveGoogleApisCdn(
   }
 }
 
-/** CloudStream decryptGoogleApisCdn (3 attempts, fresh player page each time). */
+/** Fetch player page + playlist, decrypt, return HLS sources (up to 3 attempts). */
 async function decryptGoogleApisCdn(
   playerUrl: string,
   iframe: HTMLIFrameElement,
@@ -462,5 +462,5 @@ async function decryptGoogleApisCdn(
   }
 
   cleanupIframe(iframe);
-  throw new Error('Giải mã googleapis thất bại (CloudStream path).');
+  throw new Error('Giải mã googleapis thất bại.');
 }
