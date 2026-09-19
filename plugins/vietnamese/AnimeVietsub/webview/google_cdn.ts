@@ -196,6 +196,14 @@ function buildM3u8Blob(headerLines: string[], segmentUrls: string[]): string {
     ...segmentUrls,
     '#EXT-X-ENDLIST',
   ].join('\n');
+  debugLog(
+    'buildM3u8Blob segs=' +
+      segmentUrls.length +
+      ' bodyLen=' +
+      body.length +
+      ' first=' +
+      (segmentUrls[0] || '').slice(0, 70),
+  );
   const blob = new Blob([body], { type: 'application/vnd.apple.mpegurl' });
   return URL.createObjectURL(blob);
 }

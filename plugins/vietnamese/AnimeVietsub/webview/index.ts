@@ -55,19 +55,24 @@ function stripAvsPngPrefix(ab: ArrayBuffer): ArrayBuffer {
 }
 
 function nativeFetchAny(url: string): Promise<{ status: number; text: string; buffer: ArrayBuffer }> {
-  const fetchFn =
-    // @ts-ignore
-    window.reader && window.reader.fetch
+  // blob:/data: must use page fetch — reader.fetch proxy returns empty/garbage.
+  const isBlob = /^blob:|^data:/i.test(url);
+  const fetchFn = isBlob
+    ? fetch.bind(window)
+    : // @ts-ignore
+      window.reader && window.reader.fetch
       ? // @ts-ignore
         window.reader.fetch.bind(window.reader)
       : fetch;
   return fetchFn(url, {
     credentials: 'include',
-    headers: {
-      Referer: 'https://stream.googleapiscdn.com/',
-      'User-Agent':
-        'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36',
-    },
+    headers: isBlob
+      ? undefined
+      : {
+          Referer: 'https://stream.googleapiscdn.com/',
+          'User-Agent':
+            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36',
+        },
   }).then(async (r: Response) => {
     const buffer = await r.arrayBuffer();
     let text = '';
@@ -94,21 +99,16 @@ function isPlaylistLike(url: string, context: any): boolean {
   );
 }
 
-function ensureLoaderStats(inst: any, t0: number) {
-  if (!inst.stats || typeof inst.stats !== 'object') {
-    inst.stats = {};
-  }
-  const s = inst.stats;
-  if (!s.loading || typeof s.loading !== 'object') {
-    s.loading = { start: t0, first: t0, end: t0 };
-  } else {
-    s.loading.start = t0;
-    s.loading.first = t0;
-    s.loading.end = t0;
-  }
-  s.aborted = false;
-  s.retry = s.retry || 0;
-  return s;
+/** Fresh hls.js stats — never write onto this.stats (hls may wipe it). */
+function makeLoaderStats(t0: number, loaded: number) {
+  return {
+    aborted: false,
+    loaded,
+    total: loaded,
+    retry: 0,
+    chunkCount: 1,
+    loading: { start: t0, first: t0, end: Date.now() },
+  };
 }
 
 /**
@@ -122,21 +122,12 @@ function createAvsTsLoader() {
     this.config = config;
     // @ts-ignore
     this.aborted = false;
-    // @ts-ignore
-    this.stats = {
-      aborted: false,
-      loaded: 0,
-      total: 0,
-      retry: 0,
-      loading: { start: 0, first: 0, end: 0 },
-    };
   }
   // @ts-ignore
   AvsTsLoader.prototype.load = function (context, _config, callbacks) {
     const self = this;
     const url = (context && context.url) || '';
     const t0 = Date.now();
-    const stats = ensureLoaderStats(self, t0);
     const asPlaylist = isPlaylistLike(url, context);
     debugLog(
       '[AVS] GET ' +
@@ -148,19 +139,27 @@ function createAvsTsLoader() {
     nativeFetchAny(url)
       .then(res => {
         if (self.aborted) return;
-        const t1 = Date.now();
-        stats.loading = { start: t0, first: t1, end: t1 };
-        stats.aborted = false;
 
         if (asPlaylist) {
-          const body = res.text && res.text.indexOf('#EXTM3U') !== -1
-            ? res.text
-            : new TextDecoder().decode(res.buffer);
-          stats.loaded = body.length;
-          stats.total = body.length;
-          debugLog('[AVS] playlist body len=' + body.length);
+          let body = res.text;
+          if (!body || body.indexOf('#EXTM3U') === -1) {
+            try {
+              body = new TextDecoder().decode(res.buffer);
+            } catch {
+              body = body || '';
+            }
+          }
+          debugLog(
+            '[AVS] playlist body len=' +
+              body.length +
+              ' head=' +
+              body.slice(0, 60).replace(/\n/g, '|'),
+          );
+          if (body.length < 40) {
+            debugLog('[AVS] playlist too short — decrypt output may be empty');
+          }
           callbacks.onSuccess(
-            stats,
+            makeLoaderStats(t0, body.length),
             body,
             { status: res.status, url, responseURL: url },
             context,
@@ -169,8 +168,6 @@ function createAvsTsLoader() {
         }
 
         const clean = stripAvsPngPrefix(res.buffer);
-        stats.loaded = clean.byteLength;
-        stats.total = clean.byteLength;
         debugLog(
           '[AVS] segment bytes=' +
             res.buffer.byteLength +
@@ -178,7 +175,7 @@ function createAvsTsLoader() {
             clean.byteLength,
         );
         callbacks.onSuccess(
-          stats,
+          makeLoaderStats(t0, clean.byteLength),
           clean,
           { status: res.status, url, responseURL: url },
           context,
@@ -187,12 +184,11 @@ function createAvsTsLoader() {
       .catch((err: any) => {
         if (self.aborted) return;
         debugLog('[AVS] GET fail ' + String(err && err.message).slice(0, 80));
-        const st = ensureLoaderStats(self, Date.now());
         callbacks.onError(
           { code: 0, text: String(err && err.message) },
           context,
           { status: 0, url },
-          st,
+          makeLoaderStats(Date.now(), 0),
         );
       });
   };
@@ -200,8 +196,6 @@ function createAvsTsLoader() {
   AvsTsLoader.prototype.abort = function () {
     // @ts-ignore
     this.aborted = true;
-    // @ts-ignore
-    if (this.stats) this.stats.aborted = true;
   };
   // @ts-ignore
   AvsTsLoader.prototype.destroy = function () {
