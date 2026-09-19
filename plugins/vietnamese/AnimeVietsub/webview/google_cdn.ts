@@ -1592,6 +1592,7 @@ function invokeLoaderWith(
   label: string,
   timeoutMs = 5000,
   hlsConfigExtra?: Record<string, any>,
+  preloadBody?: string,
 ): Promise<string | null> {
   return new Promise(resolve => {
     let settled = false;
@@ -1626,10 +1627,138 @@ function invokeLoaderWith(
         ...(hlsConfigExtra || {}),
       };
       const inst = new LoaderCtor(hlsConfig);
+      const body =
+        preloadBody ||
+        (context && context.responseText) ||
+        (hlsConfigExtra && (hlsConfigExtra as any).preloadBody) ||
+        '';
+      // avs pLoader onSuccess does `this.responseText.split('\\n')` (or a
+      // closed-over field) — not the callbacks `data` argument.
+      if (body) {
+        attachResponseBody(inst, body);
+        if (context) attachResponseBody(context, body);
+      }
+
+      const cb: any = {
+        onProgress: () => {
+          //
+        },
+        onError: (err: any, ctx: any, nd: any) => {
+          clearTimeout(timer);
+          debugLog(
+            label +
+              ': error ' +
+              String(err && (err.message || err.text || err)).slice(0, 80) +
+              ' st=' +
+              (nd && nd.status),
+          );
+          done(null);
+        },
+      };
+
+      cb.onSuccess = (_s: any, data: any, nd: any, ctx: any) => {
+        const text0 =
+          typeof data === 'string'
+            ? data
+            : data && typeof data.responseText === 'string'
+              ? data.responseText
+              : data && typeof data.response === 'string'
+                ? data.response
+                : body;
+        // Re-stamp body onto pLoader instance + callbacks before extract.
+        if (text0) {
+          try {
+            attachResponseBody(inst, text0);
+            attachResponseBody(cb, text0);
+            if (ctx) attachResponseBody(ctx, text0);
+          } catch {
+            //
+          }
+        }
+        clearTimeout(timer);
+        const urlNow = (ctx && ctx.url) || (context && context.url) || '';
+        debugLog(
+          label +
+            ': success st=' +
+            (nd && nd.status) +
+            ' body=' +
+            (text0 ? text0.length : 0) +
+            ' url=' +
+            String(urlNow).slice(0, 70),
+        );
+        if (text0) done(text0);
+        else done(null);
+      };
+
+      if (body) attachResponseBody(cb, body);
+
+      // If pLoader reads this.responseText inside its own onSuccess wrapper,
+      // stamp body on the instance right before load and again after ctor.
+      const stamp = (t: string) => {
+        if (!t) return;
+        attachResponseBody(inst, t);
+        attachResponseBody(cb, t);
+        try {
+          (inst as any)._response = t;
+          (inst as any).responseText = t;
+          (inst as any).body = t;
+        } catch {
+          //
+        }
+      };
+      stamp(body);
+
+      const origLoad = inst.load && inst.load.bind(inst);
+      if (typeof origLoad === 'function') {
+        inst.load = function (ctx: any, cfg: any, callbacks: any) {
+          const merged = callbacks || cb;
+          try {
+            const seed =
+              (ctx && ctx.responseText) ||
+              (merged && merged.responseText) ||
+              body;
+            stamp(seed);
+            if (ctx) attachResponseBody(ctx, seed);
+          } catch {
+            //
+          }
+          // Also stamp via wrapped onSuccess if they pass our callbacks through.
+          if (merged && merged !== cb && typeof merged.onSuccess === 'function') {
+            const inner = merged.onSuccess;
+            merged.onSuccess = function (s: any, d: any, n: any, c: any) {
+              const t =
+                typeof d === 'string'
+                  ? d
+                  : d && d.responseText
+                    ? d.responseText
+                    : body;
+              stamp(t);
+              try {
+                return inner.call(this, s, d, n, c);
+              } catch (e) {
+                // Retry with body-first / response-first argument orders.
+                debugLog(label + ': inner onSuccess fail: ' + (e && e.message));
+                try {
+                  return inner.call(inst, t || '', s, n, c);
+                } catch (e2) {
+                  try {
+                    return inner.call(inst, s, t || '', n, c);
+                  } catch (e3) {
+                    throw e;
+                  }
+                }
+              }
+            };
+          }
+          return origLoad(ctx, cfg, merged || cb);
+        };
+      }
+
       const timer = setTimeout(() => {
         debugLog(label + ': timeout');
         done(null);
       }, timeoutMs);
+
       inst.load(
         context,
         {
@@ -1638,54 +1767,7 @@ function invokeLoaderWith(
           enableWorker: false,
           lowLatencyMode: false,
         },
-        {
-          onSuccess: (_s: any, data: any, nd: any, ctx: any) => {
-            clearTimeout(timer);
-            const urlNow = (ctx && ctx.url) || (context && context.url) || '';
-            const dataPreview =
-              typeof data === 'string'
-                ? 'str:' + data.length
-                : data && typeof data === 'object'
-                  ? 'obj rt=' +
-                    typeof (data as any).responseText +
-                    ' keys=' +
-                    Object.keys(data).slice(0, 6).join(',')
-                  : typeof data;
-            debugLog(
-              label + ': success st=' + (nd && nd.status) +
-                ' data=' + dataPreview +
-                ' url=' + String(urlNow).slice(0, 80),
-            );
-            const extract = (d: any): string | null => {
-              if (typeof d === 'string') return d;
-              if (d && typeof d.responseText === 'string') return d.responseText;
-              if (d && typeof d.response === 'string') return d.response;
-              if (d instanceof ArrayBuffer) {
-                return new TextDecoder().decode(new Uint8Array(d));
-              }
-              if (ArrayBuffer.isView(d)) {
-                return new TextDecoder().decode(d as any);
-              }
-              return null;
-            };
-            const text = extract(data);
-            if (text != null) done(text);
-            else done(null);
-          },
-          onError: (err: any, ctx: any, nd: any) => {
-            clearTimeout(timer);
-            debugLog(
-              label + ': error ' +
-                String(err && (err.message || err.text || err)).slice(0, 80) +
-                ' st=' + (nd && nd.status) +
-                ' ndKeys=' + (nd && typeof nd === 'object' ? Object.keys(nd).slice(0, 8).join(',') : typeof nd),
-            );
-            done(null);
-          },
-          onProgress: () => {
-            //
-          },
-        },
+        cb,
       );
     } catch (e: any) {
       debugLog(label + ': throw ' + (e && e.message));
@@ -1829,7 +1911,8 @@ async function decryptShieldM3u8(
       spyObject(pLoaderCtx, 'ctx'),
       'pLoader',
       6000,
-      { envHash },
+      { envHash, preloadBody: m3u8Text },
+      m3u8Text,
     );
     if (viaP) {
       debugLog('pLoader out len=' + viaP.length + ' head=' + viaP.slice(0, 80).replace(/\n/g, '|'));
@@ -1893,7 +1976,8 @@ async function decryptShieldM3u8(
         spyObject(pLoaderCtxAb, 'ctxAb'),
         'pLoader-ab',
         6000,
-        { envHash },
+        { envHash, preloadBody: m3u8Text },
+        m3u8Text,
       );
       if (viaP2) {
         debugLog('pLoader-ab out len=' + viaP2.length + ' head=' + viaP2.slice(0, 70).replace(/\n/g, '|'));
