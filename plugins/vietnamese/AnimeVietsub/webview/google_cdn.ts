@@ -694,11 +694,56 @@ type LoaderProbe = {
   note?: string;
 };
 
+/** hls.js / avs-loader expect XMLHttpRequest-shaped networkDetails. */
+function buildNetworkDetails(
+  status: number,
+  url: string,
+  headerMap: Record<string, string>,
+) {
+  const map: Record<string, string> = {};
+  Object.keys(headerMap || {}).forEach(k => {
+    map[String(k).toLowerCase()] = String(headerMap[k]);
+  });
+  return {
+    status,
+    statusText: status >= 200 && status < 300 ? 'OK' : String(status),
+    url,
+    responseHeaders: map,
+    getAllResponseHeaders(): string {
+      return Object.keys(map)
+        .map(k => k + ': ' + map[k] + '\r\n')
+        .join('');
+    },
+    getResponseHeader(name: string): string {
+      if (!name) return '';
+      return map[String(name).toLowerCase()] || '';
+    },
+  };
+}
+
+function buildLoaderStats(loaded: number) {
+  const now = Date.now();
+  return {
+    aborted: false,
+    loaded,
+    total: loaded,
+    retry: 0,
+    chunkCount: 1,
+    bwEstimate: loaded,
+    loading: { start: now - 40, first: now - 10, end: now },
+  };
+}
+
 /**
  * Inner hls.js loader that uses reader.fetch. Logs every URL the site
  * wrapper hands us — including G6 rewrites from placeholders → CDN.
  */
-function makeReaderLoader(probes: LoaderProbe[], referer: string, extraHeaders?: Record<string, string>) {
+function makeReaderLoader(
+  probes: LoaderProbe[],
+  referer: string,
+  extraHeaders?: Record<string, string>,
+  knownHeadersByMatch?: { match: string; headers: Record<string, string> }[],
+) {
   function ReaderLoader(_config?: any) {
     //
   }
@@ -724,19 +769,51 @@ function makeReaderLoader(probes: LoaderProbe[], referer: string, extraHeaders?:
         rec.len = (res.text || '').length;
         rec.note = 'ok';
         if (this._aborted) return;
+
+        // Merge headers the app fetch may not expose (CORS / reader proxy).
+        const merged: Record<string, string> = { ...(res.headers || {}) };
+        if (knownHeadersByMatch) {
+          for (const rule of knownHeadersByMatch) {
+            if (url.indexOf(rule.match) !== -1) {
+              Object.keys(rule.headers).forEach(k => {
+                const lk = k.toLowerCase();
+                if (!merged[lk]) merged[lk] = rule.headers[k];
+              });
+            }
+          }
+        }
+        // Always try to keep envelope-like headers populated.
+        if (!merged['x-envelope'] && !merged['x-avs-envelope']) {
+          const anyEnv = Object.keys(merged).find(k => k.indexOf('envelope') !== -1);
+          if (anyEnv) merged['x-envelope'] = merged[anyEnv];
+        }
+
         if (res.status >= 200 && res.status < 300) {
-          callbacks.onSuccess(
-            { loaded: rec.len || 1, total: rec.len || 1 },
-            res.text,
-            { status: res.status, url, responseHeaders: res.headers },
-            context,
-          );
+          const body = res.text || '';
+          try {
+            callbacks.onSuccess(
+              buildLoaderStats(body.length || 1),
+              body,
+              buildNetworkDetails(res.status, url, merged),
+              context,
+            );
+          } catch (e: any) {
+            // pLoader may throw while post-processing a successful body.
+            rec.note = String(e && e.message).slice(0, 80);
+            debugLog('Loader onSuccess handler threw: ' + rec.note);
+            callbacks.onError(
+              { code: 500, message: rec.note, text: rec.note },
+              context,
+              buildNetworkDetails(res.status, url, merged),
+              buildLoaderStats(body.length || 1),
+            );
+          }
         } else {
           callbacks.onError(
             { code: res.status, text: 'HTTP ' + res.status },
             context,
-            { status: res.status, url },
-            { loaded: 0 },
+            buildNetworkDetails(res.status, url, merged),
+            buildLoaderStats(0),
           );
         }
       })
@@ -744,10 +821,10 @@ function makeReaderLoader(probes: LoaderProbe[], referer: string, extraHeaders?:
         rec.note = String(e && e.message).slice(0, 80);
         if (this._aborted) return;
         callbacks.onError(
-          { code: 0, text: rec.note },
+          { code: 0, text: rec.note, message: rec.note },
           context,
-          { status: 0, url },
-          { loaded: 0 },
+          buildNetworkDetails(0, url, {}),
+          buildLoaderStats(0),
         );
       });
   };
@@ -766,6 +843,7 @@ function invokeLoaderWith(
   context: any,
   label: string,
   timeoutMs = 5000,
+  hlsConfigExtra?: Record<string, any>,
 ): Promise<string | null> {
   return new Promise(resolve => {
     let settled = false;
@@ -776,14 +854,36 @@ function invokeLoaderWith(
       }
     };
     try {
-      const inst = new LoaderCtor({ loader: InnerLoader, config: {}, xhrSetup: undefined });
+      const hlsConfig = {
+        loader: InnerLoader,
+        pLoader: LoaderCtor,
+        xhrSetup: (xhr: any, url: string) => {
+          try {
+            xhr.setRequestHeader('X-Client-Env', 'f728f44d');
+            xhr.setRequestHeader('Referer', context && context.referer);
+          } catch {
+            //
+          }
+        },
+        maxRetry: 0,
+        timeout: timeoutMs - 400,
+        enableWorker: false,
+        lowLatencyMode: false,
+        ...(hlsConfigExtra || {}),
+      };
+      const inst = new LoaderCtor(hlsConfig);
       const timer = setTimeout(() => {
         debugLog(label + ': timeout');
         done(null);
       }, timeoutMs);
       inst.load(
         context,
-        { maxRetry: 0, timeout: timeoutMs - 400, enableWorker: false },
+        {
+          maxRetry: 0,
+          timeout: timeoutMs - 400,
+          enableWorker: false,
+          lowLatencyMode: false,
+        },
         {
           onSuccess: (_s: any, data: any, nd: any, ctx: any) => {
             clearTimeout(timer);
@@ -869,6 +969,26 @@ async function decryptShieldM3u8(
   if (runtime.keysSeen && runtime.keysSeen.length) {
     debugLog('Crypto keys: ' + runtime.keysSeen.slice(0, 8).join(' | '));
   }
+  try {
+    const w = window as any;
+    const g = w.__avsG;
+    debugLog(
+      '__avsG: ' +
+        (g == null
+          ? 'null'
+          : typeof g === 'object'
+            ? JSON.stringify(g).slice(0, 300)
+            : String(g).slice(0, 120)),
+    );
+    debugLog(
+      'state: sk=' + String(w._avsSk).slice(0, 16) +
+        '… salt=' + w._avsSalt +
+        ' sid=' + w.avsSid +
+        ' probe=' + JSON.stringify(w._avsProbe),
+    );
+  } catch (e: any) {
+    debugLog('__avsG dump err: ' + e.message);
+  }
 
   const hashMatch = playerUrl.match(/\/player\/([0-9a-f]+)/i);
   const baseMatch = playerUrl.match(/^(https?:\/\/[^/]+)/);
@@ -877,7 +997,15 @@ async function decryptShieldM3u8(
     baseUrl + '/playlist/' + (hashMatch ? hashMatch[1] : '') +
     '/playlist.m3u8?token=' + encodeURIComponent(avsToken);
 
-  const ReaderLoader = makeReaderLoader(probes, playerUrl, extraHeaders);
+  const knownHeadersByMatch = [
+    { match: '/playlist/', headers: m3u8Headers },
+  ];
+  const ReaderLoader = makeReaderLoader(
+    probes,
+    playerUrl,
+    extraHeaders,
+    knownHeadersByMatch,
+  );
 
   // 1) pLoader with reader.fetch (real playlist fetch through site wrapper)
   if (runtime.pLoader) {
@@ -890,9 +1018,17 @@ async function decryptShieldM3u8(
         responseType: 'text',
         type: 'manifest',
         level: 0,
-        frag: { type: 'playlist', level: 0 },
+        levelurl: playlistUrl,
+        referer: playerUrl,
         headers: m3u8Headers,
-        networkDetails: { responseHeaders: m3u8Headers },
+        networkDetails: buildNetworkDetails(200, playlistUrl, m3u8Headers || {}),
+        frag: {
+          type: 'playlist',
+          level: 0,
+          url: playlistUrl,
+          relurl: playlistUrl,
+          baseurl: baseUrl + '/',
+        },
       },
       'pLoader',
       6000,
