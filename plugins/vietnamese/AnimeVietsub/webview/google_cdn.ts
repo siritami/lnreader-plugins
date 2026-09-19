@@ -870,6 +870,9 @@ function makeReaderLoader(
         this.responseHeaders = normalized;
         this.stats = buildLoaderStats((res.text || '').length || 1);
         this.url = url;
+        const body = res.text || '';
+        attachResponseBody(this, body);
+        attachResponseBody(normalized, body);
 
         debugLog(
           'Loader hdrKeys=' +
@@ -882,15 +885,18 @@ function makeReaderLoader(
         );
 
         if (res.status >= 200 && res.status < 300) {
-          const body = res.text || '';
+          const body2 = res.text || '';
           const nd = buildNetworkDetails(res.status, url, normalized);
+          attachResponseBody(nd, body2);
+          attachResponseBody(context, body2);
           const asBuf =
             context &&
             (context.responseType === 'arraybuffer' ||
               context.responseType === 'arrayBuffer');
           const payload = asBuf
-            ? new TextEncoder().encode(body).buffer
-            : body;
+            ? new TextEncoder().encode(body2).buffer
+            : body2;
+          debugLog('Loader onSuccess body len=' + (typeof payload === 'string' ? payload.length : 'ab'));
           try {
             callbacks.onSuccess(this.stats, payload, nd, context);
           } catch (e: any) {
@@ -1092,6 +1098,7 @@ function attachContextHeaders(
     url,
     headers: map,
     responseHeaders: map,
+    // pLoader onSuccess does responseText.split('\n') after reading headers.
     getResponseHeader(name: string): any {
       return spyString(lookup(name), 'hdr[' + String(name) + ']');
     },
@@ -1109,6 +1116,18 @@ function attachContextHeaders(
     },
   };
   return Object.assign(context || {}, api);
+}
+
+/** Attach playlist body wherever avs pLoader might read it. */
+function attachResponseBody(target: any, body: string): any {
+  if (!target || typeof target !== 'object') return target;
+  target.responseText = body;
+  target.response = body;
+  target.body = body;
+  target.data = body;
+  target.responseText = body;
+  if (!target.status) target.status = 200;
+  return target;
 }
 
 function invokeLoaderWith(
@@ -1289,25 +1308,28 @@ async function decryptShieldM3u8(
   // 1) pLoader with reader.fetch (real playlist fetch through site wrapper)
   if (runtime.pLoader) {
     debugLog('Invoke pLoader (reader.fetch)…');
-    const pLoaderCtx = attachContextHeaders(
-      {
-        url: playlistUrl,
-        responseType: 'text',
-        type: 'manifest',
-        level: 0,
-        levelurl: playlistUrl,
-        referer: playerUrl,
-        frag: {
-          type: 'playlist',
-          level: 0,
+    const pLoaderCtx = attachResponseBody(
+      attachContextHeaders(
+        {
           url: playlistUrl,
-          relurl: playlistUrl,
-          baseurl: baseUrl + '/',
+          responseType: 'text',
+          type: 'manifest',
+          level: 0,
+          levelurl: playlistUrl,
+          referer: playerUrl,
+          frag: {
+            type: 'playlist',
+            level: 0,
+            url: playlistUrl,
+            relurl: playlistUrl,
+            baseurl: baseUrl + '/',
+          },
         },
-      },
-      m3u8Headers || {},
-      200,
-      playlistUrl,
+        m3u8Headers || {},
+        200,
+        playlistUrl,
+      ),
+      m3u8Text,
     );
     const viaP = await invokeLoaderWith(
       runtime.pLoader,
@@ -1347,25 +1369,28 @@ async function decryptShieldM3u8(
       }
     } else {
       debugLog('pLoader returned null — retry arraybuffer body');
-      const pLoaderCtxAb = attachContextHeaders(
-        {
-          url: playlistUrl,
-          responseType: 'arraybuffer',
-          type: 'manifest',
-          level: 0,
-          levelurl: playlistUrl,
-          referer: playerUrl,
-          frag: {
-            type: 'playlist',
-            level: 0,
+      const pLoaderCtxAb = attachResponseBody(
+        attachContextHeaders(
+          {
             url: playlistUrl,
-            relurl: playlistUrl,
-            baseurl: baseUrl + '/',
+            responseType: 'arraybuffer',
+            type: 'manifest',
+            level: 0,
+            levelurl: playlistUrl,
+            referer: playerUrl,
+            frag: {
+              type: 'playlist',
+              level: 0,
+              url: playlistUrl,
+              relurl: playlistUrl,
+              baseurl: baseUrl + '/',
+            },
           },
-        },
-        m3u8Headers || {},
-        200,
-        playlistUrl,
+          m3u8Headers || {},
+          200,
+          playlistUrl,
+        ),
+        m3u8Text,
       );
       const viaP2 = await invokeLoaderWith(
         runtime.pLoader,
