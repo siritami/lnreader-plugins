@@ -1580,9 +1580,46 @@ function attachResponseBody(target: any, body: string): any {
   target.response = body;
   target.body = body;
   target.data = body;
+  // avs-loader strings include `text` + `body` + `headers`
+  target.text = body;
   target.responseText = body;
   if (!target.status) target.status = 200;
   return target;
+}
+
+/** XHR-style header APIs on the pLoader *instance* (`this.getResponseHeader`). */
+function attachInstanceXhr(
+  inst: any,
+  headerMap: Record<string, string>,
+  body: string,
+  url: string,
+): void {
+  if (!inst || typeof inst !== 'object') return;
+  const map = normalizeHeaderMap(headerMap);
+  attachResponseBody(inst, body);
+  inst.status = inst.status || 200;
+  inst.statusText = inst.statusText || 'OK';
+  inst.url = inst.url || url;
+  inst.responseURL = inst.responseURL || url;
+  inst.headers = map;
+  inst.responseHeaders = map;
+  inst.getResponseHeader = function (name: string) {
+    if (!name) return '';
+    const n = String(name);
+    const v = map[n] != null ? map[n] : map[n.toLowerCase()];
+    return v != null ? String(v) : '';
+  };
+  inst.getAllResponseHeaders = function () {
+    const seen = new Set<string>();
+    const lines: string[] = [];
+    Object.keys(map).forEach(k => {
+      const lk = k.toLowerCase();
+      if (seen.has(lk)) return;
+      seen.add(lk);
+      lines.push(lk + ': ' + map[k] + '\r\n');
+    });
+    return lines.join('');
+  };
 }
 
 function invokeLoaderWith(
@@ -1630,13 +1667,21 @@ function invokeLoaderWith(
       const body =
         preloadBody ||
         (context && context.responseText) ||
+        (context && context.text) ||
         (hlsConfigExtra && (hlsConfigExtra as any).preloadBody) ||
         '';
-      // avs pLoader onSuccess does `this.responseText.split('\\n')` (or a
-      // closed-over field) — not the callbacks `data` argument.
-      if (body) {
-        attachResponseBody(inst, body);
-        if (context) attachResponseBody(context, body);
+      const hdrMap = normalizeHeaderMap(
+        (context && context.headers) ||
+          (context && context.responseHeaders) ||
+          (hlsConfigExtra && (hlsConfigExtra as any).headers) ||
+          {},
+      );
+      // pLoader reads this.responseText / this.text / this.headers /
+      // this.getResponseHeader — stamp the full XHR surface on the instance.
+      attachInstanceXhr(inst, hdrMap, body, (context && context.url) || '');
+      if (context) {
+        attachResponseBody(context, body);
+        attachInstanceXhr(context, hdrMap, body, context.url || '');
       }
 
       const cb: any = {
@@ -1702,6 +1747,10 @@ function invokeLoaderWith(
           (inst as any)._response = t;
           (inst as any).responseText = t;
           (inst as any).body = t;
+          (inst as any).text = t;
+          if (!(inst as any).getResponseHeader) {
+            attachInstanceXhr(inst, hdrMap, t, (context && context.url) || '');
+          }
         } catch {
           //
         }
