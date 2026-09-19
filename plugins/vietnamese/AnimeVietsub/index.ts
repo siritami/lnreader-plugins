@@ -17,7 +17,7 @@ class AnimeVietsubPlugin extends NekoriBasePlugin {
   name = 'AnimeVietsub';
   icon = 'icon.png';
   site = 'https://animevietsub.li';
-  version = '1.5.0';
+  version = '1.6.0';
   filters = filters;
   contentType = ContentType.VIDEO;
 
@@ -25,15 +25,13 @@ class AnimeVietsubPlugin extends NekoriBasePlugin {
 
   pluginSettings: Plugin.PluginSettings = {
     playMode: {
-      // Live site (v1.15.x) plays via site iframe + SW/fLoader.
-      // pLoader/_decryptAndStart do not return a standalone m3u8 outside
-      // that player; stream /hls/?e= is not fetchable cross-origin.
-      value: 'embed',
+      // User: always try m3u8 first. Embed remains automatic fallback.
+      value: 'm3u8',
       label: 'Chế độ phát',
       type: 'Select',
       options: [
-        { label: 'Embed (iframe) — ổn định', value: 'embed' },
-        { label: 'm3u8 (thử giải mã)', value: 'm3u8' },
+        { label: 'm3u8 (giải mã) — ưu tiên', value: 'm3u8' },
+        { label: 'Embed (iframe)', value: 'embed' },
       ],
     },
     enableDebug: {
@@ -44,7 +42,7 @@ class AnimeVietsubPlugin extends NekoriBasePlugin {
   };
 
   get playMode(): string {
-    return (storage.get('playMode') as string) || 'embed';
+    return (storage.get('playMode') as string) || 'm3u8';
   }
 
   get enableDebug(): boolean {

@@ -628,6 +628,161 @@ function installCryptoProbe(keysSeen: string[]) {
   };
 }
 
+type RuntimeCapture = {
+  urls: string[];
+  blobs: string[];
+  dataUris: string[];
+  crypto: string[];
+  installed: boolean;
+};
+
+function getCapture(): RuntimeCapture {
+  const w = window as any;
+  if (!w.__avsCapture) {
+    w.__avsCapture = {
+      urls: [],
+      blobs: [],
+      dataUris: [],
+      crypto: [],
+      installed: false,
+    } as RuntimeCapture;
+  }
+  return w.__avsCapture as RuntimeCapture;
+}
+
+function looksLikePlayableM3u8(text: string): boolean {
+  if (!text || text.indexOf('#EXTM3U') === -1) return false;
+  if (text.indexOf('data:video/mp2t;base64,Rx//EP') !== -1) return false;
+  if (text.indexOf('data:video/mp2t;base64,Rx//EP') !== -1) return false;
+  const urls = text.split('\n').filter(l => l && l[0] !== '#');
+  const media = urls.filter(u => looksLikeMediaUrl(u));
+  return media.length >= 1 && !isNewShieldPlaylist(text);
+}
+
+function collectPlayableFromCapture(): string | null {
+  const cap = getCapture();
+  const candidates: string[] = [
+    ...cap.blobs,
+    ...cap.dataUris.map(s => {
+      try {
+        return s.startsWith('data:') ? atob(s.split(',')[1] || '') : s;
+      } catch {
+        return '';
+      }
+    }),
+  ];
+  for (const c of candidates) {
+    if (looksLikePlayableM3u8(c)) return c;
+  }
+  return null;
+}
+
+/**
+ * Hook network/blob BEFORE evaluating site scripts so their closed-over
+ * fetch still reports rewritten URLs and decrypted m3u8 blobs.
+ */
+function installRuntimeCapture(): RuntimeCapture {
+  const cap = getCapture();
+  if (cap.installed) return cap;
+  cap.installed = true;
+  const w = window as any;
+
+  try {
+    const origCreate = URL.createObjectURL.bind(URL);
+    URL.createObjectURL = function (obj: any) {
+      const url = origCreate(obj);
+      try {
+        if (obj instanceof Blob) {
+          cap.urls.push('blob:' + (obj.type || '') + ':' + (obj.size || 0));
+          if (obj.size && obj.size < 2 * 1024 * 1024) {
+            const fr = new FileReader();
+            fr.onload = () => {
+              const t = String(fr.result || '');
+              if (t.indexOf('#EXTM3U') !== -1 || t.indexOf('https://') !== -1) {
+                cap.blobs.push(t);
+                debugLog('capture blob m3u8 len=' + t.length);
+              }
+            };
+            fr.readAsText(obj);
+          }
+        }
+      } catch (e: any) {
+        cap.crypto.push('blobErr:' + e.message);
+      }
+      return url;
+    };
+  } catch (e: any) {
+    debugLog('createObjectURL hook fail: ' + e.message);
+  }
+
+  try {
+    const origFetch = w.fetch ? w.fetch.bind(w) : null;
+    if (origFetch) {
+      w.fetch = async function (input: any, init?: any) {
+        const url =
+          typeof input === 'string'
+            ? input
+            : (input && input.url) || String(input);
+        if (/hls|chunks|playlist|m3u8|seg-key|stream\./i.test(String(url))) {
+          cap.urls.push(String(url).slice(0, 200));
+        }
+        const res = await origFetch(input, init);
+        try {
+          const ct = res.headers && res.headers.get && res.headers.get('content-type');
+          if (
+            ct &&
+            /mpegurl|m3u8|text\/plain/i.test(ct) &&
+            res.clone
+          ) {
+            const clone = res.clone();
+            clone
+              .text()
+              .then((t: string) => {
+                if (t && looksLikePlayableM3u8(t)) cap.blobs.push(t);
+              })
+              .catch(() => {
+                // ignore clone read errors
+              });
+          }
+        } catch {
+          //
+        }
+        return res;
+      };
+    }
+  } catch (e: any) {
+    debugLog('fetch hook fail: ' + e.message);
+  }
+
+  try {
+    const OrigXHR = w.XMLHttpRequest;
+    if (OrigXHR) {
+      const Wrapped = function (this: any) {
+        const xhr = new OrigXHR();
+        const open = xhr.open;
+        xhr.open = function (m: string, u: string, ...rest: any[]) {
+          try {
+            if (/hls|chunks|playlist|m3u8|seg-key|stream\./i.test(String(u))) {
+              cap.urls.push(String(u).slice(0, 200));
+            }
+          } catch {
+            //
+          }
+          return open.apply(xhr, [m, u, ...rest] as any);
+        };
+        return xhr;
+      } as any;
+      Wrapped.prototype = OrigXHR.prototype;
+      w.XMLHttpRequest = Wrapped;
+    }
+  } catch (e: any) {
+    debugLog('xhr hook fail: ' + e.message);
+  }
+
+  debugLog('Runtime capture installed');
+  return cap;
+}
+
 async function loadSiteDecryptRuntime(
   token: string,
   avsSid: string | null,
@@ -649,6 +804,9 @@ async function loadSiteDecryptRuntime(
   const m3u8Text = (boot && boot.m3u8Text) || '';
   const m3u8Headers = (boot && boot.m3u8Headers) || {};
   const playlistUrl = (boot && boot.playlistUrl) || '';
+
+  // Must run BEFORE eval so site code binds our wrappers.
+  installRuntimeCapture();
 
   w._avsExpV = expV || '1.15.7';
   w._avsCryptoHarden = true;
@@ -893,6 +1051,30 @@ async function loadSiteDecryptRuntime(
     g6: w._avsG6Diag,
     keysSeen,
   };
+}
+
+function dumpCaptureSummary() {
+  const cap = getCapture();
+  debugLog(
+    'capture urls=' +
+      cap.urls.length +
+      ' blobs=' +
+      cap.blobs.length +
+      ' dataUris=' +
+      cap.dataUris.length,
+  );
+  if (cap.urls.length) {
+    debugLog('capture url sample: ' + cap.urls.slice(-5).join(' | ').slice(0, 240));
+  }
+  if (cap.blobs.length) {
+    const last = cap.blobs[cap.blobs.length - 1];
+    debugLog(
+      'capture blob head: ' +
+        last.slice(0, 80).replace(/\n/g, '|') +
+        ' playable=' +
+        looksLikePlayableM3u8(last),
+    );
+  }
 }
 
 type LoaderProbe = {
@@ -1797,6 +1979,20 @@ async function decryptShieldM3u8(
   } catch {
     //
   }
+
+  // Reverse path: site scripts may create decrypted m3u8 blobs in our WebView.
+  dumpCaptureSummary();
+  const captured = collectPlayableFromCapture();
+  if (captured) {
+    debugLog('Captured playable m3u8 from runtime (' + captured.length + ')');
+    const urls = extractMediaUrls(captured);
+    if (urls.length) return finishWithUrls(parsed.headers, urls);
+    return {
+      type: 'sources',
+      sources: [{ file: buildM3u8Blob([], captured.split('\n')), type: 'hls' }],
+    };
+  }
+
   debugLog('probes=' + JSON.stringify(probes).slice(0, 400));
   throw new ShieldDecryptUnsupportedError(
     'AVS shield v3: không giải mã được m3u8.',
