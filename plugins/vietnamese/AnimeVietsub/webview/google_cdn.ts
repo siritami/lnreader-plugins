@@ -100,7 +100,12 @@ function buildM3u8DataUri(m3u8Text: string): string {
     if (/^https?:\/\//i.test(line)) media.push(line);
   }
 
-  const out: string[] = [...headers];
+  // Nekori/hls.js require the format identifier as the first line.
+  const out: string[] = ['#EXTM3U'];
+  for (const h of headers) {
+    if (/^#EXTM3U/i.test(h)) continue;
+    out.push(h);
+  }
   for (const item of media) {
     if (/^#EXTINF:/i.test(item)) {
       out.push(item);
@@ -110,7 +115,7 @@ function buildM3u8DataUri(m3u8Text: string): string {
     if (!prev || !/^#EXTINF:/i.test(prev)) out.push('#EXTINF:10.0,');
     out.push(item);
   }
-  out.push('#EXT-X-ENDLIST');
+  if (!out.some(l => /^#EXT-X-ENDLIST/i.test(l))) out.push('#EXT-X-ENDLIST');
   const body = out.join('\n');
   const segs = out.filter(l => /^https?:/i.test(l)).length;
   debugLog(
@@ -120,6 +125,8 @@ function buildM3u8DataUri(m3u8Text: string): string {
       out.filter(l => /^#EXTINF:/i.test(l)).length +
       ' bodyLen=' +
       body.length +
+      ' head=' +
+      out[0] +
       ' first=' +
       (out.find(l => /^https?:/i.test(l)) || '').slice(0, 70),
   );
@@ -339,6 +346,9 @@ async function processEncryptedM3u8(
         }
 
         let fullM3u8Text = headerLines.join('\n') + '\n' + m3u8Body;
+        if (!/^#EXTM3U/m.test(fullM3u8Text.trimStart())) {
+          fullM3u8Text = '#EXTM3U\n' + fullM3u8Text.replace(/^#EXTM3U[^\n]*\n?/i, '');
+        }
         if (!fullM3u8Text.includes('#EXT-X-ENDLIST')) {
           fullM3u8Text += '\n#EXT-X-ENDLIST';
         }
