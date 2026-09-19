@@ -51,16 +51,6 @@ function stripAvsPng(ab: ArrayBuffer): ArrayBuffer {
   }
 }
 
-function makeStats(t0: number, loaded: number) {
-  return {
-    aborted: false,
-    loaded,
-    total: loaded,
-    retry: 0,
-    loading: { start: t0, first: t0, end: Date.now() },
-  };
-}
-
 function isPlaylistUrl(url: string, context: any): boolean {
   const u = String(url || '');
   const t = String((context && context.type) || '');
@@ -96,50 +86,99 @@ async function fetchMedia(url: string): Promise<ArrayBuffer> {
   return res.arrayBuffer();
 }
 
-/** hls.js fLoader only — PNG-strip segments; playlist uses default loader. */
+/**
+ * hls.js fLoader — same callback contract as CosplayTele/NguonC.
+ * Nekori hls adapter reads stats.chunkCount; onSuccess is (response, stats, ctx, networkDetails).
+ */
 function createAvsFragmentLoader() {
   // @ts-ignore
-  function AvsFragmentLoader(_config) {
+  function AvsFragmentLoader(config) {
+    // @ts-ignore
+    this._config = config;
+    // @ts-ignore
+    this.context = null;
     // @ts-ignore
     this.aborted = false;
+    // @ts-ignore
+    this.stats = {
+      aborted: false,
+      loaded: 0,
+      retry: 0,
+      total: 0,
+      chunkCount: 0,
+      bwEstimate: 0,
+      loading: { start: 0, first: 0, end: 0 },
+      parsing: { start: 0, end: 0 },
+      buffering: { start: 0, first: 0, end: 0 },
+    };
   }
   // @ts-ignore
-  AvsFragmentLoader.prototype.load = function (context, _config, callbacks) {
-    const self = this;
-    const url = (context && context.url) || '';
-    const t0 = Date.now();
-    debugLog('[AVS] frag GET ' + String(url).slice(0, 90));
-
-    fetchMedia(url)
-      .then(buf => {
-        if (self.aborted) return;
-        if (isPlaylistUrl(url, context)) {
-          const text = new TextDecoder().decode(buf);
-          callbacks.onSuccess(makeStats(t0, text.length), text, { status: 200, url }, context);
-          return;
-        }
-        const clean = stripAvsPng(buf);
-        debugLog('[AVS] frag bytes=' + buf.byteLength + ' clean=' + clean.byteLength);
-        callbacks.onSuccess(makeStats(t0, clean.byteLength), clean, { status: 200, url }, context);
-      })
-      .catch((err: any) => {
-        if (self.aborted) return;
-        debugLog('[AVS] frag fail ' + String(err && err.message).slice(0, 80));
-        callbacks.onError(
-          { code: 0, text: String(err && err.message) },
-          context,
-          { status: 0, url },
-          makeStats(Date.now(), 0),
-        );
-      });
+  AvsFragmentLoader.prototype.destroy = function () {
+    this.abort();
   };
   // @ts-ignore
   AvsFragmentLoader.prototype.abort = function () {
     // @ts-ignore
     this.aborted = true;
+    // @ts-ignore
+    this.stats.aborted = true;
   };
   // @ts-ignore
-  AvsFragmentLoader.prototype.destroy = function () {};
+  AvsFragmentLoader.prototype.getResponseData = function (xhr: any) {
+    return xhr && xhr.response;
+  };
+  // @ts-ignore
+  AvsFragmentLoader.prototype.load = function (context, _config, callbacks) {
+    const self = this;
+    self.context = context;
+    const url = (context && context.url) || '';
+    const t0 = performance.now();
+    self.stats.loading.start = t0;
+    self.stats.aborted = false;
+    debugLog('[AVS] frag GET ' + String(url).slice(0, 90));
+
+    fetchMedia(url)
+      .then(buf => {
+        if (self.aborted) return;
+        self.stats.loading.first = performance.now();
+        self.stats.loading.end = performance.now();
+        if (isPlaylistUrl(url, context)) {
+          const text = new TextDecoder().decode(buf);
+          self.stats.loaded = text.length;
+          self.stats.total = text.length;
+          callbacks.onSuccess(
+            { data: text, url: url },
+            self.stats,
+            context,
+            null,
+          );
+          return;
+        }
+        const clean = stripAvsPng(buf);
+        debugLog(
+          '[AVS] frag bytes=' + buf.byteLength + ' clean=' + clean.byteLength,
+        );
+        self.stats.loaded = clean.byteLength;
+        self.stats.total = clean.byteLength;
+        callbacks.onSuccess(
+          { data: clean, url: url },
+          self.stats,
+          context,
+          null,
+        );
+      })
+      .catch((err: any) => {
+        if (self.aborted) return;
+        debugLog('[AVS] frag fail ' + String(err && err.message).slice(0, 80));
+        self.stats.loading.end = performance.now();
+        callbacks.onError(
+          { code: 0, text: String(err && err.message) },
+          context,
+          null,
+          self.stats,
+        );
+      });
+  };
   return AvsFragmentLoader;
 }
 
