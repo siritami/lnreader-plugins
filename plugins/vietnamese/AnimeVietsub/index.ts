@@ -17,7 +17,7 @@ class AnimeVietsubPlugin extends NekoriBasePlugin {
   name = 'AnimeVietsub';
   icon = 'icon.png';
   site = 'https://animevietsub.li';
-  version = '1.7.6';
+  version = '1.1.0';
   filters = filters;
   contentType = ContentType.VIDEO;
 
@@ -25,12 +25,11 @@ class AnimeVietsubPlugin extends NekoriBasePlugin {
 
   pluginSettings: Plugin.PluginSettings = {
     playMode: {
-      // User: always try m3u8 first. Embed remains automatic fallback.
       value: 'm3u8',
       label: 'Chế độ phát',
       type: 'Select',
       options: [
-        { label: 'm3u8 (giải mã) — ưu tiên', value: 'm3u8' },
+        { label: 'm3u8 (giải mã)', value: 'm3u8' },
         { label: 'Embed (iframe)', value: 'embed' },
       ],
     },
@@ -317,21 +316,25 @@ class AnimeVietsubPlugin extends NekoriBasePlugin {
         const pd = JSON.parse(rawJson);
 
         // Case A: iframe player at stream.googleapiscdn.com
-        // v1.15+ encrypts m3u8 with AVS shield v3 (SAMPLE-AES-CTR + SW).
-        // Embed the site player so playback works; m3u8 mode still gets the
-        // iframe URL so customJS can try decrypt and fall back.
+        // The player page is behind Cloudflare managed challenge, so
+        // fetchText cannot reach it. Embed the iframe directly and let
+        // the WebView handle the Cloudflare challenge + JWPlayer boot.
         if (
           pd.playTech === 'iframe' &&
           typeof pd.link === 'string' &&
           pd.link.includes('googleapiscdn.com')
         ) {
-          if (this.playMode === 'm3u8') {
+          if (this.playMode === 'embed') {
             return {
               state: 'ready',
               type: 'video',
               noCache: true,
               noPrefetch: true,
-              html: this.buildPlayerHtml({ iframe: pd.link, bannerUrl: img }),
+              html: this.buildPlayerHtml({
+                iframe: pd.link,
+                embedOnly: true,
+                bannerUrl: img,
+              }),
             };
           }
           return {
@@ -339,11 +342,7 @@ class AnimeVietsubPlugin extends NekoriBasePlugin {
             type: 'video',
             noCache: true,
             noPrefetch: true,
-            html: this.buildPlayerHtml({
-              iframe: pd.link,
-              embedOnly: true,
-              bannerUrl: img,
-            }),
+            html: this.buildPlayerHtml({ iframe: pd.link, bannerUrl: img }),
           };
         }
 
@@ -525,7 +524,7 @@ class AnimeVietsubPlugin extends NekoriBasePlugin {
     ].join('\n');
   }
 
-  resolveUrl(path: string, _isNovel?: boolean): string {
+  resolveUrl(path: string, isNovel?: boolean): string {
     return this.site + path;
   }
 }

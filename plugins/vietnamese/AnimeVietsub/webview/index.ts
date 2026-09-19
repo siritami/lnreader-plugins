@@ -6,240 +6,15 @@
  * Runs inside the WebView/browser context after parseChapter returns HTML.
  *
  * Priority:
- *   1. data-m3u8   → HLS + PNG-strip loader (CloudStream algorithm)
+ *   1. data-m3u8   → direct HLS.js playback (bypasses iframe adblock detection)
  *   2. data-sources → direct source playback
  *   3. data-iframe  → embed iframe
  *   4. data-hash    → AJAX /ajax/player fallback
  */
 import { initUtils, debugLog, showError } from './utils';
 import { fetchAjaxPlayer } from './ajax';
-import {
-  resolveGoogleApisCdn,
-  ShieldDecryptUnsupportedError,
-} from './google_cdn';
+import { resolveGoogleApisCdn } from './google_cdn';
 import type { PlayerConfig, ResolvedMedia } from './types';
-
-/** CloudStream AnimeVietsubProvider: PNG shell + MPEG-TS sync strip. */
-const AVS_TS_SYNC = 0x47;
-const AVS_TS_PACKET = 188;
-const AVS_TS_SYNC_CHAIN = 8;
-const AVS_MAX_PREFIX = 4096;
-
-function stripAvsPngPrefix(ab: ArrayBuffer): ArrayBuffer {
-  try {
-    const u8 = new Uint8Array(ab);
-    if (u8.length < 4) return ab;
-    if (u8[0] !== 0x89 || u8[1] !== 0x50 || u8[2] !== 0x4e || u8[3] !== 0x47) {
-      return ab;
-    }
-    const max = Math.min(u8.length, AVS_MAX_PREFIX);
-    for (let i = 0; i <= max; i++) {
-      if (u8[i] !== AVS_TS_SYNC) continue;
-      let ok = true;
-      for (let k = 1; k < AVS_TS_SYNC_CHAIN; k++) {
-        const idx = i + k * AVS_TS_PACKET;
-        if (idx >= u8.length || u8[idx] !== AVS_TS_SYNC) {
-          ok = false;
-          break;
-        }
-      }
-      if (ok) {
-        debugLog('[AVS] strip PNG prefix=' + i + ' / ' + u8.length);
-        return u8.slice(i).buffer;
-      }
-    }
-    return ab;
-  } catch {
-    return ab;
-  }
-}
-
-function nativeFetchAny(url: string): Promise<{ status: number; text: string; buffer: ArrayBuffer }> {
-  // blob:/data: must use page fetch — reader.fetch proxy returns empty/garbage.
-  const isBlob = /^blob:|^data:/i.test(url);
-  const fetchFn = isBlob
-    ? fetch.bind(window)
-    : // @ts-ignore
-      window.reader && window.reader.fetch
-      ? // @ts-ignore
-        window.reader.fetch.bind(window.reader)
-      : fetch;
-  return fetchFn(url, {
-    credentials: 'include',
-    headers: isBlob
-      ? undefined
-      : {
-          Referer: 'https://stream.googleapiscdn.com/',
-          'User-Agent':
-            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36',
-        },
-  }).then(async (r: Response) => {
-    const buffer = await r.arrayBuffer();
-    let text = '';
-    try {
-      text = new TextDecoder().decode(buffer);
-    } catch {
-      text = '';
-    }
-    return { status: r.status, text, buffer };
-  });
-}
-
-function isPlaylistLike(url: string, context: any): boolean {
-  const u = String(url || '');
-  const t = String((context && context.type) || (context && context.responseType) || '');
-  return (
-    u.indexOf('blob:') === 0 ||
-    u.indexOf('data:') === 0 ||
-    /\.m3u8(\?|$)/i.test(u) ||
-    /playlist\.m3u8/i.test(u) ||
-    t === 'manifest' ||
-    t === 'level' ||
-    t === 'text'
-  );
-}
-
-/** Fresh hls.js stats — never write onto this.stats (hls may wipe it). */
-function makeLoaderStats(t0: number, loaded: number) {
-  return {
-    aborted: false,
-    loaded,
-    total: loaded,
-    retry: 0,
-    chunkCount: 1,
-    loading: { start: t0, first: t0, end: Date.now() },
-  };
-}
-
-/**
- * hls.js loader: reader.fetch + PNG-strip (CloudStream).
- * Playlist/blob → text; media segments → PNG-stripped ArrayBuffer.
- *
- * docs.md: playHls(url, hlsJsConfig) is passed into the Hls constructor.
- * Core player: blob:/data: must be read with window.fetch; hls.js uses its
- * own loader for fragments (we replace loader/pLoader/fLoader).
- */
-function createAvsTsLoader() {
-  // @ts-ignore
-  function AvsTsLoader(config) {
-    // @ts-ignore
-    this.config = config;
-    // @ts-ignore
-    this.aborted = false;
-    // hls.js / video.js write loader.stats.loading.start — must exist.
-    // @ts-ignore
-    this.stats = makeLoaderStats(Date.now(), 0);
-  }
-  // @ts-ignore
-  AvsTsLoader.prototype.load = function (context, _config, callbacks) {
-    const self = this;
-    const url = (context && context.url) || '';
-    const t0 = Date.now();
-    const asPlaylist = isPlaylistLike(url, context);
-    // Keep a live stats object on the instance for hls.js.
-    // @ts-ignore
-    self.stats = makeLoaderStats(t0, 0);
-    debugLog(
-      '[AVS] GET ' +
-        (asPlaylist ? 'playlist' : 'segment') +
-        ' ' +
-        String(url).slice(0, 90),
-    );
-
-    nativeFetchAny(url)
-      .then(res => {
-        if (self.aborted) return;
-
-        if (asPlaylist) {
-          let body = res.text;
-          if (!body || body.indexOf('#EXTM3U') === -1) {
-            try {
-              body = new TextDecoder().decode(res.buffer);
-            } catch {
-              body = body || '';
-            }
-          }
-          debugLog(
-            '[AVS] playlist body len=' +
-              body.length +
-              ' head=' +
-              body.slice(0, 60).replace(/\n/g, '|'),
-          );
-          // @ts-ignore
-          self.stats = makeLoaderStats(t0, body.length);
-          try {
-            callbacks.onSuccess(
-              // @ts-ignore
-              self.stats,
-              body,
-              { status: res.status, url, responseURL: url },
-              context,
-            );
-          } catch (e: any) {
-            debugLog('[AVS] playlist onSuccess throw: ' + (e && e.message));
-            throw e;
-          }
-          return;
-        }
-
-        const clean = stripAvsPngPrefix(res.buffer);
-        debugLog(
-          '[AVS] segment bytes=' +
-            res.buffer.byteLength +
-            ' clean=' +
-            clean.byteLength,
-        );
-        // @ts-ignore
-        self.stats = makeLoaderStats(t0, clean.byteLength);
-        callbacks.onSuccess(
-          // @ts-ignore
-          self.stats,
-          clean,
-          { status: res.status, url, responseURL: url },
-          context,
-        );
-      })
-      .catch((err: any) => {
-        if (self.aborted) return;
-        debugLog('[AVS] GET fail ' + String(err && err.message).slice(0, 80));
-        // @ts-ignore
-        self.stats = makeLoaderStats(Date.now(), 0);
-        try {
-          callbacks.onError(
-            { code: 0, text: String(err && err.message) },
-            context,
-            { status: 0, url },
-            // @ts-ignore
-            self.stats,
-          );
-        } catch (e2: any) {
-          debugLog('[AVS] onError throw: ' + (e2 && e2.message));
-        }
-      });
-  };
-  // @ts-ignore
-  AvsTsLoader.prototype.abort = function () {
-    // @ts-ignore
-    this.aborted = true;
-    // @ts-ignore
-    if (!this.stats) this.stats = makeLoaderStats(Date.now(), 0);
-    // @ts-ignore
-    this.stats.aborted = true;
-  };
-  // @ts-ignore
-  AvsTsLoader.prototype.destroy = function () {
-    // noop
-  };
-  return AvsTsLoader;
-}
-
-function iframeFallback(config: PlayerConfig): ResolvedMedia | null {
-  if (config.iframeSrc) {
-    debugLog('Fallback: nhúng iframe player.');
-    return { type: 'iframe', iframeUrl: config.iframeSrc };
-  }
-  return null;
-}
 
 function parseConfig(container: HTMLElement): PlayerConfig {
   return {
@@ -282,20 +57,7 @@ async function resolveMedia(config: PlayerConfig): Promise<ResolvedMedia> {
       config.mode === 'm3u8'
     ) {
       debugLog('Resolver: Kích hoạt GoogleApisCdn Decryptor.');
-      try {
-        return await resolveGoogleApisCdn(config.iframeSrc);
-      } catch (e: any) {
-        if (
-          e instanceof ShieldDecryptUnsupportedError ||
-          /AVS_SHIELD|AVS shield|Giải mã|Không tìm thấy avsToken|Thiếu thông tin|không giải mã được|không nhận dạng/i.test(
-            e?.message || '',
-          )
-        ) {
-          const fb = iframeFallback(config);
-          if (fb) return fb;
-        }
-        throw e;
-      }
+      return await resolveGoogleApisCdn(config.iframeSrc);
     }
     debugLog('Resolver: Dùng Iframe nhúng trực tiếp.');
     return { type: 'iframe', iframeUrl: config.iframeSrc };
@@ -304,35 +66,10 @@ async function resolveMedia(config: PlayerConfig): Promise<ResolvedMedia> {
   // 4. Ajax Fallback
   if (config.ajaxHash && config.ajaxSite) {
     debugLog('Resolver: Kích hoạt Ajax Fallback.');
-    try {
-      return await fetchAjaxPlayer(config);
-    } catch (e: any) {
-      debugLog('Ajax/m3u8 path failed: ' + (e?.message || e));
-      throw e;
-    }
+    return await fetchAjaxPlayer(config);
   }
 
   throw new Error('Thiếu thông tin cấu hình, không thể xác định nguồn phát.');
-}
-
-function buildHlsConfig() {
-  const Loader = createAvsTsLoader();
-  // docs.md: playHls(url, hlsJsConfig) → raw Hls constructor config.
-  // Core player notes HLS uses hls.js loaders. Replacing loader/pLoader
-  // broke video.js (stats.loading.start). Only fLoader for PNG-strip
-  // segments; default playlist loader reads data:/blob m3u8.
-  return {
-    fLoader: Loader,
-    xhrSetup: (xhr: any, url: string) => {
-      try {
-        if (/googleusercontent|stream\.googleapis|lh3\./i.test(String(url))) {
-          xhr.setRequestHeader('Referer', 'https://stream.googleapiscdn.com/');
-        }
-      } catch {
-        //
-      }
-    },
-  };
 }
 
 function renderMedia(resolved: ResolvedMedia, config: PlayerConfig) {
@@ -344,14 +81,9 @@ function renderMedia(resolved: ResolvedMedia, config: PlayerConfig) {
   if (resolved.type === 'sources' && resolved.sources) {
     const s = resolved.sources[0];
     const file = (s.file || '').replace(/^&http/, 'http');
-    if (
-      s.type === 'hls' ||
-      /\.m3u8(\?|$)/i.test(file) ||
-      file.indexOf('blob:') === 0 ||
-      file.indexOf('data:') === 0
-    ) {
-      debugLog('[AVS] Playing M3U8: ' + file.slice(0, 80));
-      player.playHls(file, buildHlsConfig());
+    if (s.type === 'hls' || /\\.m3u8(\\?|$)/i.test(file)) {
+      player.log('[AVS] Playing M3U8: ' + file);
+      player.playHls(file);
     } else {
       player.log('[AVS] Playing Direct: ' + file);
       player.playDirect(file);
@@ -375,27 +107,10 @@ async function initPlayer() {
 
   try {
     const resolvedMedia = await resolveMedia(config);
-    if (resolvedMedia.type === 'sources' && resolvedMedia.sources) {
-      const file = resolvedMedia.sources[0].file || '';
-      debugLog('Resolved HLS (' + file.slice(0, 32) + '…)');
-    }
     renderMedia(resolvedMedia, config);
   } catch (error: any) {
-    debugLog('Pipeline error: ' + (error && error.message));
     showError(error.message || 'Lỗi không xác định.');
     console.error('[AVS] Pipeline Error:', error);
-    if (config.iframeSrc) {
-      debugLog('Fallback: nhúng iframe sau lỗi m3u8.');
-      renderMedia({ type: 'iframe', iframeUrl: config.iframeSrc }, config);
-    } else if (config.ajaxHash && config.ajaxSite) {
-      debugLog('Fallback: thử iframe từ ajax hash…');
-      try {
-        const fb = await fetchAjaxPlayer({ ...config, mode: 'embed' });
-        renderMedia(fb, config);
-      } catch (e2: any) {
-        debugLog('Ajax embed fallback fail: ' + (e2 && e2.message));
-      }
-    }
   }
 }
 

@@ -1,7 +1,4 @@
-import {
-  resolveGoogleApisCdn,
-  ShieldDecryptUnsupportedError,
-} from './google_cdn';
+import { resolveGoogleApisCdn } from './google_cdn';
 import type { PlayerConfig, ResolvedMedia } from './types';
 import { debugLog } from './utils';
 
@@ -55,20 +52,7 @@ async function parsePlayerResponse(
 ): Promise<ResolvedMedia> {
   if (json.playTech === 'iframe' && typeof json.link === 'string') {
     if (json.link.indexOf('googleapiscdn.com') !== -1 && mode === 'm3u8') {
-      try {
-        return await resolveGoogleApisCdn(json.link);
-      } catch (e: any) {
-        if (
-          e instanceof ShieldDecryptUnsupportedError ||
-          /AVS_SHIELD_UNSUPPORTED|Giải mã thất bại|Không tìm thấy avsToken|Thiếu thông tin giải mã/.test(
-            e?.message || '',
-          )
-        ) {
-          debugLog('Shield decrypt failed — using site iframe player.');
-          return { type: 'iframe', iframeUrl: json.link };
-        }
-        throw e;
-      }
+      return await resolveGoogleApisCdn(json.link);
     }
     return { type: 'iframe', iframeUrl: json.link };
   }
