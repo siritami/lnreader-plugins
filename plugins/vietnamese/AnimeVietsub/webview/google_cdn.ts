@@ -944,6 +944,45 @@ function spyObject(obj: any, label: string): any {
   }
 }
 
+/**
+ * avs pLoader reads header APIs off the hls.js *context*, not networkDetails:
+ *   context.getResponseHeader('…').split(...)
+ * If getResponseHeader is missing, that becomes undefined.split.
+ */
+function attachContextHeaders(
+  context: any,
+  headerMap: Record<string, string>,
+  status: number,
+  url: string,
+): any {
+  const map = normalizeHeaderMap(headerMap);
+  const api = {
+    status,
+    statusText: status >= 200 && status < 300 ? 'OK' : String(status),
+    url,
+    headers: map,
+    responseHeaders: map,
+    getResponseHeader(name: string): string {
+      if (!name) return '';
+      const n = String(name);
+      const v = map[n] != null ? map[n] : map[n.toLowerCase()];
+      return v != null ? String(v) : '';
+    },
+    getAllResponseHeaders(): string {
+      const seen = new Set<string>();
+      const lines: string[] = [];
+      Object.keys(map).forEach(k => {
+        const lk = k.toLowerCase();
+        if (seen.has(lk)) return;
+        seen.add(lk);
+        lines.push(lk + ': ' + map[k] + '\r\n');
+      });
+      return lines.join('');
+    },
+  };
+  return Object.assign(context || {}, api);
+}
+
 function invokeLoaderWith(
   LoaderCtor: any,
   InnerLoader: any,
@@ -1057,8 +1096,9 @@ async function decryptShieldM3u8(
   const envHeader = m3u8Headers['x-envelope'] || m3u8Headers['x-avs-envelope'] || '';
   const env = envHeader ? parseEnvelope(envHeader) : null;
   const parsed = parsePlaylistSegments(m3u8Text);
-  const probeEnv = (window as any)._avsProbe && (window as any)._avsProbe.envHash;
-  const envHash = m3u8Headers['x-client-env'] || probeEnv || 'f728f44d';
+  const probeEnv =
+    (window as any)._avsProbe && (window as any)._avsProbe.envHash;
+  const envHash = probeEnv || m3u8Headers['x-client-env'] || 'f728f44d';
 
   debugLog(
     'Shield playlist: segs=' + parsed.segments.length +
@@ -1115,29 +1155,30 @@ async function decryptShieldM3u8(
   // 1) pLoader with reader.fetch (real playlist fetch through site wrapper)
   if (runtime.pLoader) {
     debugLog('Invoke pLoader (reader.fetch)…');
+    const pLoaderCtx = attachContextHeaders(
+      {
+        url: playlistUrl,
+        responseType: 'text',
+        type: 'manifest',
+        level: 0,
+        levelurl: playlistUrl,
+        referer: playerUrl,
+        frag: {
+          type: 'playlist',
+          level: 0,
+          url: playlistUrl,
+          relurl: playlistUrl,
+          baseurl: baseUrl + '/',
+        },
+      },
+      m3u8Headers || {},
+      200,
+      playlistUrl,
+    );
     const viaP = await invokeLoaderWith(
       runtime.pLoader,
       ReaderLoader,
-      spyObject(
-        {
-          url: playlistUrl,
-          responseType: 'text',
-          type: 'manifest',
-          level: 0,
-          levelurl: playlistUrl,
-          referer: playerUrl,
-          headers: m3u8Headers,
-          networkDetails: buildNetworkDetails(200, playlistUrl, m3u8Headers || {}),
-          frag: {
-            type: 'playlist',
-            level: 0,
-            url: playlistUrl,
-            relurl: playlistUrl,
-            baseurl: baseUrl + '/',
-          },
-        },
-        'ctx',
-      ),
+      spyObject(pLoaderCtx, 'ctx'),
       'pLoader',
       6000,
       { envHash },
@@ -1172,9 +1213,7 @@ async function decryptShieldM3u8(
       }
     } else {
       debugLog('pLoader returned null — retry arraybuffer body');
-      const viaP2 = await invokeLoaderWith(
-        runtime.pLoader,
-        ReaderLoader,
+      const pLoaderCtxAb = attachContextHeaders(
         {
           url: playlistUrl,
           responseType: 'arraybuffer',
@@ -1182,8 +1221,6 @@ async function decryptShieldM3u8(
           level: 0,
           levelurl: playlistUrl,
           referer: playerUrl,
-          headers: m3u8Headers,
-          networkDetails: buildNetworkDetails(200, playlistUrl, m3u8Headers || {}),
           frag: {
             type: 'playlist',
             level: 0,
@@ -1192,6 +1229,14 @@ async function decryptShieldM3u8(
             baseurl: baseUrl + '/',
           },
         },
+        m3u8Headers || {},
+        200,
+        playlistUrl,
+      );
+      const viaP2 = await invokeLoaderWith(
+        runtime.pLoader,
+        ReaderLoader,
+        spyObject(pLoaderCtxAb, 'ctxAb'),
         'pLoader-ab',
         6000,
         { envHash },
