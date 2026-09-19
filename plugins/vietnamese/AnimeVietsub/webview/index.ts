@@ -54,7 +54,7 @@ function stripAvsPngPrefix(ab: ArrayBuffer): ArrayBuffer {
   }
 }
 
-function nativeFetchBuffer(url: string): Promise<ArrayBuffer> {
+function nativeFetchAny(url: string): Promise<{ status: number; text: string; buffer: ArrayBuffer }> {
   const fetchFn =
     // @ts-ignore
     window.reader && window.reader.fetch
@@ -68,11 +68,52 @@ function nativeFetchBuffer(url: string): Promise<ArrayBuffer> {
       'User-Agent':
         'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36',
     },
-  }).then((r: Response) => r.arrayBuffer());
+  }).then(async (r: Response) => {
+    const buffer = await r.arrayBuffer();
+    let text = '';
+    try {
+      text = new TextDecoder().decode(buffer);
+    } catch {
+      text = '';
+    }
+    return { status: r.status, text, buffer };
+  });
+}
+
+function isPlaylistLike(url: string, context: any): boolean {
+  const u = String(url || '');
+  const t = String((context && context.type) || (context && context.responseType) || '');
+  return (
+    u.indexOf('blob:') === 0 ||
+    u.indexOf('data:') === 0 ||
+    /\.m3u8(\?|$)/i.test(u) ||
+    /playlist\.m3u8/i.test(u) ||
+    t === 'manifest' ||
+    t === 'level' ||
+    t === 'text'
+  );
+}
+
+function ensureLoaderStats(inst: any, t0: number) {
+  if (!inst.stats || typeof inst.stats !== 'object') {
+    inst.stats = {};
+  }
+  const s = inst.stats;
+  if (!s.loading || typeof s.loading !== 'object') {
+    s.loading = { start: t0, first: t0, end: t0 };
+  } else {
+    s.loading.start = t0;
+    s.loading.first = t0;
+    s.loading.end = t0;
+  }
+  s.aborted = false;
+  s.retry = s.retry || 0;
+  return s;
 }
 
 /**
- * hls.js loader: reader.fetch + PNG-strip (CloudStream getVideoInterceptor).
+ * hls.js loader: reader.fetch + PNG-strip (CloudStream).
+ * Playlist/blob → text; media segments → PNG-stripped ArrayBuffer.
  */
 function createAvsTsLoader() {
   // @ts-ignore
@@ -95,33 +136,63 @@ function createAvsTsLoader() {
     const self = this;
     const url = (context && context.url) || '';
     const t0 = Date.now();
-    self.stats.loading = { start: t0, first: t0, end: t0 };
-    self.stats.aborted = false;
-    debugLog('[AVS] TS GET ' + String(url).slice(0, 100));
+    const stats = ensureLoaderStats(self, t0);
+    const asPlaylist = isPlaylistLike(url, context);
+    debugLog(
+      '[AVS] GET ' +
+        (asPlaylist ? 'playlist' : 'segment') +
+        ' ' +
+        String(url).slice(0, 90),
+    );
 
-    nativeFetchBuffer(url)
-      .then((buf: ArrayBuffer) => {
+    nativeFetchAny(url)
+      .then(res => {
         if (self.aborted) return;
-        const clean = stripAvsPngPrefix(buf);
         const t1 = Date.now();
-        self.stats.loading = { start: t0, first: t1, end: t1 };
-        self.stats.loaded = clean.byteLength;
-        self.stats.total = clean.byteLength;
+        stats.loading = { start: t0, first: t1, end: t1 };
+        stats.aborted = false;
+
+        if (asPlaylist) {
+          const body = res.text && res.text.indexOf('#EXTM3U') !== -1
+            ? res.text
+            : new TextDecoder().decode(res.buffer);
+          stats.loaded = body.length;
+          stats.total = body.length;
+          debugLog('[AVS] playlist body len=' + body.length);
+          callbacks.onSuccess(
+            stats,
+            body,
+            { status: res.status, url, responseURL: url },
+            context,
+          );
+          return;
+        }
+
+        const clean = stripAvsPngPrefix(res.buffer);
+        stats.loaded = clean.byteLength;
+        stats.total = clean.byteLength;
+        debugLog(
+          '[AVS] segment bytes=' +
+            res.buffer.byteLength +
+            ' clean=' +
+            clean.byteLength,
+        );
         callbacks.onSuccess(
-          self.stats,
+          stats,
           clean,
-          { status: 200, url, responseURL: url },
+          { status: res.status, url, responseURL: url },
           context,
         );
       })
       .catch((err: any) => {
         if (self.aborted) return;
-        debugLog('[AVS] TS fail ' + String(err && err.message).slice(0, 80));
+        debugLog('[AVS] GET fail ' + String(err && err.message).slice(0, 80));
+        const st = ensureLoaderStats(self, Date.now());
         callbacks.onError(
           { code: 0, text: String(err && err.message) },
           context,
           { status: 0, url },
-          self.stats,
+          st,
         );
       });
   };
@@ -130,7 +201,7 @@ function createAvsTsLoader() {
     // @ts-ignore
     this.aborted = true;
     // @ts-ignore
-    this.stats.aborted = true;
+    if (this.stats) this.stats.aborted = true;
   };
   // @ts-ignore
   AvsTsLoader.prototype.destroy = function () {
