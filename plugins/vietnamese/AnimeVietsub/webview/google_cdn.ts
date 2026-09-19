@@ -632,20 +632,35 @@ async function loadSiteDecryptRuntime(
   token: string,
   avsSid: string | null,
   expV: string,
+  boot?: {
+    playerId?: string;
+    playerUrl?: string;
+    m3u8Text?: string;
+    m3u8Headers?: Record<string, string>;
+    playlistUrl?: string;
+  },
 ): Promise<SiteRuntime> {
   const w = window as any;
   const keysBefore = new Set(Object.getOwnPropertyNames(window));
   const keysSeen: string[] = [];
   installCryptoProbe(keysSeen);
 
+  const playerId = (boot && boot.playerId) || '';
+  const m3u8Text = (boot && boot.m3u8Text) || '';
+  const m3u8Headers = (boot && boot.m3u8Headers) || {};
+  const playlistUrl = (boot && boot.playlistUrl) || '';
+
   w._avsExpV = expV || '1.15.7';
   w._avsCryptoHarden = true;
   w._avsCryptoHardenShadow = true;
   w._avsCryptoHardenDisable = [];
   w._avsSk = token;
-  // init.js expects these as bare globals (player page uses const avsToken / avsSid).
+  // init.js / player page globals (const in their HTML → must be window.*)
   w.avsToken = token;
   if (avsSid) w.avsSid = avsSid;
+  w.id = playerId;
+  w.playerId = playerId;
+  w.title = playerId;
   w._avsCryptoSupported = !!(
     window.crypto &&
     (window.crypto as any).subtle &&
@@ -744,21 +759,65 @@ async function loadSiteDecryptRuntime(
     debugLog('init.min.js eval fail: ' + (e && e.message));
   }
 
-  // Site player boot path: _decryptAndStart (exposed after init.js / loader).
+  // Site player boot path: _decryptAndStart(xhrLike) — needs getAllResponseHeaders.
   try {
     const w3 = window as any;
     if (typeof w3._decryptAndStart === 'function') {
-      debugLog('_decryptAndStart arity=' + w3._decryptAndStart.length + ' src=' + String(w3._decryptAndStart).slice(0, 80));
-      try {
-        const r = await w3._decryptAndStart();
-        debugLog('_decryptAndStart() → ' + JSON.stringify(r).slice(0, 180));
-      } catch (e1: any) {
-        debugLog('_decryptAndStart() err: ' + (e1 && e1.message));
+      debugLog(
+        '_decryptAndStart arity=' +
+          w3._decryptAndStart.length +
+          ' id=' +
+          w3.id +
+          ' body=' +
+          (m3u8Text ? m3u8Text.length : 0),
+      );
+      const hdrMap = normalizeHeaderMap(m3u8Headers);
+      if (token) {
+        hdrMap['X-Envelope'] = shapeEnvelopeHeader(hdrMap['x-envelope'] || '');
+        hdrMap['x-envelope'] = hdrMap['X-Envelope'];
+      }
+      const xhrLike: any = {
+        status: 200,
+        statusText: 'OK',
+        responseText: m3u8Text,
+        response: m3u8Text,
+        body: m3u8Text,
+        data: m3u8Text,
+        responseURL: playlistUrl || (boot && boot.playerUrl) || '',
+        url: playlistUrl || '',
+        responseType: 'text',
+        readyState: 4,
+        headers: hdrMap,
+        responseHeaders: hdrMap,
+        getAllResponseHeaders(): string {
+          return Object.keys(hdrMap)
+            .map(k => k.toLowerCase() + ': ' + hdrMap[k] + '\r\n')
+            .join('');
+        },
+        getResponseHeader(name: string): string {
+          if (!name) return '';
+          const n = String(name);
+          const v = hdrMap[n] != null ? hdrMap[n] : hdrMap[n.toLowerCase()];
+          return v != null ? String(v) : '';
+        },
+      };
+      const candidates: any[] = [
+        ['xhrLike', xhrLike],
+        ['xhr+cb', { xhr: xhrLike, response: xhrLike, callbacks: xhrLike }],
+      ];
+      for (const [label, arg] of candidates) {
         try {
-          const r2 = await w3._decryptAndStart(token);
-          debugLog('_decryptAndStart(token) → ' + JSON.stringify(r2).slice(0, 180));
-        } catch (e2: any) {
-          debugLog('_decryptAndStart(token) err: ' + (e2 && e2.message));
+          const r = await w3._decryptAndStart(arg);
+          debugLog(
+            '_decryptAndStart(' +
+              label +
+              ') → ' +
+              (typeof r === 'string'
+                ? r.slice(0, 120)
+                : JSON.stringify(r).slice(0, 180)),
+          );
+        } catch (e: any) {
+          debugLog('_decryptAndStart(' + label + ') err: ' + (e && e.message));
         }
       }
       if (w3._avsG6Diag) {
@@ -769,7 +828,7 @@ async function loadSiteDecryptRuntime(
         }
       }
     } else {
-      debugLog('_decryptAndStart missing (' + typeof w3._decryptAndStart + ')');
+      debugLog('_decryptAndStart missing (' + typeof w3._decryptAndStart + ') id=' + w3.id);
     }
   } catch (e: any) {
     debugLog('decryptAndStart probe err: ' + e.message);
@@ -1430,7 +1489,23 @@ async function decryptShieldM3u8(
 
   const expV = ((window as any)._avsExpV as string) || '1.15.7';
   const probes: LoaderProbe[] = [];
-  const runtime = await loadSiteDecryptRuntime(avsToken, avsSid, expV);
+  const hashMatch0 = playerUrl.match(/\/player\/([0-9a-f]+)/i);
+  const playerId = hashMatch0 ? hashMatch0[1] : '';
+  const baseMatch0 = playerUrl.match(/^(https?:\/\/[^/]+)/);
+  const baseUrl0 = baseMatch0 ? baseMatch0[1] : '';
+  const playlistUrl0 =
+    baseUrl0 +
+    '/playlist/' +
+    playerId +
+    '/playlist.m3u8?token=' +
+    encodeURIComponent(avsToken);
+  const runtime = await loadSiteDecryptRuntime(avsToken, avsSid, expV, {
+    playerId,
+    playerUrl,
+    m3u8Text,
+    m3u8Headers,
+    playlistUrl: playlistUrl0,
+  });
   // _avsProbe.envHash is only set after fingerprint/loader init.
   const probeEnv1 =
     (window as any)._avsProbe && (window as any)._avsProbe.envHash;
