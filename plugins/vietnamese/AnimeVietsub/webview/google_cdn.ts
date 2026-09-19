@@ -456,16 +456,32 @@ async function decryptShieldPlaceholders(
     { name: 'jtiHex', key: hexToBytes(jti) },
     { name: 'jtiOddUtf8', key: new TextEncoder().encode(jtiOdd) },
   ];
+  if (env) {
+    if (env.cn) keyCandidates.push({ name: 'cnUtf8', key: new TextEncoder().encode(env.cn) });
+    if (env.sk) keyCandidates.push({ name: 'skUtf8', key: new TextEncoder().encode(env.sk) });
+    if (env.uid && /^[0-9a-f]+$/i.test(env.uid)) {
+      keyCandidates.push({ name: 'uidHex', key: hexToBytes(env.uid.slice(0, 64)) });
+    }
+  }
 
-  const signs = (fileId: string, index: number) => [
-    'url-cipher|' + fileId,
-    fileId,
-    'url-cipher|' + fileId + '|' + index,
-    'placeholder|' + fileId,
-    'cdn|' + fileId,
-    'url|' + fileId + '|' + index,
-    fileId + ':' + index,
-  ];
+  const signs = (fileId: string, index: number) => {
+    const list = [
+      'url-cipher|' + fileId,
+      fileId,
+      'url-cipher|' + fileId + '|' + index,
+      'placeholder|' + fileId,
+      'cdn|' + fileId,
+      'url|' + fileId + '|' + index,
+      fileId + ':' + index,
+    ];
+    if (env) {
+      list.push(env.cn + '|' + env.sk + '|' + env.ts);
+      list.push(env.sk + '|' + fileId);
+      list.push(env.uid + '|' + fileId);
+      list.push('url-cipher|' + fileId + '|' + env.ts);
+    }
+    return list;
+  };
 
   const first = segments[0];
   if (!first) return null;
@@ -880,8 +896,12 @@ function makeReaderLoader(
           } catch (e: any) {
             rec.note = String(e && e.message).slice(0, 80);
             debugLog('Loader onSuccess handler threw: ' + rec.note);
+            debugLog(
+              'Loader stack: ' +
+                String((e && e.stack) || '').split('\n').slice(0, 6).join(' | '),
+            );
             callbacks.onError(
-              { code: 500, message: rec.note, text: rec.note },
+              { code: 500, message: rec.note, text: rec.note, stack: e && e.stack },
               context,
               nd,
               this.stats,
@@ -1409,11 +1429,19 @@ async function decryptShieldM3u8(
     }
   }
 
-  // 3) site _avsDecryptM3u8
+  // 3) site _avsDecryptM3u8 — pass headers shaped the way pLoader reads them
   if (runtime.decrypt) {
     debugLog('Invoke _avsDecryptM3u8…');
+    const shapedHeaders = normalizeHeaderMap(m3u8Headers || {});
+    const envRaw = shapedHeaders['x-envelope'] || '';
+    const envJ = shapeEnvelopeHeader(envRaw);
+    if (envJ) {
+      shapedHeaders['X-Envelope'] = envJ;
+      shapedHeaders['x-envelope'] = envJ;
+      shapedHeaders['X-Envelope-USDK'] = envRaw;
+    }
     try {
-      const dec = await runtime.decrypt(m3u8Text, avsToken, m3u8Headers);
+      const dec = await runtime.decrypt(m3u8Text, avsToken, shapedHeaders);
       if (typeof dec === 'string') {
         debugLog('decrypt out len=' + dec.length + ' head=' + dec.slice(0, 70).replace(/\n/g, '|'));
         if (looksLikeM3u8(dec)) {
