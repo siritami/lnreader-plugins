@@ -956,18 +956,34 @@ function attachContextHeaders(
   url: string,
 ): any {
   const map = normalizeHeaderMap(headerMap);
+  const lookup = (name: any): string => {
+    const n = String(name == null ? '' : name);
+    debugLog('ctx.getResponseHeader("' + n + '")');
+    if (!n) return '';
+    if (map[n] != null) return String(map[n]);
+    const ln = n.toLowerCase();
+    if (map[ln] != null) return String(map[ln]);
+    for (const k of Object.keys(map)) {
+      const lk = k.toLowerCase();
+      if (lk === ln || lk.replace(/-/g, '') === ln.replace(/-/g, '')) {
+        debugLog('  → hdr ' + k);
+        return String(map[k]);
+      }
+      if (lk.indexOf(ln) !== -1 || ln.indexOf(lk) !== -1) {
+        debugLog('  → fuzzy ' + k);
+        return String(map[k]);
+      }
+    }
+    debugLog('  → missing (keys=' + Object.keys(map).length + ')');
+    return '';
+  };
   const api = {
     status,
     statusText: status >= 200 && status < 300 ? 'OK' : String(status),
     url,
     headers: map,
     responseHeaders: map,
-    getResponseHeader(name: string): string {
-      if (!name) return '';
-      const n = String(name);
-      const v = map[n] != null ? map[n] : map[n.toLowerCase()];
-      return v != null ? String(v) : '';
-    },
+    getResponseHeader: lookup,
     getAllResponseHeaders(): string {
       const seen = new Set<string>();
       const lines: string[] = [];
@@ -1096,9 +1112,9 @@ async function decryptShieldM3u8(
   const envHeader = m3u8Headers['x-envelope'] || m3u8Headers['x-avs-envelope'] || '';
   const env = envHeader ? parseEnvelope(envHeader) : null;
   const parsed = parsePlaylistSegments(m3u8Text);
-  const probeEnv =
+  const probeEnv0 =
     (window as any)._avsProbe && (window as any)._avsProbe.envHash;
-  const envHash = probeEnv || m3u8Headers['x-client-env'] || 'f728f44d';
+  let envHash = probeEnv0 || m3u8Headers['x-client-env'] || 'f728f44d';
 
   debugLog(
     'Shield playlist: segs=' + parsed.segments.length +
@@ -1113,9 +1129,15 @@ async function decryptShieldM3u8(
 
   const expV = ((window as any)._avsExpV as string) || '1.15.7';
   const probes: LoaderProbe[] = [];
-  const extraHeaders = { 'X-Client-Env': envHash };
-
   const runtime = await loadSiteDecryptRuntime(avsToken, avsSid, expV);
+  // _avsProbe.envHash is only set after fingerprint/loader init.
+  const probeEnv1 =
+    (window as any)._avsProbe && (window as any)._avsProbe.envHash;
+  if (probeEnv1 && probeEnv1 !== envHash) {
+    debugLog('envHash update ' + envHash + ' → ' + probeEnv1);
+    envHash = String(probeEnv1);
+  }
+  const extraHeaders = { 'X-Client-Env': envHash };
   if (runtime.g6) {
     try {
       debugLog('G6: ' + JSON.stringify(runtime.g6()));
