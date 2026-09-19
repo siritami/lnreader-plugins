@@ -211,8 +211,7 @@ function buildM3u8Blob(headerLines: string[], segmentUrls: string[]): string {
   }
 
   const bodyLines: string[] = [...headers];
-  for (let i = 0; i < media.length; i++) {
-    const line = media[i];
+  for (const line of media) {
     if (/^#EXTINF:/i.test(line)) {
       bodyLines.push(line);
       continue;
