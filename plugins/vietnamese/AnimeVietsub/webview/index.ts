@@ -73,7 +73,7 @@ async function resolveMedia(config: PlayerConfig): Promise<ResolvedMedia> {
       } catch (e: any) {
         if (
           e instanceof ShieldDecryptUnsupportedError ||
-          /AVS_SHIELD_UNSUPPORTED|Giải mã thất bại|Không tìm thấy avsToken|Thiếu thông tin giải mã/.test(
+          /AVS_SHIELD|AVS shield|Giải mã|Không tìm thấy avsToken|Thiếu thông tin|không giải mã được|không nhận dạng/i.test(
             e?.message || '',
           )
         ) {
