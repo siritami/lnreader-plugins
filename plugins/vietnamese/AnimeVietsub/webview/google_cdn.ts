@@ -643,12 +643,19 @@ async function loadSiteDecryptRuntime(
   w._avsCryptoHardenShadow = true;
   w._avsCryptoHardenDisable = [];
   w._avsSk = token;
+  // init.js expects these as bare globals (player page uses const avsToken / avsSid).
+  w.avsToken = token;
+  if (avsSid) w.avsSid = avsSid;
   w._avsCryptoSupported = !!(
     window.crypto &&
     (window.crypto as any).subtle &&
     (window.crypto as any).subtle.importKey
   );
-  if (avsSid) w.avsSid = avsSid;
+  w.nextName = '';
+  w.nextUrl = '';
+  w.schedule = '';
+  w.isFinal = '';
+  w.adsConfig = '';
   w._avsDomains = [
     [97, 110, 105, 109, 101, 118, 105, 101, 116, 115, 117, 98, 46, 114, 117],
     [97, 110, 105, 109, 101, 118, 105, 101, 116, 115, 117, 98, 46, 112, 108],
@@ -726,14 +733,46 @@ async function loadSiteDecryptRuntime(
       Referer: 'https://storage.googleapiscdn.com/',
     });
     if (initRes.status === 200 && initRes.text && initRes.text.length > 1000) {
+      debugLog('Evaluating init.min.js (' + initRes.text.length + ') avsToken=' + typeof w.avsToken);
       // eslint-disable-next-line no-eval
       (0, eval)(initRes.text);
-      debugLog('Loaded init.min.js (' + initRes.text.length + ')');
+      debugLog('Loaded init.min.js OK');
     } else {
       debugLog('init.min.js skip st=' + initRes.status + ' len=' + (initRes.text || '').length);
     }
   } catch (e: any) {
     debugLog('init.min.js eval fail: ' + (e && e.message));
+  }
+
+  // Site player boot path: _decryptAndStart (exposed after init.js / loader).
+  try {
+    const w3 = window as any;
+    if (typeof w3._decryptAndStart === 'function') {
+      debugLog('_decryptAndStart arity=' + w3._decryptAndStart.length + ' src=' + String(w3._decryptAndStart).slice(0, 80));
+      try {
+        const r = await w3._decryptAndStart();
+        debugLog('_decryptAndStart() → ' + JSON.stringify(r).slice(0, 180));
+      } catch (e1: any) {
+        debugLog('_decryptAndStart() err: ' + (e1 && e1.message));
+        try {
+          const r2 = await w3._decryptAndStart(token);
+          debugLog('_decryptAndStart(token) → ' + JSON.stringify(r2).slice(0, 180));
+        } catch (e2: any) {
+          debugLog('_decryptAndStart(token) err: ' + (e2 && e2.message));
+        }
+      }
+      if (w3._avsG6Diag) {
+        try {
+          debugLog('G6 after decryptAndStart: ' + JSON.stringify(w3._avsG6Diag()));
+        } catch {
+          //
+        }
+      }
+    } else {
+      debugLog('_decryptAndStart missing (' + typeof w3._decryptAndStart + ')');
+    }
+  } catch (e: any) {
+    debugLog('decryptAndStart probe err: ' + e.message);
   }
 
   const newKeys = Object.getOwnPropertyNames(window).filter(k => !keysBefore.has(k));
