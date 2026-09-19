@@ -1641,6 +1641,27 @@ function attachInstanceXhr(
   }
 }
 
+/** Log pLoader instance property reads that are undefined (likely crash source). */
+function spyInstUndefined(inst: any, label: string): any {
+  try {
+    return new Proxy(inst, {
+      get(t, p, r) {
+        const key = String(p);
+        if (key === 'then' || key === 'toJSON' || key === 'constructor') {
+          return (t as any)[p];
+        }
+        const v = (t as any)[p];
+        if (v === undefined && typeof p === 'string' && !p.startsWith('_')) {
+          debugLog(label + '.' + key + ' = undefined');
+        }
+        return v;
+      },
+    });
+  } catch {
+    return inst;
+  }
+}
+
 function invokeLoaderWith(
   LoaderCtor: any,
   InnerLoader: any,
@@ -1682,7 +1703,7 @@ function invokeLoaderWith(
         lowLatencyMode: false,
         ...(hlsConfigExtra || {}),
       };
-      const inst = new LoaderCtor(hlsConfig);
+      const instRaw = new LoaderCtor(hlsConfig);
       const body =
         preloadBody ||
         (context && context.responseText) ||
@@ -1695,21 +1716,49 @@ function invokeLoaderWith(
           (hlsConfigExtra && (hlsConfigExtra as any).headers) ||
           {},
       );
-      // pLoader reads this.responseText / this.text / this.headers /
-      // this.getResponseHeader — stamp the full XHR surface on the instance.
-      attachInstanceXhr(inst, hdrMap, body, (context && context.url) || '');
+      attachInstanceXhr(instRaw, hdrMap, body, (context && context.url) || '');
+      // Extra fields pLoader may read on `this` then `.split`
+      try {
+        const w = window as any;
+        const token = w._avsSk || w.avsToken || '';
+        const jwt = token ? token.split('.') : [];
+        let jtiOdd = '';
+        try {
+          const pl = JSON.parse(atob(jwt[1].replace(/-/g, '+').replace(/_/g, '/')));
+          const jti = String(pl.jti || '');
+          for (let i = 1; i < jti.length; i += 2) jtiOdd += jti[i];
+          (instRaw as any).jti = jti;
+          (instRaw as any).sessionKey = jtiOdd;
+        } catch {
+          //
+        }
+        (instRaw as any).avsToken = token;
+        (instRaw as any).avsSid = w.avsSid || '';
+        (instRaw as any).id = w.id || '';
+        (instRaw as any).playlistUrl =
+          (context && context.url) || (context && context.responseURL) || '';
+        (instRaw as any).nextUrl = w.nextUrl || '';
+        (instRaw as any).nextName = w.nextName || '';
+        (instRaw as any).salt = w._avsSalt || '';
+        (instRaw as any).guard = w._avsGuard || w.avsG || '';
+        (instRaw as any).uid = w.avsSid || '';
+        (instRaw as any).sk = hdrMap['x-cache-node'] || hdrMap['X-Cache-Node'] || '';
+        (instRaw as any).cn = hdrMap['x-edge-tag'] || hdrMap['X-Edge-Tag'] || '';
+        (instRaw as any).ts = hdrMap['x-request-trace'] || '';
+      } catch {
+        //
+      }
+      const inst = spyInstUndefined(instRaw, label + '.inst');
       if (context) {
         attachResponseBody(context, body);
-        // Do not clobber logging getResponseHeader on context.
         if (!context.responseURL) context.responseURL = context.url || '';
         if (!context.finalUrl) context.finalUrl = context.url || '';
         context.headers = hdrMap;
         context.responseHeaders = hdrMap;
-        if (typeof context.getResponseHeader !== 'function') {
-          attachInstanceXhr(context, hdrMap, body, context.url || '');
-        } else if (!context.responseURL && context.url) {
-          context.responseURL = context.url;
+        if (!context.sessionKey && (instRaw as any).sessionKey) {
+          context.sessionKey = (instRaw as any).sessionKey;
         }
+        if (!context.playlistUrl) context.playlistUrl = context.url || '';
         debugLog(
           'invoke ctx responseURL=' +
             String(context.responseURL || '').slice(0, 50) +
