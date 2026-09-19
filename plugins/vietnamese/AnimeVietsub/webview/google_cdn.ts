@@ -773,37 +773,79 @@ async function loadSiteDecryptRuntime(
       );
       const hdrMap = normalizeHeaderMap(m3u8Headers);
       if (token) {
-        hdrMap['X-Envelope'] = shapeEnvelopeHeader(hdrMap['x-envelope'] || '');
-        hdrMap['x-envelope'] = hdrMap['X-Envelope'];
+        const shaped = shapeEnvelopeHeader(hdrMap['x-envelope'] || '');
+        if (shaped) {
+          hdrMap['X-Envelope'] = shaped;
+          hdrMap['x-envelope'] = shaped;
+        }
       }
+      if (!w3.avsG && w3._avsGuard) {
+        w3.avsG = w3._avsGuard;
+        debugLog('avsG := _avsGuard ' + String(w3.avsG).slice(0, 24));
+      }
+      const headerString = Object.keys(hdrMap)
+        .map(k => k.toLowerCase() + ': ' + hdrMap[k] + '\r\n')
+        .join('');
+      const getHdr = (name: string): string => {
+        if (!name) return '';
+        const n = String(name);
+        const v = hdrMap[n] != null ? hdrMap[n] : hdrMap[n.toLowerCase()];
+        return v != null ? String(v) : '';
+      };
       const xhrLike: any = {
         status: 200,
         statusText: 'OK',
-        responseText: m3u8Text,
-        response: m3u8Text,
-        body: m3u8Text,
-        data: m3u8Text,
-        responseURL: playlistUrl || (boot && boot.playerUrl) || '',
+        readyState: 4,
+        responseText: m3u8Text || '',
+        response: m3u8Text || '',
+        body: m3u8Text || '',
+        data: m3u8Text || '',
+        responseURL: playlistUrl || '',
+        finalUrl: playlistUrl || '',
         url: playlistUrl || '',
         responseType: 'text',
-        readyState: 4,
         headers: hdrMap,
         responseHeaders: hdrMap,
-        getAllResponseHeaders(): string {
-          return Object.keys(hdrMap)
-            .map(k => k.toLowerCase() + ': ' + hdrMap[k] + '\r\n')
-            .join('');
+        getAllResponseHeaders: () => headerString,
+        getResponseHeader: getHdr,
+        // Common hls/avs context fields (.slice on url/path/finalUrl)
+        context: {
+          url: playlistUrl || '',
+          levelurl: playlistUrl || '',
+          responseType: 'text',
+          type: 'manifest',
+          level: 0,
+          headers: hdrMap,
+          responseHeaders: hdrMap,
+          responseText: m3u8Text || '',
+          getResponseHeader: getHdr,
+          getAllResponseHeaders: () => headerString,
+          frag: {
+            type: 'playlist',
+            level: 0,
+            url: playlistUrl || '',
+            relurl: playlistUrl || '',
+            baseurl: (playlistUrl || '').replace(/[^/]*$/, ''),
+            baseURL: (playlistUrl || '').replace(/[^/]*$/, ''),
+            sn: 0,
+          },
         },
-        getResponseHeader(name: string): string {
-          if (!name) return '';
-          const n = String(name);
-          const v = hdrMap[n] != null ? hdrMap[n] : hdrMap[n.toLowerCase()];
-          return v != null ? String(v) : '';
+        stats: {
+          aborted: false,
+          loaded: (m3u8Text || '').length,
+          total: (m3u8Text || '').length,
+          retry: 0,
+          loading: {
+            start: Date.now() - 40,
+            first: Date.now() - 10,
+            end: Date.now(),
+          },
         },
+        networkDetails: null, // set below
       };
+      xhrLike.networkDetails = xhrLike;
       const candidates: any[] = [
-        ['xhrLike', xhrLike],
-        ['xhr+cb', { xhr: xhrLike, response: xhrLike, callbacks: xhrLike }],
+        ['xhr+playlistUrl', xhrLike],
       ];
       for (const [label, arg] of candidates) {
         try {
@@ -813,8 +855,8 @@ async function loadSiteDecryptRuntime(
               label +
               ') → ' +
               (typeof r === 'string'
-                ? r.slice(0, 120)
-                : JSON.stringify(r).slice(0, 180)),
+                ? r.slice(0, 140)
+                : JSON.stringify(r).slice(0, 200)),
           );
         } catch (e: any) {
           debugLog('_decryptAndStart(' + label + ') err: ' + (e && e.message));
