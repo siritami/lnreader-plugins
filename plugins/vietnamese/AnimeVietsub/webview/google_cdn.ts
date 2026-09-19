@@ -5,10 +5,14 @@ import { cleanupIframe, debugLog } from './utils';
 
 /**
  * avsToken is intentionally split in the player HTML so scrapers that
- * regex a single "..." capture get a broken half. Reassemble string
- * concatenations, then fall back to window._avsSk / a lone literal.
+ * regex a single "..." capture get a broken half.
+ *
+ * Live format (browser-verified):
+ *   const avsToken = "eyJ…(~178)" + "GRm…(~178)";
+ * Join all quoted pieces. Fallback to window._avsSk / a lone literal.
  */
 export function extractAvsToken(html: string): string | null {
+  // Prefer concatenation: "part1" + "part2" [+ "part3"...]
   const concat = html.match(
     /const\s+avsToken\s*=\s*((?:"[^"]*"\s*(?:\+\s*)?)+)/,
   );
@@ -16,15 +20,31 @@ export function extractAvsToken(html: string): string | null {
     const parts = concat[1].match(/"([^"]*)"/g);
     if (parts && parts.length) {
       const joined = parts.map(p => p.slice(1, -1)).join('');
-      if (joined.length > 20 && joined.includes('.')) return joined;
+      if (joined.length > 20 && joined.includes('.')) {
+        debugLog(
+          'avsToken concat parts=' +
+            parts.length +
+            ' lens=' +
+            parts.map(p => p.length - 2).join(',') +
+            ' joined=' +
+            joined.length,
+        );
+        return joined;
+      }
     }
   }
 
   const single = html.match(/const\s+avsToken\s*=\s*"([^"]+)"/);
-  if (single && single[1] && single[1].includes('.')) return single[1];
+  if (single && single[1] && single[1].includes('.')) {
+    debugLog('avsToken single len=' + single[1].length + ' (maybe truncated)');
+    return single[1];
+  }
 
   const winLit = html.match(/window\._avsSk\s*=\s*"([^"]+)"/);
-  if (winLit && winLit[1] && winLit[1].includes('.')) return winLit[1];
+  if (winLit && winLit[1] && winLit[1].includes('.')) {
+    debugLog('avsToken window._avsSk len=' + winLit[1].length);
+    return winLit[1];
+  }
 
   return null;
 }
@@ -2049,7 +2069,16 @@ async function fetchPlayerPage(
       throw new Error('Không tìm thấy avsToken trong HTML.');
     }
     const avsSid = extractAvsSid(html);
-    debugLog('Token: ' + avsToken.substring(0, 24) + '… sid=' + avsSid);
+    debugLog(
+      'Token: ' +
+        avsToken.substring(0, 24) +
+        '… len=' +
+        avsToken.length +
+        ' dots=' +
+        (avsToken.match(/\./g) || []).length +
+        ' sid=' +
+        avsSid,
+    );
 
     const hashMatch = playerUrl.match(/\/player\/([0-9a-f]+)/i);
     if (!hashMatch) {
