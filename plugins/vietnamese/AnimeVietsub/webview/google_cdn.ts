@@ -1504,6 +1504,21 @@ function attachContextHeaders(
     debugLog('X-Envelope shaped → jwtish len=' + envShaped.length);
   }
 
+  // pLoader reads context.sessionKey / context.playlistUrl then .split()
+  const w = window as any;
+  let sessionKey = '';
+  try {
+    const token = w._avsSk || w.avsToken || '';
+    const jwt = token.split('.');
+    if (jwt[1]) {
+      const pl = JSON.parse(atob(jwt[1].replace(/-/g, '+').replace(/_/g, '/')));
+      const jti = String(pl.jti || '');
+      for (let i = 1; i < jti.length; i += 2) sessionKey += jti[i];
+    }
+  } catch {
+    //
+  }
+
   const lookup = (name: any): string => {
     const n = String(name == null ? '' : name);
     if (!n) {
@@ -1554,6 +1569,16 @@ function attachContextHeaders(
     // pLoader does responseURL.split(...) — must never be undefined.
     responseURL: url,
     finalUrl: url,
+    // Spy log: pLoader reads these on context then .split
+    sessionKey,
+    playlistUrl: url,
+    avsToken: w._avsSk || w.avsToken || '',
+    avsSid: w.avsSid || '',
+    id: w.id || '',
+    playerId: w.id || '',
+    nextUrl: w.nextUrl || '',
+    nextName: w.nextName || '',
+    salt: w._avsSalt || '',
     headers: map,
     responseHeaders: map,
     // pLoader onSuccess does responseText.split('\n') after reading headers.
@@ -1575,7 +1600,13 @@ function attachContextHeaders(
   };
   const merged = Object.assign(context || {}, api);
   if (url) {
-    debugLog('ctx.responseURL set len=' + String(url).length + ' ' + String(url).slice(0, 50));
+    debugLog(
+      'ctx.sessionKey len=' +
+        String(sessionKey || '').length +
+        ' playlistUrl set' +
+        ' responseURL len=' +
+        String(url).length,
+    );
   }
   return merged;
 }
