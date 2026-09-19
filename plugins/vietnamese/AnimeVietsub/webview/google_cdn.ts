@@ -191,21 +191,51 @@ function parsePlaylistSegments(m3u8Text: string): {
 }
 
 function buildM3u8Blob(headerLines: string[], segmentUrls: string[]): string {
-  const body = [
-    ...headerLines.filter(h => !/^#EXT-X-KEY/i.test(h)),
-    ...segmentUrls,
-    '#EXT-X-ENDLIST',
-  ].join('\n');
+  // CloudStream keeps #EXTINF before each decrypted URL. hls.js will not
+  // start media if segments are bare URLs (our 1.7.5 data: URI).
+  const headers = (headerLines || []).filter(
+    h =>
+      !/^#EXT-X-KEY/i.test(h) &&
+      !/^#EXT-X-ENDLIST/i.test(h) &&
+      !/^#EXTINF:/i.test(h),
+  );
+  const media: string[] = [];
+  for (const raw of segmentUrls || []) {
+    const line = String(raw || '').trim();
+    if (!line) continue;
+    if (line.startsWith('#')) {
+      if (/^#EXTINF:/i.test(line)) media.push(line);
+      continue;
+    }
+    if (/^https?:\/\//i.test(line)) media.push(line);
+  }
+
+  const bodyLines: string[] = [...headers];
+  for (let i = 0; i < media.length; i++) {
+    const line = media[i];
+    if (/^#EXTINF:/i.test(line)) {
+      bodyLines.push(line);
+      continue;
+    }
+    const prev = bodyLines[bodyLines.length - 1];
+    if (!prev || !/^#EXTINF:/i.test(prev)) {
+      bodyLines.push('#EXTINF:10.0,');
+    }
+    bodyLines.push(line);
+  }
+  bodyLines.push('#EXT-X-ENDLIST');
+  const body = bodyLines.join('\n');
+  const urlCount = bodyLines.filter(l => /^https?:\/\//i.test(l)).length;
   debugLog(
     'buildM3u8Blob segs=' +
-      segmentUrls.length +
+      urlCount +
       ' bodyLen=' +
       body.length +
+      ' extinf=' +
+      bodyLines.filter(l => /^#EXTINF:/i.test(l)).length +
       ' first=' +
-      (segmentUrls[0] || '').slice(0, 70),
+      (bodyLines.find(l => /^https?:/i.test(l)) || '').slice(0, 70),
   );
-  // data: URI — default hls.js pLoader can parse the playlist without a
-  // custom loader (custom pLoader broke video.js stats.loading.start).
   return (
     'data:application/vnd.apple.mpegurl;charset=utf-8,' + encodeURIComponent(body)
   );
@@ -447,9 +477,22 @@ async function decryptHlsEParams(m3u8Text: string, jtiOdd: string): Promise<stri
   const lines = m3u8Text.split('\n');
   const out: string[] = [];
   for (const line of lines) {
-    const m = line.match(/\/hls\/([0-9a-f]{24})\.ts\?e=([^&\s]+).*?[?&]i=([^&\s]*)/i);
+    const trimmed = line.trim();
+    const m = trimmed.match(
+      /\/hls\/([0-9a-f]{24})\.ts\?e=([^&\s]+).*?[?&]i=([^&\s]*)/i,
+    );
     if (!m) {
-      if (line && !line.startsWith('#')) out.push(line.trim());
+      // Keep #EXTINF and non-#hls media lines (CloudStream outLines behavior).
+      if (!trimmed) continue;
+      if (trimmed.startsWith('#')) {
+        if (/^#EXTINF:/i.test(trimmed) || /^#EXT-X-(VERSION|TARGETDURATION|MEDIA-SEQUENCE|PLAYLIST-TYPE|ENDLIST)/i.test(trimmed)) {
+          out.push(trimmed);
+        }
+        continue;
+      }
+      if (/^https?:\/\//i.test(trimmed) && !/\/hls\/[0-9a-f]{24}\.ts/i.test(trimmed)) {
+        out.push(trimmed);
+      }
       continue;
     }
     try {
@@ -457,7 +500,6 @@ async function decryptHlsEParams(m3u8Text: string, jtiOdd: string): Promise<stri
       const index = parseInt(m[3] || '0', 10) || 0;
       const dec = await aesCtrDecrypt(key, makeIndexCounter(index), b64urlDecode(m[2]));
       const url = new TextDecoder().decode(dec);
-      // CloudStream: any http(s) result is a real segment (incl. googleusercontent).
       if (looksPlayableUrl(url)) out.push(url);
     } catch {
       //
