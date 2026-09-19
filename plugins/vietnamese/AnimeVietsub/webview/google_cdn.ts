@@ -893,10 +893,17 @@ function makeReaderLoader(
             context &&
             (context.responseType === 'arraybuffer' ||
               context.responseType === 'arrayBuffer');
-          const payload = asBuf
-            ? new TextEncoder().encode(body2).buffer
-            : body2;
-          debugLog('Loader onSuccess body len=' + (typeof payload === 'string' ? payload.length : 'ab'));
+          // XHR-like body so data.responseText.split works; still has String.split.
+          const payload = makeXhrLikeBody(body2, url, normalized);
+          if (asBuf) {
+            (payload as any).responseArrayBuffer = new TextEncoder().encode(body2).buffer;
+          }
+          debugLog(
+            'Loader onSuccess body len=' +
+              body2.length +
+              ' responseText=' +
+              typeof (payload as any).responseText,
+          );
           try {
             callbacks.onSuccess(this.stats, payload, nd, context);
           } catch (e: any) {
@@ -990,15 +997,69 @@ function shapeEnvelopeHeader(raw: string): string {
   try {
     const envJson = parseEnvelope(raw);
     if (envJson && (envJson.cn || envJson.sk)) {
-      const payload = b64urlEncode(JSON.stringify(envJson));
-      return 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.' + payload + '.sig';
+      const jwt = jtiParts((window as any)._avsSk || '');
+      const w = window as any;
+      const payload = {
+        ...envJson,
+        // pLoader may read these JWT claims after split('.')[1]
+        sub: 'avs-user',
+        iss: 'avs-auth',
+        jti: jwt ? jwt.jti : '',
+        sessionKey: jwt ? jwt.jtiOdd : '',
+        sid: w.avsSid || '',
+        salt: w._avsSalt || '',
+        envHash: (w._avsProbe && w._avsProbe.envHash) || '',
+      };
+      const enc = b64urlEncode(JSON.stringify(payload));
+      return 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.' + enc + '.sig';
     }
   } catch {
     //
   }
-  // Already dotted? keep as-is.
   if (raw.indexOf('.') !== -1) return raw;
   return raw;
+}
+
+/**
+ * pLoader onSuccess may treat `data` as an XHR, not a string:
+ *   data.responseText.split('\\n')
+ * A raw string has responseText === undefined.
+ */
+function makeXhrLikeBody(
+  body: string,
+  url: string,
+  headerMap: Record<string, string>,
+) {
+  const map = normalizeHeaderMap(headerMap);
+  const obj: any = new String(body);
+  obj.responseText = body;
+  obj.response = body;
+  obj.body = body;
+  obj.data = body;
+  obj.status = 200;
+  obj.statusText = 'OK';
+  obj.responseURL = url;
+  obj.responseType = 'text';
+  obj.responseHeaders = map;
+  obj.headers = map;
+  obj.getResponseHeader = function (name: string) {
+    if (!name) return '';
+    const n = String(name);
+    const v = map[n] != null ? map[n] : map[n.toLowerCase()];
+    return v != null ? String(v) : '';
+  };
+  obj.getAllResponseHeaders = function () {
+    const seen = new Set<string>();
+    const lines: string[] = [];
+    Object.keys(map).forEach(k => {
+      const lk = k.toLowerCase();
+      if (seen.has(lk)) return;
+      seen.add(lk);
+      lines.push(lk + ': ' + map[k] + '\r\n');
+    });
+    return lines.join('');
+  };
+  return obj;
 }
 
 function spyString(value: string, tag: string): any {
@@ -1187,17 +1248,35 @@ function invokeLoaderWith(
           onSuccess: (_s: any, data: any, nd: any, ctx: any) => {
             clearTimeout(timer);
             const urlNow = (ctx && ctx.url) || (context && context.url) || '';
+            const dataPreview =
+              typeof data === 'string'
+                ? 'str:' + data.length
+                : data && typeof data === 'object'
+                  ? 'obj rt=' +
+                    typeof (data as any).responseText +
+                    ' keys=' +
+                    Object.keys(data).slice(0, 6).join(',')
+                  : typeof data;
             debugLog(
               label + ': success st=' + (nd && nd.status) +
-                ' type=' + typeof data +
+                ' data=' + dataPreview +
                 ' url=' + String(urlNow).slice(0, 80),
             );
-            if (typeof data === 'string') done(data);
-            else if (data instanceof ArrayBuffer) {
-              done(new TextDecoder().decode(new Uint8Array(data)));
-            } else if (ArrayBuffer.isView(data)) {
-              done(new TextDecoder().decode(data as any));
-            } else done(null);
+            const extract = (d: any): string | null => {
+              if (typeof d === 'string') return d;
+              if (d && typeof d.responseText === 'string') return d.responseText;
+              if (d && typeof d.response === 'string') return d.response;
+              if (d instanceof ArrayBuffer) {
+                return new TextDecoder().decode(new Uint8Array(d));
+              }
+              if (ArrayBuffer.isView(d)) {
+                return new TextDecoder().decode(d as any);
+              }
+              return null;
+            };
+            const text = extract(data);
+            if (text != null) done(text);
+            else done(null);
           },
           onError: (err: any, ctx: any, nd: any) => {
             clearTimeout(timer);
