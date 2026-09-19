@@ -114,6 +114,10 @@ function makeLoaderStats(t0: number, loaded: number) {
 /**
  * hls.js loader: reader.fetch + PNG-strip (CloudStream).
  * Playlist/blob → text; media segments → PNG-stripped ArrayBuffer.
+ *
+ * docs.md: playHls(url, hlsJsConfig) is passed into the Hls constructor.
+ * Core player: blob:/data: must be read with window.fetch; hls.js uses its
+ * own loader for fragments (we replace loader/pLoader/fLoader).
  */
 function createAvsTsLoader() {
   // @ts-ignore
@@ -122,6 +126,9 @@ function createAvsTsLoader() {
     this.config = config;
     // @ts-ignore
     this.aborted = false;
+    // hls.js / video.js write loader.stats.loading.start — must exist.
+    // @ts-ignore
+    this.stats = makeLoaderStats(Date.now(), 0);
   }
   // @ts-ignore
   AvsTsLoader.prototype.load = function (context, _config, callbacks) {
@@ -129,6 +136,9 @@ function createAvsTsLoader() {
     const url = (context && context.url) || '';
     const t0 = Date.now();
     const asPlaylist = isPlaylistLike(url, context);
+    // Keep a live stats object on the instance for hls.js.
+    // @ts-ignore
+    self.stats = makeLoaderStats(t0, 0);
     debugLog(
       '[AVS] GET ' +
         (asPlaylist ? 'playlist' : 'segment') +
@@ -155,15 +165,20 @@ function createAvsTsLoader() {
               ' head=' +
               body.slice(0, 60).replace(/\n/g, '|'),
           );
-          if (body.length < 40) {
-            debugLog('[AVS] playlist too short — decrypt output may be empty');
+          // @ts-ignore
+          self.stats = makeLoaderStats(t0, body.length);
+          try {
+            callbacks.onSuccess(
+              // @ts-ignore
+              self.stats,
+              body,
+              { status: res.status, url, responseURL: url },
+              context,
+            );
+          } catch (e: any) {
+            debugLog('[AVS] playlist onSuccess throw: ' + (e && e.message));
+            throw e;
           }
-          callbacks.onSuccess(
-            makeLoaderStats(t0, body.length),
-            body,
-            { status: res.status, url, responseURL: url },
-            context,
-          );
           return;
         }
 
@@ -174,8 +189,11 @@ function createAvsTsLoader() {
             ' clean=' +
             clean.byteLength,
         );
+        // @ts-ignore
+        self.stats = makeLoaderStats(t0, clean.byteLength);
         callbacks.onSuccess(
-          makeLoaderStats(t0, clean.byteLength),
+          // @ts-ignore
+          self.stats,
           clean,
           { status: res.status, url, responseURL: url },
           context,
@@ -184,18 +202,29 @@ function createAvsTsLoader() {
       .catch((err: any) => {
         if (self.aborted) return;
         debugLog('[AVS] GET fail ' + String(err && err.message).slice(0, 80));
-        callbacks.onError(
-          { code: 0, text: String(err && err.message) },
-          context,
-          { status: 0, url },
-          makeLoaderStats(Date.now(), 0),
-        );
+        // @ts-ignore
+        self.stats = makeLoaderStats(Date.now(), 0);
+        try {
+          callbacks.onError(
+            { code: 0, text: String(err && err.message) },
+            context,
+            { status: 0, url },
+            // @ts-ignore
+            self.stats,
+          );
+        } catch (e2: any) {
+          debugLog('[AVS] onError throw: ' + (e2 && e2.message));
+        }
       });
   };
   // @ts-ignore
   AvsTsLoader.prototype.abort = function () {
     // @ts-ignore
     this.aborted = true;
+    // @ts-ignore
+    if (!this.stats) this.stats = makeLoaderStats(Date.now(), 0);
+    // @ts-ignore
+    this.stats.aborted = true;
   };
   // @ts-ignore
   AvsTsLoader.prototype.destroy = function () {
