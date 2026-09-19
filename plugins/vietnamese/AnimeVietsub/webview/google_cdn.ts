@@ -57,12 +57,9 @@ export function extractAvsSid(html: string): string | null {
 }
 
 export function isLegacyEncryptedPlaylist(m3u8Text: string): boolean {
-  return !!(
-    m3u8Text &&
-    /[?&]_t=/.test(m3u8Text) &&
-    m3u8Text.includes('#EXTINF') &&
-    !isNewShieldPlaylist(m3u8Text)
-  );
+  // CloudStream still uses GCM+_t decrypt even when playlist also has
+  // SAMPLE-AES-CTR KEY lines / /chunks/ placeholders.
+  return !!(m3u8Text && /[?&]_t=/.test(m3u8Text) && m3u8Text.includes('#EXTINF'));
 }
 
 export function isNewShieldPlaylist(m3u8Text: string): boolean {
@@ -204,11 +201,9 @@ function buildM3u8Blob(headerLines: string[], segmentUrls: string[]): string {
 }
 
 function looksPlayableUrl(url: string): boolean {
-  if (!/^https?:\/\//i.test(url)) return false;
-  // Known anti-scraper decoys from old url-cipher path.
-  if (/googleusercontent\.com\//i.test(url)) return false;
-  if (/lh3\.googleusercontent|lh6\.googleusercontent/i.test(url)) return false;
-  return true;
+  // CloudStream AnimeVietsubProvider: googleusercontent URLs are REAL
+  // segments (MPEG-TS wrapped in a ~127-byte fake PNG shell).
+  return /^https?:\/\//i.test(url);
 }
 
 function looksLikeMediaUrl(url: string): boolean {
@@ -217,7 +212,9 @@ function looksLikeMediaUrl(url: string): boolean {
     /\.(ts|m4s|mp4|m3u8|mpd|webm|mkv)(\?|$)/i.test(url) ||
     /\/hls\//i.test(url) ||
     /stream\.googleapis/i.test(url) ||
-    /googlevideo\.com/i.test(url)
+    /googlevideo\.com/i.test(url) ||
+    // AVS CloudStream decrypt output: lh3.googleusercontent.com/…=d
+    /googleusercontent\.com\//i.test(url)
   );
 }
 
@@ -449,11 +446,10 @@ async function decryptHlsEParams(m3u8Text: string, jtiOdd: string): Promise<stri
       const index = parseInt(m[3] || '0', 10) || 0;
       const dec = await aesCtrDecrypt(key, makeIndexCounter(index), b64urlDecode(m[2]));
       const url = new TextDecoder().decode(dec);
-      // Skip known decoy image URLs; keep anything that looks like media.
+      // CloudStream: any http(s) result is a real segment (incl. googleusercontent).
       if (looksPlayableUrl(url)) out.push(url);
-      else out.push(line.trim());
     } catch {
-      out.push(line.trim());
+      //
     }
   }
   return out;
@@ -2297,12 +2293,26 @@ export async function resolveGoogleApisCdn(
   return await fetchPlayerPage(playerUrl, iframe);
 }
 
+/** CloudStream getBypassHeaders — same UA/accept for player + playlist. */
+function avsBypassHeaders(referer?: string): Record<string, string> {
+  const h: Record<string, string> = {
+    Accept:
+      'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
+    'Accept-Language': 'vi,en-US;q=0.9,en;q=0.8',
+    'Upgrade-Insecure-Requests': '1',
+    'User-Agent':
+      'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36',
+  };
+  if (referer) h.Referer = referer;
+  return h;
+}
+
 async function fetchPlayerPage(
   playerUrl: string,
   iframe: HTMLIFrameElement,
 ): Promise<ResolvedMedia> {
   try {
-    const res = await nativeFetch(playerUrl, { Referer: playerUrl });
+    const res = await nativeFetch(playerUrl, avsBypassHeaders(playerUrl));
     if (res.status !== 200) {
       throw new Error('HTTP ' + res.status + ' (len=' + (res.text || '').length + ')');
     }
@@ -2332,11 +2342,9 @@ async function fetchPlayerPage(
       throw new Error('Không tìm thấy video hash trong URL.');
     }
     const videoHash = hashMatch[1];
-
     const baseUrlMatch = playerUrl.match(/^(https?:\/\/[^/]+)/);
     if (!baseUrlMatch) throw new Error('Không lấy được baseUrl.');
     const baseUrl = baseUrlMatch[1];
-
     const m3u8Url =
       baseUrl +
       '/playlist/' +
@@ -2344,14 +2352,31 @@ async function fetchPlayerPage(
       '/playlist.m3u8?token=' +
       encodeURIComponent(avsToken);
 
-    const m3u8Res = await nativeFetch(m3u8Url, { Referer: playerUrl });
-    const m3u8Text = m3u8Res.text;
-    const m3u8Headers = m3u8Res.headers || {};
-    debugLog('m3u8 OK, size=' + m3u8Text.length);
+    // CloudStream: retry playlist a few times (fresh token each attempt).
+    let m3u8Text = '';
+    let m3u8Headers: Record<string, string> = {};
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      const m3u8Res = await nativeFetch(
+        m3u8Url,
+        Object.assign({ Referer: playerUrl }, avsBypassHeaders(playerUrl)),
+      );
+      m3u8Text = m3u8Res.text;
+      m3u8Headers = m3u8Res.headers || {};
+      debugLog(
+        'm3u8 attempt=' + attempt + ' HTTP=' + m3u8Res.status + ' size=' + m3u8Text.length,
+      );
+      if (m3u8Res.status === 200 && m3u8Text.length > 200) break;
+    }
 
+    // CloudStream processEncryptedM3u8: GCM on concatenated _t, then
+    // url-cipher on /hls/?e= → googleusercontent PNG-wrapped TS segments.
     if (isLegacyEncryptedPlaylist(m3u8Text)) {
-      debugLog('Legacy encrypted playlist — 2-layer decrypt');
-      return await decryptLegacyM3u8(m3u8Text, m3u8Headers, avsToken);
+      debugLog('CloudStream GCM+_t decrypt path');
+      try {
+        return await decryptLegacyM3u8(m3u8Text, m3u8Headers, avsToken);
+      } catch (e: any) {
+        debugLog('CloudStream GCM path fail: ' + (e && e.message));
+      }
     }
 
     if (isNewShieldPlaylist(m3u8Text)) {
@@ -2365,7 +2390,6 @@ async function fetchPlayerPage(
       );
     }
 
-    // Already playable URLs?
     const mediaUrls = extractMediaUrls(m3u8Text);
     if (mediaUrls.length) {
       return {
