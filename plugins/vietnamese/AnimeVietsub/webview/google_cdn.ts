@@ -695,28 +695,59 @@ type LoaderProbe = {
 };
 
 /** hls.js / avs-loader expect XMLHttpRequest-shaped networkDetails. */
+function normalizeHeaderMap(headerMap: Record<string, string> | undefined): Record<string, string> {
+  const map: Record<string, string> = {};
+  const raw = headerMap || {};
+  Object.keys(raw).forEach(k => {
+    const v = raw[k];
+    if (v == null) return;
+    const lk = String(k).toLowerCase();
+    map[lk] = String(v);
+    // Mirror common casings avs-loader may index directly.
+    map[k] = String(v);
+    if (lk === 'content-type') map['Content-Type'] = String(v);
+    if (lk === 'x-envelope') {
+      map['X-Envelope'] = String(v);
+      map['X-Envelope'] = String(v);
+    }
+  });
+  // Never leave these undefined for `.split` call sites.
+  if (!map['content-type']) {
+    const ct = 'application/vnd.apple.mpegurl; charset=utf-8';
+    map['content-type'] = ct;
+    map['Content-Type'] = ct;
+  }
+  return map;
+}
+
 function buildNetworkDetails(
   status: number,
   url: string,
   headerMap: Record<string, string>,
 ) {
-  const map: Record<string, string> = {};
-  Object.keys(headerMap || {}).forEach(k => {
-    map[String(k).toLowerCase()] = String(headerMap[k]);
-  });
+  const map = normalizeHeaderMap(headerMap);
   return {
     status,
     statusText: status >= 200 && status < 300 ? 'OK' : String(status),
     url,
     responseHeaders: map,
+    headers: map,
     getAllResponseHeaders(): string {
-      return Object.keys(map)
-        .map(k => k + ': ' + map[k] + '\r\n')
-        .join('');
+      const seen = new Set<string>();
+      const lines: string[] = [];
+      Object.keys(map).forEach(k => {
+        const lk = k.toLowerCase();
+        if (seen.has(lk)) return;
+        seen.add(lk);
+        lines.push(lk + ': ' + map[k] + '\r\n');
+      });
+      return lines.join('');
     },
     getResponseHeader(name: string): string {
       if (!name) return '';
-      return map[String(name).toLowerCase()] || '';
+      const n = String(name);
+      const v = map[n] != null ? map[n] : map[n.toLowerCase()];
+      return v != null ? String(v) : '';
     },
   };
 }
@@ -757,9 +788,13 @@ function makeReaderLoader(
     probes.push(rec);
     debugLog('Loader GET ' + rec.url);
 
+    const envHash =
+      (extraHeaders && extraHeaders['X-Client-Env']) ||
+      ((window as any)._avsProbe && (window as any)._avsProbe.envHash) ||
+      'f728f44d';
     const headers: Record<string, string> = {
       Referer: referer,
-      'X-Client-Env': 'f728f44d',
+      'X-Client-Env': envHash,
       ...(extraHeaders || {}),
     };
 
@@ -770,41 +805,52 @@ function makeReaderLoader(
         rec.note = 'ok';
         if (this._aborted) return;
 
-        // Merge headers the app fetch may not expose (CORS / reader proxy).
         const merged: Record<string, string> = { ...(res.headers || {}) };
+        if (!merged['content-type'] && !merged['Content-Type']) {
+          merged['content-type'] = 'application/vnd.apple.mpegurl; charset=utf-8';
+        }
         if (knownHeadersByMatch) {
           for (const rule of knownHeadersByMatch) {
             if (url.indexOf(rule.match) !== -1) {
               Object.keys(rule.headers).forEach(k => {
                 const lk = k.toLowerCase();
-                if (!merged[lk]) merged[lk] = rule.headers[k];
+                if (!merged[lk] && merged[k] == null) {
+                  merged[lk] = rule.headers[k];
+                  merged[k] = rule.headers[k];
+                }
               });
             }
           }
         }
-        // Always try to keep envelope-like headers populated.
-        if (!merged['x-envelope'] && !merged['x-avs-envelope']) {
-          const anyEnv = Object.keys(merged).find(k => k.indexOf('envelope') !== -1);
-          if (anyEnv) merged['x-envelope'] = merged[anyEnv];
-        }
+
+        debugLog(
+          'Loader headers keys=' +
+            Object.keys(merged)
+              .map(k => k.toLowerCase())
+              .filter((v, i, a) => a.indexOf(v) === i)
+              .join(','),
+        );
 
         if (res.status >= 200 && res.status < 300) {
           const body = res.text || '';
+          const nd = buildNetworkDetails(res.status, url, merged);
+          // pLoader may expect ArrayBuffer when responseType says so.
+          const asBuf =
+            context &&
+            (context.responseType === 'arraybuffer' ||
+              context.responseType === 'arrayBuffer');
+          const payload = asBuf
+            ? new TextEncoder().encode(body).buffer
+            : body;
           try {
-            callbacks.onSuccess(
-              buildLoaderStats(body.length || 1),
-              body,
-              buildNetworkDetails(res.status, url, merged),
-              context,
-            );
+            callbacks.onSuccess(buildLoaderStats(body.length || 1), payload, nd, context);
           } catch (e: any) {
-            // pLoader may throw while post-processing a successful body.
             rec.note = String(e && e.message).slice(0, 80);
             debugLog('Loader onSuccess handler threw: ' + rec.note);
             callbacks.onError(
               { code: 500, message: rec.note, text: rec.note },
               context,
-              buildNetworkDetails(res.status, url, merged),
+              nd,
               buildLoaderStats(body.length || 1),
             );
           }
@@ -859,8 +905,14 @@ function invokeLoaderWith(
         pLoader: LoaderCtor,
         xhrSetup: (xhr: any, url: string) => {
           try {
-            xhr.setRequestHeader('X-Client-Env', 'f728f44d');
-            xhr.setRequestHeader('Referer', context && context.referer);
+            const eh =
+              (hlsConfigExtra && hlsConfigExtra.envHash) ||
+              ((window as any)._avsProbe && (window as any)._avsProbe.envHash) ||
+              'f728f44d';
+            xhr.setRequestHeader('X-Client-Env', eh);
+            if (context && context.referer) {
+              xhr.setRequestHeader('Referer', context.referer);
+            }
           } catch {
             //
           }
@@ -943,13 +995,16 @@ async function decryptShieldM3u8(
   const envHeader = m3u8Headers['x-envelope'] || m3u8Headers['x-avs-envelope'] || '';
   const env = envHeader ? parseEnvelope(envHeader) : null;
   const parsed = parsePlaylistSegments(m3u8Text);
-  const envHash = m3u8Headers['x-client-env'] || ((window as any)._avsProbe && (window as any)._avsProbe.envHash) || 'f728f44d';
+  const probeEnv = (window as any)._avsProbe && (window as any)._avsProbe.envHash;
+  const envHash = m3u8Headers['x-client-env'] || probeEnv || 'f728f44d';
 
   debugLog(
     'Shield playlist: segs=' + parsed.segments.length +
       ' key=' + (parsed.keyUrl ? 'yes' : 'no') +
-      ' envHash=' + envHash,
+      ' envHash=' + envHash +
+      ' hdrKeys=' + Object.keys(m3u8Headers || {}).join(',').slice(0, 120),
   );
+  debugLog('envelope=' + (env ? 'ok cn=' + String(env.cn).slice(0, 12) : 'MISSING'));
   if (parsed.segments[0]) {
     debugLog('seg0 fileId=' + parsed.segments[0].fileId + ' i=' + parsed.segments[0].index);
   }
@@ -966,28 +1021,16 @@ async function decryptShieldM3u8(
       debugLog('G6 err: ' + e.message);
     }
   }
-  if (runtime.keysSeen && runtime.keysSeen.length) {
-    debugLog('Crypto keys: ' + runtime.keysSeen.slice(0, 8).join(' | '));
-  }
   try {
     const w = window as any;
-    const g = w.__avsG;
     debugLog(
-      '__avsG: ' +
-        (g == null
-          ? 'null'
-          : typeof g === 'object'
-            ? JSON.stringify(g).slice(0, 300)
-            : String(g).slice(0, 120)),
-    );
-    debugLog(
-      'state: sk=' + String(w._avsSk).slice(0, 16) +
-        '… salt=' + w._avsSalt +
+      'avsG=' + String(w.avsG || w.__avsG) +
+        ' salt=' + w._avsSalt +
         ' sid=' + w.avsSid +
         ' probe=' + JSON.stringify(w._avsProbe),
     );
   } catch (e: any) {
-    debugLog('__avsG dump err: ' + e.message);
+    debugLog('state dump err: ' + e.message);
   }
 
   const hashMatch = playerUrl.match(/\/player\/([0-9a-f]+)/i);
@@ -1032,6 +1075,7 @@ async function decryptShieldM3u8(
       },
       'pLoader',
       6000,
+      { envHash },
     );
     if (viaP) {
       debugLog('pLoader out len=' + viaP.length + ' head=' + viaP.slice(0, 80).replace(/\n/g, '|'));
@@ -1054,6 +1098,7 @@ async function decryptShieldM3u8(
           },
           'fLoader-fromP',
           6000,
+          { envHash },
         );
         if (viaF && looksLikeM3u8(viaF)) {
           const media2 = extractMediaUrls(viaF);
@@ -1061,7 +1106,40 @@ async function decryptShieldM3u8(
         }
       }
     } else {
-      debugLog('pLoader returned null');
+      debugLog('pLoader returned null — retry arraybuffer body');
+      const viaP2 = await invokeLoaderWith(
+        runtime.pLoader,
+        ReaderLoader,
+        {
+          url: playlistUrl,
+          responseType: 'arraybuffer',
+          type: 'manifest',
+          level: 0,
+          levelurl: playlistUrl,
+          referer: playerUrl,
+          headers: m3u8Headers,
+          networkDetails: buildNetworkDetails(200, playlistUrl, m3u8Headers || {}),
+          frag: {
+            type: 'playlist',
+            level: 0,
+            url: playlistUrl,
+            relurl: playlistUrl,
+            baseurl: baseUrl + '/',
+          },
+        },
+        'pLoader-ab',
+        6000,
+        { envHash },
+      );
+      if (viaP2) {
+        debugLog('pLoader-ab out len=' + viaP2.length + ' head=' + viaP2.slice(0, 70).replace(/\n/g, '|'));
+        const media = extractMediaUrls(viaP2);
+        if (media.length && !isNewShieldPlaylist(viaP2)) {
+          return finishWithUrls(parsed.headers, media);
+        }
+      } else {
+        debugLog('pLoader-ab returned null');
+      }
     }
   } else {
     debugLog('pLoader missing on window');
@@ -1141,6 +1219,14 @@ async function decryptShieldM3u8(
     debugLog('JS placeholder decrypt: no playable urls');
   }
 
+  if (runtime.keysSeen && runtime.keysSeen.length) {
+    debugLog('Crypto keys after: ' + runtime.keysSeen.slice(0, 6).join(' | '));
+  }
+  try {
+    if (runtime.g6) debugLog('G6 after: ' + JSON.stringify(runtime.g6()));
+  } catch {
+    //
+  }
   debugLog('probes=' + JSON.stringify(probes).slice(0, 400));
   throw new ShieldDecryptUnsupportedError(
     'AVS shield v3: không giải mã được m3u8.',
