@@ -63,9 +63,8 @@ class YanHH3DPlugin extends NekoriBasePlugin {
   name = 'YanHH3D';
   icon = 'icon.png';
   site = SITE;
-  version = '1.0.5';
+  version = '1.0.7';
   customJS = 'player.js';
-  customCSS = 'style.css';
   contentType = ContentType.VIDEO;
   contentWarning = ContentWarning.SAFE;
 
@@ -365,9 +364,12 @@ class YanHH3DPlugin extends NekoriBasePlugin {
     }
 
     if (resolvedVariants.length > 1) {
-      let masterText = '#EXTM3U\n#EXT-X-VERSION:3\n';
+      let masterText = '#EXTM3U\n';
       for (const v of resolvedVariants) {
-        masterText += `#EXT-X-STREAM-INF:BANDWIDTH=${v.bw},RESOLUTION=${v.res},NAME="${v.name}"\n`;
+        const codec =
+          v.res === '3840x2160' ? 'avc1.640033,mp4a.40.2' : 'avc1.4d401f,mp4a.40.2';
+        const avgBw = Math.round(v.bw * 0.8);
+        masterText += `#EXT-X-STREAM-INF:AVERAGE-BANDWIDTH=${avgBw},BANDWIDTH=${v.bw},RESOLUTION=${v.res},FRAME-RATE=30.000,CODECS="${codec}",CLOSED-CAPTIONS=NONE\n`;
         masterText += `${v.url}\n`;
       }
       const encodedMaster = Buffer.from(masterText).toString('base64');
