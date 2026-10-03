@@ -63,7 +63,7 @@ class YanHH3DPlugin extends NekoriBasePlugin {
   name = 'YanHH3D';
   icon = 'icon.png';
   site = SITE;
-  version = '1.0.4';
+  version = '1.0.5';
   customJS = 'player.js';
   customCSS = 'style.css';
   contentType = ContentType.VIDEO;
@@ -364,15 +364,23 @@ class YanHH3DPlugin extends NekoriBasePlugin {
       };
     }
 
-    let finalVideoUrl = resolvedVariants[0].url;
-
     if (resolvedVariants.length > 1) {
       let masterText = '#EXTM3U\n#EXT-X-VERSION:3\n';
       for (const v of resolvedVariants) {
         masterText += `#EXT-X-STREAM-INF:BANDWIDTH=${v.bw},RESOLUTION=${v.res},NAME="${v.name}"\n`;
         masterText += `${v.url}\n`;
       }
-      finalVideoUrl = `data:application/vnd.apple.mpegurl;base64,${Buffer.from(masterText).toString('base64')}`;
+      const encodedMaster = Buffer.from(masterText).toString('base64');
+      return {
+        state: 'ready',
+        type: 'video',
+        noCache: true,
+        noPrefetch: true,
+        html: [
+          '<meta name="lnreader-video-mode" content="lazy">',
+          `<div id="yan-master-data" data-master="${encodedMaster}"></div>`,
+        ].join('\n'),
+      };
     }
 
     return {
@@ -383,7 +391,7 @@ class YanHH3DPlugin extends NekoriBasePlugin {
       html: [
         '<meta name="lnreader-video-mode" content="direct">',
         '<meta name="lnreader-video-type" content="m3u8">',
-        `<meta name="lnreader-video-url" content="${finalVideoUrl}">`,
+        `<meta name="lnreader-video-url" content="${resolvedVariants[0].url}">`,
       ].join('\n'),
     };
   }

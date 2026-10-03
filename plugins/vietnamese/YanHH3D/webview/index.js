@@ -179,8 +179,37 @@
     }
   }
 
+  function initPlayerWithBlob() {
+    var dataEl = document.getElementById('yan-master-data');
+    if (!dataEl) return;
+
+    var rawBase64 = dataEl.getAttribute('data-master');
+    if (!rawBase64) return;
+
+    var player = window.LNReaderPlayer;
+    if (!player) return;
+
+    try {
+      var decodedText = atob(rawBase64);
+      var blob = new Blob([decodedText], {
+        type: 'application/vnd.apple.mpegurl',
+      });
+      var blobUrl = URL.createObjectURL(blob);
+      player.log('[YanHH3D] Playing master playlist via blob URL: ' + blobUrl);
+      player.playHls(blobUrl);
+    } catch (err) {
+      player.log('[YanHH3D] Failed to create blob for master playlist: ' + err);
+    }
+  }
+
   function monitorPlayer() {
+    initPlayerWithBlob();
+
     var timer = setInterval(function () {
+      if (!window.LNReaderPlayer?.hlsInstance) {
+        initPlayerWithBlob();
+      }
+
       var skin = document.querySelector('video-skin, live-video-skin');
       var player = window.LNReaderPlayer;
       var hls = player ? player.hlsInstance : null;
