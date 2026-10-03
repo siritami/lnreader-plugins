@@ -3,7 +3,7 @@ import { fetchApi, fetchText } from '@libs/fetch';
 import { NovelStatus } from '@libs/novelStatus';
 import { NekoriBasePlugin } from '@nekori/plugin';
 import { ContentType, ContentWarning } from '@nekori/pluginMetadata';
-import { decodeHtmlEntities } from '@nekori/utils';
+import { Buffer, decodeHtmlEntities } from '@nekori/utils';
 
 import { Plugin } from '@/types/plugin';
 
@@ -63,7 +63,7 @@ class YanHH3DPlugin extends NekoriBasePlugin {
   name = 'YanHH3D';
   icon = 'icon.png';
   site = SITE;
-  version = '1.0.2';
+  version = '1.0.4';
   customJS = 'player.js';
   customCSS = 'style.css';
   contentType = ContentType.VIDEO;
@@ -254,7 +254,7 @@ class YanHH3DPlugin extends NekoriBasePlugin {
       };
     }
 
-    // Detect server options from episode page
+    // Detect available server options on episode page
     const foundTypes: string[] = [];
     const serverRegex = /data-type="([^"]+)"/g;
     let sm;
@@ -262,59 +262,98 @@ class YanHH3DPlugin extends NekoriBasePlugin {
       foundTypes.push(sm[1]);
     }
 
-    const availableButtons: Array<{ type: string; name: string }> = [];
-    if (foundTypes.includes('vip4k') || foundTypes.includes('vip4k_v2')) {
-      availableButtons.push({ type: 'vip4k', name: '4K Vietsub' });
-    }
-    if (foundTypes.includes('pro') || foundTypes.includes('tiktik') || availableButtons.length === 0) {
-      availableButtons.push({ type: 'pro', name: '1080p Vietsub' });
-    }
-    if (foundTypes.includes('vip4ktm') || foundTypes.includes('vip4ktm_v2')) {
-      availableButtons.push({ type: 'vip4ktm', name: '4K Thuyết Minh' });
-    }
-    if (foundTypes.includes('pro_tm') || foundTypes.includes('tiktm')) {
-      availableButtons.push({ type: 'pro_tm', name: '1080p Thuyết Minh' });
+    const serverDefinitions = [
+      {
+        primary: 'vip4k',
+        fallback: 'vip4k_v2',
+        name: '4K Vietsub',
+        res: '3840x2160',
+        bw: 15000000,
+        enabled: foundTypes.includes('vip4k') || foundTypes.includes('vip4k_v2'),
+      },
+      {
+        primary: 'pro',
+        fallback: 'tiktik',
+        name: '1080p Vietsub',
+        res: '1920x1080',
+        bw: 6000000,
+        enabled: foundTypes.includes('pro') || foundTypes.includes('tiktik') || foundTypes.length === 0,
+      },
+      {
+        primary: 'vip4ktm',
+        fallback: 'vip4ktm_v2',
+        name: '4K Thuyết Minh',
+        res: '3840x2160',
+        bw: 15000000,
+        enabled: foundTypes.includes('vip4ktm') || foundTypes.includes('vip4ktm_v2'),
+      },
+      {
+        primary: 'pro_tm',
+        fallback: 'tiktm',
+        name: '1080p Thuyết Minh',
+        res: '1920x1080',
+        bw: 6000000,
+        enabled: foundTypes.includes('pro_tm') || foundTypes.includes('tiktm'),
+      },
+    ];
+
+    const activeServers = serverDefinitions.filter(s => s.enabled);
+    if (activeServers.length === 0) {
+      activeServers.push(serverDefinitions[1]); // fallback 1080p
     }
 
-    // Default: 4K Vietsub if available, otherwise switch back to 1080p Vietsub
-    let activeServer = 'pro';
-    if (availableButtons.some(b => b.type === 'vip4k')) {
-      activeServer = 'vip4k';
-    } else if (availableButtons.some(b => b.type === 'pro')) {
-      activeServer = 'pro';
-    } else if (availableButtons.length > 0) {
-      activeServer = availableButtons[0].type;
-    }
-
-    const candidateList =
-      activeServer === 'vip4k'
-        ? ['vip4k', 'vip4k_v2', 'pro', 'tiktik']
-        : ['pro', 'tiktik', 'vip4k', 'vip4k_v2'];
-
-    let foundVid: string | null = null;
-    let actualServer = activeServer;
-
-    for (const s of candidateList) {
-      try {
-        const playerUrl = `${this.site}/player/player.php?action=dox_ajax_player&post_id=${postId}&chapter_st=tap-${ep}&type=${s}&sv=1`;
-        const playerHtml = await fetchText(playerUrl, {
-          headers: {
-            Referer: `${this.site}/`,
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)',
-          },
-        });
-        const match = playerHtml.match(/embed\/vt?\/([A-Za-z0-9]+)/);
-        if (match && match[1]) {
-          foundVid = match[1];
-          actualServer = s.includes('4k') ? 'vip4k' : 'pro';
-          break;
-        }
-      } catch {
-        // Continue fallback
+    const resolveStream = async (s: (typeof serverDefinitions)[0]) => {
+      const candidates = [s.primary, s.fallback];
+      for (const type of candidates) {
+        try {
+          const playerUrl = `${this.site}/player/player.php?action=dox_ajax_player&post_id=${postId}&chapter_st=tap-${ep}&type=${type}&sv=1`;
+          const playerHtml = await fetchText(playerUrl, {
+            headers: {
+              Referer: `${this.site}/`,
+              'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)',
+            },
+          });
+          const match = playerHtml.match(/embed\/vt?\/([A-Za-z0-9]+)/);
+          if (match && match[1]) {
+            const vid = match[1];
+            // Probe CDN
+            for (const host of DEFAULT_CDN_HOSTS) {
+              try {
+                const res = await fetchApi(`https://${host}/${vid}/index.m3u8`, {
+                  method: 'HEAD',
+                });
+                if (res.status === 200) {
+                  return {
+                    name: s.name,
+                    res: s.res,
+                    bw: s.bw,
+                    url: `https://${host}/${vid}/index.m3u8`,
+                  };
+                }
+              } catch {}
+            }
+            return {
+              name: s.name,
+              res: s.res,
+              bw: s.bw,
+              url: `https://${DEFAULT_CDN_HOSTS[0]}/${vid}/index.m3u8`,
+            };
+          }
+        } catch {}
       }
-    }
+      return null;
+    };
 
-    if (!foundVid) {
+    const resolvedVariants = (
+      await Promise.all(activeServers.map(s => resolveStream(s)))
+    ).filter(Boolean) as Array<{
+      name: string;
+      res: string;
+      bw: number;
+      url: string;
+    }>;
+
+    if (resolvedVariants.length === 0) {
       return {
         state: 'checkpoint',
         type: 'video',
@@ -325,182 +364,27 @@ class YanHH3DPlugin extends NekoriBasePlugin {
       };
     }
 
-    const probePromises = DEFAULT_CDN_HOSTS.map(async host => {
-      try {
-        const res = await fetchApi(`https://${host}/${foundVid}/index.m3u8`, {
-          method: 'HEAD',
-        });
-        if (res.status === 200) return `https://${host}`;
-      } catch {
-        // ignore error
+    let finalVideoUrl = resolvedVariants[0].url;
+
+    if (resolvedVariants.length > 1) {
+      let masterText = '#EXTM3U\n#EXT-X-VERSION:3\n';
+      for (const v of resolvedVariants) {
+        masterText += `#EXT-X-STREAM-INF:BANDWIDTH=${v.bw},RESOLUTION=${v.res},NAME="${v.name}"\n`;
+        masterText += `${v.url}\n`;
       }
-      return null;
-    });
-    const results = await Promise.all(probePromises);
-    const workingCdn = results.find(Boolean) || `https://${DEFAULT_CDN_HOSTS[0]}`;
-
-    const videoUrl = `${workingCdn}/${foundVid}/index.m3u8`;
-
-    const buttonsHtml = availableButtons
-      .map(
-        b =>
-          `<button type="button" class="yan-btn ${b.type === actualServer ? 'active' : ''}" data-type="${b.type}">${b.name}</button>`,
-      )
-      .join('\n      ');
-
-    const htmlContent = [
-      '<meta name="lnreader-video-mode" content="direct">',
-      '<meta name="lnreader-video-type" content="m3u8">',
-      `<meta name="lnreader-video-url" content="${videoUrl}">`,
-      `<style>
-        .yan-server-bar {
-          margin: 16px auto;
-          padding: 14px 16px;
-          max-width: 800px;
-          background: rgba(255, 255, 255, 0.05);
-          border: 1px solid rgba(255, 255, 255, 0.12);
-          border-radius: 12px;
-          font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-          color: #e0e0e0;
-          box-sizing: border-box;
-        }
-        .yan-server-title {
-          font-size: 13px;
-          font-weight: 600;
-          text-transform: uppercase;
-          letter-spacing: 0.5px;
-          color: #9e9e9e;
-          margin-bottom: 10px;
-        }
-        .yan-server-buttons {
-          display: flex;
-          flex-wrap: wrap;
-          gap: 8px;
-        }
-        .yan-btn {
-          appearance: none;
-          background: rgba(255, 255, 255, 0.08);
-          border: 1px solid rgba(255, 255, 255, 0.16);
-          border-radius: 8px;
-          color: #f5f5f5;
-          padding: 8px 14px;
-          font-size: 13px;
-          font-weight: 500;
-          cursor: pointer;
-          transition: all 0.2s ease;
-          user-select: none;
-          outline: none;
-        }
-        .yan-btn:hover {
-          background: rgba(255, 255, 255, 0.16);
-          border-color: rgba(255, 255, 255, 0.3);
-        }
-        .yan-btn.active {
-          background: #3b82f6;
-          border-color: #60a5fa;
-          color: #ffffff;
-          box-shadow: 0 0 12px rgba(59, 130, 246, 0.5);
-          font-weight: 600;
-        }
-        .yan-btn.loading {
-          opacity: 0.6;
-          pointer-events: none;
-        }
-        .yan-server-status {
-          margin-top: 8px;
-          font-size: 12px;
-          color: #60a5fa;
-          min-height: 16px;
-        }
-      </style>`,
-      `<div id="yan-server-bar" class="yan-server-bar" data-post-id="${postId}" data-ep="${ep}" data-active="${actualServer}" data-site="${this.site}" data-cdn-hosts="${DEFAULT_CDN_HOSTS.join(',')}">
-        <div class="yan-server-title">Đổi Server / Độ phân giải:</div>
-        <div class="yan-server-buttons">
-          ${buttonsHtml}
-        </div>
-        <div id="yan-server-status" class="yan-server-status"></div>
-      </div>`,
-      `<script>
-      (function() {
-        var bar = document.getElementById('yan-server-bar');
-        if (!bar || bar.dataset.bound) return;
-        bar.dataset.bound = 'true';
-
-        var postId = bar.getAttribute('data-post-id');
-        var ep = bar.getAttribute('data-ep');
-        var site = bar.getAttribute('data-site') || 'https://yanhh3d.ee';
-        var cdnHosts = (bar.getAttribute('data-cdn-hosts') || '').split(',').filter(Boolean);
-        var statusEl = document.getElementById('yan-server-status');
-
-        function setStatus(msg, isErr) {
-          if (!statusEl) return;
-          statusEl.textContent = msg;
-          statusEl.style.color = isErr ? '#ef4444' : '#60a5fa';
-        }
-
-        var fallbacks = {
-          vip4k: ['vip4k', 'vip4k_v2', 'pro', 'tiktik'],
-          pro: ['pro', 'tiktik', 'vip4k', 'vip4k_v2'],
-          vip4ktm: ['vip4ktm', 'vip4ktm_v2', 'pro_tm', 'tiktm'],
-          pro_tm: ['pro_tm', 'tiktm', 'vip4ktm', 'vip4ktm_v2']
-        };
-
-        async function findCdn(vid) {
-          for (var i = 0; i < cdnHosts.length; i++) {
-            try {
-              var r = await fetch('https://' + cdnHosts[i] + '/' + vid + '/index.m3u8', { method: 'HEAD' });
-              if (r.status === 200) return 'https://' + cdnHosts[i];
-            } catch(e) {}
-          }
-          return 'https://' + cdnHosts[0];
-        }
-
-        var btns = bar.querySelectorAll('.yan-btn');
-        btns.forEach(function(b) {
-          b.addEventListener('click', async function() {
-            var target = b.getAttribute('data-type');
-            if (!target || !window.LNReaderPlayer) return;
-            if (b.classList.contains('active')) return;
-
-            btns.forEach(function(btn) { btn.classList.add('loading'); });
-            setStatus('Đang tải stream ' + b.textContent.trim() + '...');
-
-            try {
-              var candidates = fallbacks[target] || [target];
-              var vid = null;
-              for (var c of candidates) {
-                var purl = site + '/player/player.php?action=dox_ajax_player&post_id=' + postId + '&chapter_st=tap-' + ep + '&type=' + c + '&sv=1';
-                var pr = await fetch(purl, { headers: { Referer: site + '/' } });
-                var pt = await pr.text();
-                var m = pt.match(/embed\\/vt?\\/([A-Za-z0-9]+)/);
-                if (m && m[1]) { vid = m[1]; break; }
-              }
-              if (!vid) throw new Error('Không tìm thấy stream');
-
-              var cdn = await findCdn(vid);
-              var m3u8 = cdn + '/' + vid + '/index.m3u8';
-              window.LNReaderPlayer.playHls(m3u8);
-
-              btns.forEach(function(btn) { btn.classList.remove('active'); });
-              b.classList.add('active');
-              setStatus('Đang phát: ' + b.textContent.trim());
-            } catch (err) {
-              setStatus('Lỗi: ' + (err.message || err), true);
-            } finally {
-              btns.forEach(function(btn) { btn.classList.remove('loading'); });
-            }
-          });
-        });
-      })();
-      </script>`,
-    ].join('\n');
+      finalVideoUrl = `data:application/vnd.apple.mpegurl;base64,${Buffer.from(masterText).toString('base64')}`;
+    }
 
     return {
       state: 'ready',
       type: 'video',
       noCache: true,
       noPrefetch: true,
-      html: htmlContent,
+      html: [
+        '<meta name="lnreader-video-mode" content="direct">',
+        '<meta name="lnreader-video-type" content="m3u8">',
+        `<meta name="lnreader-video-url" content="${finalVideoUrl}">`,
+      ].join('\n'),
     };
   }
 
