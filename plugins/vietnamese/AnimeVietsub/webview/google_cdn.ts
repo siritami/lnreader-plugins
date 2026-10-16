@@ -403,36 +403,55 @@ async function processEncryptedM3u8(
 export async function resolveGoogleApisCdn(
   playerUrl: string,
 ): Promise<ResolvedMedia> {
+  const overlay = document.createElement('div');
+  overlay.setAttribute('data-avs-challenge-overlay', '');
+  overlay.style.cssText = [
+    'position:fixed',
+    'inset:0',
+    'z-index:2147483647',
+    'background:#111',
+    'visibility:hidden',
+    'opacity:0',
+    'pointer-events:none',
+  ].join(';');
+
   const iframe = document.createElement('iframe');
-  iframe.style.cssText =
-    'position:absolute;width:1px;height:1px;opacity:0;pointer-events:none;';
+  iframe.title = 'Cloudflare verification';
+  iframe.style.cssText = [
+    'display:block',
+    'width:100%',
+    'height:100%',
+    'border:0',
+    'background:#fff',
+  ].join(';');
   iframe.src = playerUrl;
-  (document.body || document.documentElement).appendChild(iframe);
+  overlay.appendChild(iframe);
+  (document.body || document.documentElement).appendChild(overlay);
 
   const iframeReady = new Promise<void>(resolve => {
     iframe.addEventListener('load', () => resolve(), { once: true });
   });
-  const maxWait = 5000;
+  const maxWait = 8000;
   debugLog('Đợi player iframe/cookie, tối đa ' + maxWait + 'ms…');
   await Promise.race([
     iframeReady,
     new Promise<void>(resolve => setTimeout(resolve, maxWait)),
   ]);
-  await new Promise(resolve => setTimeout(resolve, 500));
-  debugLog('Player iframe ready, fetching page…');
+  debugLog('Player iframe loaded, polling clearance/token…');
 
   try {
-    return await decryptGoogleApisCdn(playerUrl, iframe);
+    return await decryptGoogleApisCdn(playerUrl, iframe, overlay);
   } catch (err) {
     cleanupIframe(iframe);
     throw err;
   }
 }
 
-/** Fetch player page + playlist, decrypt, return HLS sources (up to 3 attempts). */
+/** Fetch player page + playlist after Cloudflare clearance, then decrypt it. */
 async function decryptGoogleApisCdn(
   playerUrl: string,
   iframe: HTMLIFrameElement,
+  overlay: HTMLElement,
 ): Promise<ResolvedMedia> {
   const videoHash = (playerUrl.match(/\/player\/([0-9a-f]+)/) || [])[1];
   const baseUrl = (playerUrl.match(/^(https?:\/\/[^/]+)/) || [])[1];
@@ -440,7 +459,8 @@ async function decryptGoogleApisCdn(
     throw new Error('Không tìm thấy video hash/baseUrl trong URL player.');
   }
 
-  for (let attempt = 1; attempt <= 3; attempt++) {
+  const maxAttempts = 120;
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
     try {
       const playerRes = await nativeFetch(playerUrl, bypassHeaders(playerUrl));
       const html = playerRes.text;
@@ -454,6 +474,15 @@ async function decryptGoogleApisCdn(
             ' html=' +
             html.length,
         );
+        if (attempt === 3) {
+          debugLog('Cloudflare cần tương tác, hiển thị trang xác minh…');
+          overlay.style.visibility = 'visible';
+          overlay.style.opacity = '1';
+          overlay.style.pointerEvents = 'auto';
+        }
+        if (attempt < maxAttempts) {
+          await new Promise(resolve => setTimeout(resolve, 1000));
+        }
         continue;
       }
       debugLog(
@@ -464,6 +493,9 @@ async function decryptGoogleApisCdn(
           ' html=' +
           html.length,
       );
+          overlay.style.visibility = 'hidden';
+          overlay.style.opacity = '0';
+          overlay.style.pointerEvents = 'none';
 
       const m3u8Url =
         baseUrl +
@@ -498,6 +530,9 @@ async function decryptGoogleApisCdn(
     } catch (e) {
       const message = e instanceof Error ? e.message : String(e);
       debugLog('attempt ' + attempt + ' error: ' + message);
+    }
+    if (attempt < maxAttempts) {
+      await new Promise(resolve => setTimeout(resolve, 1000));
     }
   }
 
