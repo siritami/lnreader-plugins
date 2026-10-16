@@ -97,7 +97,8 @@ function buildM3u8DataUri(m3u8Text: string): string {
     .split('\n')
     .map(l => l.trim())
     .filter(Boolean);
-  const headerTag = /^#EXT-X-(VERSION|TARGETDURATION|MEDIA-SEQUENCE|PLAYLIST-TYPE)/i;
+  const headerTag =
+    /^#EXT-X-(VERSION|TARGETDURATION|MEDIA-SEQUENCE|PLAYLIST-TYPE)/i;
   // KEY/BYTERANGE must stay in order: segments are AES-128 ranges inside a PNG file.
   const mediaTag = /^#(EXTINF:|EXT-X-(KEY|BYTERANGE|DISCONTINUITY)\b)/i;
   const headers: string[] = [];
@@ -535,9 +536,9 @@ async function decryptGoogleApisCdn(
           ' html=' +
           html.length,
       );
-          overlay.style.visibility = 'hidden';
-          overlay.style.opacity = '0';
-          overlay.style.pointerEvents = 'none';
+      overlay.style.visibility = 'hidden';
+      overlay.style.opacity = '0';
+      overlay.style.pointerEvents = 'none';
 
       const m3u8Url =
         baseUrl +

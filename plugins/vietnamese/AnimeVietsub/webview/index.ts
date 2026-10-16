@@ -269,7 +269,7 @@ void window
       throw new Error('Thiếu thông tin cấu hình video.');
     }
 
-    async function renderMedia(resolved: ResolvedMedia, config: PlayerConfig) {
+    async function renderMedia(resolved: ResolvedMedia) {
       // @ts-ignore
       if (!window.nekori!.player) return;
       // @ts-ignore
@@ -327,17 +327,14 @@ void window
 
       try {
         const resolved = await resolveMedia(config);
-        await renderMedia(resolved, config);
+        await renderMedia(resolved);
       } catch (error: any) {
         debugLog('Pipeline error: ' + (error && error.message));
         showError(error.message || 'Lỗi giải mã video.');
         // Fallback: site iframe player when decrypt/playback fails.
         if (config.iframeSrc) {
           debugLog('Fallback: site iframe player.');
-          await renderMedia(
-            { type: 'iframe', iframeUrl: config.iframeSrc },
-            config,
-          );
+          await renderMedia({ type: 'iframe', iframeUrl: config.iframeSrc });
         }
       }
     }
