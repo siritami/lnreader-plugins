@@ -9,13 +9,43 @@ void window
     const AVS_TS_SYNC = 0x47;
     const AVS_TS_PACKET = 188;
     const AVS_TS_SYNC_CHAIN = 8;
-    const AVS_MAX_PREFIX = 4096;
+    const AVS_MAX_PREFIX = 1024 * 1024;
 
     /** Find a wrapped MPEG-TS payload by its packet sync chain. */
     function stripAvsWrapper(ab: ArrayBuffer): ArrayBuffer {
       try {
         const u8 = new Uint8Array(ab);
         if (u8.length < AVS_TS_PACKET * AVS_TS_SYNC_CHAIN) return ab;
+        const isPng =
+          u8[0] === 0x89 &&
+          u8[1] === 0x50 &&
+          u8[2] === 0x4e &&
+          u8[3] === 0x47 &&
+          u8[4] === 0x0d &&
+          u8[5] === 0x0a &&
+          u8[6] === 0x1a &&
+          u8[7] === 0x0a;
+        if (isPng) {
+          let offset = 8;
+          const chunks: string[] = [];
+          while (offset + 12 <= u8.length && chunks.length < 12) {
+            const length =
+              u8[offset] * 0x1000000 +
+              (u8[offset + 1] << 16) +
+              (u8[offset + 2] << 8) +
+              u8[offset + 3];
+            const type = String.fromCharCode(
+              u8[offset + 4],
+              u8[offset + 5],
+              u8[offset + 6],
+              u8[offset + 7],
+            );
+            chunks.push(type + ':' + length);
+            offset += length + 12;
+            if (type === 'IEND' || length > u8.length) break;
+          }
+          debugLog('[AVS] PNG chunks=' + chunks.join(',') + ' end=' + offset);
+        }
         const max = Math.min(u8.length, AVS_MAX_PREFIX);
         for (let i = 0; i <= max; i++) {
           if (u8[i] !== AVS_TS_SYNC) continue;
