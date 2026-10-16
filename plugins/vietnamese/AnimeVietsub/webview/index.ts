@@ -58,7 +58,10 @@ void window
       );
     }
 
-    async function fetchMedia(url: string): Promise<ArrayBuffer> {
+    async function fetchMedia(
+      url: string,
+      signal?: AbortSignal,
+    ): Promise<ArrayBuffer> {
       const isLocal = /^(blob:|data:)/i.test(url);
       // docs/core-player: blob/data → window.fetch; http → reader.fetch
       const fetchFn = isLocal
@@ -70,6 +73,7 @@ void window
           : fetch;
       const res = await fetchFn(url, {
         credentials: 'include',
+        signal,
         headers: isLocal
           ? undefined
           : {
@@ -77,6 +81,9 @@ void window
               'User-Agent': getAvsUa(),
             },
       });
+      if (!res.ok) {
+        throw new Error('HTTP ' + res.status + ' for ' + url.slice(0, 120));
+      }
       return res.arrayBuffer();
     }
 
@@ -93,6 +100,8 @@ void window
         this.context = null;
         // @ts-ignore
         this.aborted = false;
+        // @ts-ignore
+        this.controller = null;
         // @ts-ignore
         this.stats = {
           aborted: false,
@@ -116,6 +125,10 @@ void window
         this.aborted = true;
         // @ts-ignore
         this.stats.aborted = true;
+        // @ts-ignore
+        if (this.controller) this.controller.abort();
+        // @ts-ignore
+        this.controller = null;
       };
       // @ts-ignore
       AvsFragmentLoader.prototype.getResponseData = function (xhr: any) {
@@ -129,17 +142,22 @@ void window
       ) {
         const self = this;
         self.context = context;
+        self.aborted = false;
+        self.stats.aborted = false;
+        self.controller = new AbortController();
         const url = (context && context.url) || '';
         const t0 = performance.now();
         self.stats.loading.start = t0;
         self.stats.aborted = false;
         debugLog('[AVS] frag GET ' + String(url).slice(0, 90));
 
-        fetchMedia(url)
+        fetchMedia(url, self.controller.signal)
           .then(buf => {
             if (self.aborted) return;
+            self.controller = null;
             self.stats.loading.first = performance.now();
             self.stats.loading.end = performance.now();
+            self.stats.chunkCount = 1;
             if (isPlaylistUrl(url, context)) {
               const text = new TextDecoder().decode(buf);
               self.stats.loaded = text.length;
@@ -170,6 +188,7 @@ void window
           })
           .catch((err: any) => {
             if (self.aborted) return;
+            self.controller = null;
             debugLog(
               '[AVS] frag fail ' + String(err && err.message).slice(0, 80),
             );

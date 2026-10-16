@@ -409,10 +409,17 @@ export async function resolveGoogleApisCdn(
   iframe.src = playerUrl;
   (document.body || document.documentElement).appendChild(iframe);
 
-  const cfWait = 1500;
-  debugLog('Đợi CF ' + cfWait + 'ms…');
-  await new Promise(resolve => setTimeout(resolve, cfWait));
-  debugLog('CF done, fetching page…');
+  const iframeReady = new Promise<void>(resolve => {
+    iframe.addEventListener('load', () => resolve(), { once: true });
+  });
+  const maxWait = 5000;
+  debugLog('Đợi player iframe/cookie, tối đa ' + maxWait + 'ms…');
+  await Promise.race([
+    iframeReady,
+    new Promise<void>(resolve => setTimeout(resolve, maxWait)),
+  ]);
+  await new Promise(resolve => setTimeout(resolve, 500));
+  debugLog('Player iframe ready, fetching page…');
 
   try {
     return await decryptGoogleApisCdn(playerUrl, iframe);
