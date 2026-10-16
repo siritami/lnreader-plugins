@@ -11,19 +11,11 @@ void window
     const AVS_TS_SYNC_CHAIN = 8;
     const AVS_MAX_PREFIX = 4096;
 
-    /** Find MPEG-TS sync after a fake PNG header and return the payload from that offset. */
-    function stripAvsPng(ab: ArrayBuffer): ArrayBuffer {
+    /** Find a wrapped MPEG-TS payload by its packet sync chain. */
+    function stripAvsWrapper(ab: ArrayBuffer): ArrayBuffer {
       try {
         const u8 = new Uint8Array(ab);
-        if (u8.length < 4) return ab;
-        if (
-          u8[0] !== 0x89 ||
-          u8[1] !== 0x50 ||
-          u8[2] !== 0x4e ||
-          u8[3] !== 0x47
-        ) {
-          return ab;
-        }
+        if (u8.length < AVS_TS_PACKET * AVS_TS_SYNC_CHAIN) return ab;
         const max = Math.min(u8.length, AVS_MAX_PREFIX);
         for (let i = 0; i <= max; i++) {
           if (u8[i] !== AVS_TS_SYNC) continue;
@@ -36,10 +28,19 @@ void window
             }
           }
           if (ok) {
-            debugLog('[AVS] PNG strip prefix=' + i + '/' + u8.length);
-            return u8.slice(i).buffer;
+            if (i > 0) {
+              debugLog('[AVS] wrapper strip prefix=' + i + '/' + u8.length);
+              return u8.slice(i).buffer;
+            }
+            return ab;
           }
         }
+        debugLog(
+          '[AVS] TS sync not found head=' +
+            Array.from(u8.slice(0, 12))
+              .map(value => value.toString(16).padStart(2, '0'))
+              .join(' '),
+        );
         return ab;
       } catch {
         return ab;
@@ -170,7 +171,7 @@ void window
               );
               return;
             }
-            const clean = stripAvsPng(buf);
+            const clean = stripAvsWrapper(buf);
             debugLog(
               '[AVS] frag bytes=' +
                 buf.byteLength +
