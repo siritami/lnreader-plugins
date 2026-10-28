@@ -289,13 +289,18 @@ void (async () => {
       );
       debugLog('ctx keys=' + ctxKeys);
 
-      // Master playlist synthesized locally — return immediately
-      if (url.indexOf(masterMarker) !== -1) {
+      // Serve synthesized master for ANY manifest-level request.
+      // hls.js fires a duplicate manifest load with empty url during
+      // loadSource — fetching it would fail and trigger "Levels reset"
+      const isManifestType = ctxType === 'manifest';
+      if (isManifestType || url.indexOf(masterMarker) !== -1) {
         debugLog(
-          'master playlist served len=' +
+          'master served type=' +
+            String(ctxType) +
+            ' len=' +
             masterText.length +
-            ' head=' +
-            masterText.slice(0, 60).replace(/\n/g, '|'),
+            ' url=' +
+            String(url).slice(0, 80),
         );
         self.stats.loading.first = performance.now();
         self.stats.loading.end = performance.now();
@@ -303,7 +308,7 @@ void (async () => {
         self.stats.loaded = masterText.length;
         self.stats.total = masterText.length;
         callbacks.onSuccess(
-          { data: masterText, url: url },
+          { data: masterText, url: url || 'yanhh3d-master.m3u8' },
           self.stats,
           context,
           null,
