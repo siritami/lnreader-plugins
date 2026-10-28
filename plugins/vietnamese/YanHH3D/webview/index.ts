@@ -141,19 +141,14 @@ void (async () => {
     debugLog('sources parse fail ' + String(e));
     sources = [];
   }
-  debugLog('sources=' + sources.length + ' raw=' + raw.slice(0, 200));
+  debugLog('sources=' + sources.length);
 
   // variants = only sources with resolved playlist, sorted high→low
   const variants = sources
     .filter(s => s.resolved)
     .sort((a, b) => rankQuality(b) - rankQuality(a));
   const iframeSources = sources.filter(s => !s.resolved);
-  debugLog(
-    'variants=' +
-      variants.length +
-      ' labels=' +
-      variants.map(v => v.label).join(','),
-  );
+  debugLog('variants=' + variants.map(v => v.label).join(','));
 
   function buildMaster(): string {
     const lines = ['#EXTM3U', '#EXT-X-VERSION:3'];
@@ -253,41 +248,16 @@ void (async () => {
     };
     // @ts-ignore
     YanLoader.prototype.load = function (context, _config, callbacks) {
-      debugLog(
-        'loader ctor ok callbacks=' +
-          (callbacks ? Object.keys(callbacks).join(',') : 'MISSING'),
-      );
       const self = this;
       self.context = context;
       self.aborted = false;
       self.stats.aborted = false;
       self.controller = new AbortController();
       const url = (context && context.url) || '';
-      const t0 = performance.now();
-      self.stats.loading.start = t0;
+      self.stats.loading.start = performance.now();
 
-      // Dump full context — tells us which hls.js codepath invoked us
       const ctxType = context && context.type;
-      const ctxRt = context && context.responseType;
       const ctxFrag = context && context.frag;
-      const ctxKeys = context ? Object.keys(context).join(',') : 'none';
-      debugLog(
-        'load() type=' +
-          String(ctxType) +
-          ' rt=' +
-          String(ctxRt) +
-          ' frag=' +
-          (ctxFrag ? 'sn=' + ctxFrag.sn + ' cc=' + ctxFrag.cc : 'none') +
-          ' part=' +
-          (context && context.part ? 'yes' : 'no') +
-          ' range=' +
-          String((context && context.rangeStart) || 0) +
-          '-' +
-          String((context && context.rangeEnd) || 'end') +
-          ' url=' +
-          String(url),
-      );
-      debugLog('ctx keys=' + ctxKeys);
 
       // Serve synthesized master for ANY manifest-level request.
       // IMPORTANT: must be async — if onSuccess fires synchronously inside
@@ -296,26 +266,14 @@ void (async () => {
       // reset wipes _levels populated during MANIFEST_PARSED.
       const isManifestType = ctxType === 'manifest';
       if (isManifestType || url.indexOf(masterMarker) !== -1) {
-        debugLog(
-          'master queued type=' +
-            String(ctxType) +
-            ' len=' +
-            masterText.length +
-            ' url=' +
-            String(url).slice(0, 80),
-        );
         self.controller = null;
         setTimeout(() => {
-          if (self.aborted) {
-            debugLog('master serve aborted');
-            return;
-          }
+          if (self.aborted) return;
           self.stats.loading.first = performance.now();
           self.stats.loading.end = performance.now();
           self.stats.chunkCount = 1;
           self.stats.loaded = masterText.length;
           self.stats.total = masterText.length;
-          debugLog('master served async');
           callbacks.onSuccess(
             { data: masterText, url: url || 'yanhh3d-master.m3u8' },
             self.stats,
@@ -327,13 +285,9 @@ void (async () => {
       }
 
       const playlist = isPlaylistRequest(url, context);
-      debugLog('resolved as ' + (playlist ? 'PLAYLIST' : 'FRAGMENT/BINARY'));
       fetchMedia(url, self.controller.signal)
         .then(buf => {
-          if (self.aborted) {
-            debugLog('fetch done but aborted url=' + String(url).slice(0, 60));
-            return;
-          }
+          if (self.aborted) return;
           self.controller = null;
           self.stats.loading.first = performance.now();
           self.stats.loading.end = performance.now();
@@ -341,26 +295,12 @@ void (async () => {
 
           if (playlist) {
             const text = new TextDecoder().decode(buf);
-            // Scan for tags hls.js cares about — if media playlist has
-            // EXT-X-MAP or no EXTINF, frag loading may never start
-            const tags = (text.match(/^#EXT-X-[A-Z-]+/gm) || [])
-              .slice(0, 20)
-              .join(' ');
-            const isMaster = text.indexOf('#EXT-X-STREAM-INF') !== -1;
-            const segCount = (text.match(/^#EXTINF:/gm) || []).length;
-            const endlist = text.indexOf('#EXT-X-ENDLIST') !== -1;
             debugLog(
-              'playlist bytes=' +
+              'playlist ' +
                 text.length +
-                ' kind=' +
-                (isMaster ? 'MASTER' : 'MEDIA') +
-                ' segs=' +
-                segCount +
-                ' endlist=' +
-                endlist,
+                'b ' +
+                (ctxFrag ? 'sn=' + ctxFrag.sn : ctxType),
             );
-            debugLog('playlist tags=' + tags);
-            debugLog('playlist head=' + text.slice(0, 200).replace(/\n/g, '|'));
             self.stats.loaded = text.length;
             self.stats.total = text.length;
             callbacks.onSuccess(
@@ -383,19 +323,18 @@ void (async () => {
           const ranged = re > rs;
           const clean = ranged ? buf.slice(rs, re) : stripPngWrapper(buf);
           const u8 = new Uint8Array(clean);
-          const head = Array.from(u8.slice(0, 4))
-            .map(b => b.toString(16).padStart(2, '0'))
-            .join(' ');
-          debugLog(
-            'frag ' +
-              buf.byteLength +
-              '→' +
-              clean.byteLength +
-              ' head=' +
-              head +
-              ' sync=' +
-              (u8[0] === 0x47 ? 'ok' : 'BAD'),
-          );
+          if (u8[0] !== 0x47 && !ranged) {
+            debugLog(
+              'frag BAD_SYNC ' +
+                buf.byteLength +
+                'b sn=' +
+                (ctxFrag ? ctxFrag.sn : '?') +
+                ' head=' +
+                Array.from(u8.slice(0, 4))
+                  .map(b => b.toString(16).padStart(2, '0'))
+                  .join(' '),
+            );
+          }
           self.stats.loaded = clean.byteLength;
           self.stats.total = clean.byteLength;
           callbacks.onSuccess(
@@ -406,18 +345,13 @@ void (async () => {
           );
         })
         .catch(err => {
-          if (self.aborted) {
-            debugLog(
-              'fetch aborted type=' + String(ctxType) + ' url=' + String(url),
-            );
-            return;
-          }
+          if (self.aborted) return;
           self.controller = null;
           debugLog(
             'load fail ' +
               String(
                 err && (err as Error).message ? (err as Error).message : err,
-              ).slice(0, 140) +
+              ).slice(0, 100) +
               ' url=' +
               String(url).slice(0, 80),
           );
@@ -457,19 +391,8 @@ void (async () => {
       startLevel: 0,
       capLevelToPlayerSize: false,
       autoStartLoad: true,
-      // extra instrumentation: no retry so stall shows fast
-      manifestLoadingMaxRetry: 0,
-      levelLoadingMaxRetry: 0,
-      fragLoadingMaxRetry: 0,
     });
-    debugLog('playHls resolved — watching for loader calls');
-    // Heartbeat: if no new load() lines appear after this, hls.js is idle
-    let heartbeat = 0;
-    const hb = setInterval(() => {
-      heartbeat++;
-      debugLog('heartbeat ' + heartbeat + ' (waiting for frag loads…)');
-      if (heartbeat > 15) clearInterval(hb);
-    }, 2000);
+    debugLog('playHls resolved');
   } catch (e) {
     reader.error('YanHH3D playback failed: ' + String(e));
   }
