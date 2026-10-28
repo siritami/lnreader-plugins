@@ -99,38 +99,39 @@ void (async () => {
     }
   };
 
-  // Forward hls.js console output → debug overlay (debug:true set below)
-  const origLog = console.log.bind(console);
-  const origWarn = console.warn.bind(console);
+  // Rate-limited hls.js console bridge — only errors/warnings, capped
   const origError = console.error.bind(console);
-  const pipe = (kind: string, args: unknown[]) => {
-    try {
-      const s = args
-        .map(a => {
-          try {
-            return typeof a === 'string' ? a : JSON.stringify(a);
-          } catch {
-            return String(a);
-          }
-        })
-        .join(' ')
-        .slice(0, 240);
-      player.log('[hls.' + kind + '] ' + s);
-    } catch {
-      //
+  const origWarn = console.warn.bind(console);
+  let errCount = 0;
+  let warnCount = 0;
+  const MAX_BRIDGE = 30;
+  console.error = (...a: unknown[]) => {
+    if (errCount++ < MAX_BRIDGE) {
+      try {
+        const s = a
+          .map(x => (typeof x === 'string' ? x : JSON.stringify(x)))
+          .join(' ')
+          .slice(0, 200);
+        player.log('[hls.err] ' + s);
+      } catch {
+        //
+      }
     }
-  };
-  console.log = (...a: unknown[]) => {
-    pipe('log', a);
-    origLog(...a);
+    origError(...a);
   };
   console.warn = (...a: unknown[]) => {
-    pipe('warn', a);
+    if (warnCount++ < MAX_BRIDGE) {
+      try {
+        const s = a
+          .map(x => (typeof x === 'string' ? x : JSON.stringify(x)))
+          .join(' ')
+          .slice(0, 200);
+        player.log('[hls.warn] ' + s);
+      } catch {
+        //
+      }
+    }
     origWarn(...a);
-  };
-  console.error = (...a: unknown[]) => {
-    pipe('err', a);
-    origError(...a);
   };
 
   let sources: Source[] = [];
