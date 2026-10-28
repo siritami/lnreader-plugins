@@ -127,7 +127,7 @@ void (async () => {
       lines.push(
         `#EXT-X-STREAM-INF:BANDWIDTH=${bandwidthOf(v.label)},` +
           `AVERAGE-BANDWIDTH=${Math.floor(bandwidthOf(v.label) * 0.8)},` +
-          `RESOLUTION=${resolutionOf(v.label)},NAME="${label}",CODECS="avc1.4d401f,mp4a.40.2"`,
+          `RESOLUTION=${resolutionOf(v.label)},NAME="${label}"`,
         v.resolved as string,
       );
     }
@@ -139,11 +139,20 @@ void (async () => {
     if (u.indexOf('data:') === 0 || u.indexOf('blob:') === 0) return true;
     if (u.indexOf('yanhh3d-master') !== -1) return true;
     if (M3U8_RE.test(u)) return true;
-    const ctx = context as { frag?: unknown; type?: string } | undefined;
-    // segments carry context.frag — never treat as playlist
-    if (ctx && ctx.frag) return false;
-    const t = String((ctx && ctx.type) || '');
-    return t === 'manifest' || t === 'level';
+    const ctx = context as { responseType?: string; type?: string } | undefined;
+    if (!ctx) return false;
+    // hls.js: playlists have responseType 'text' + type MANIFEST/LEVEL/
+    // AUDIO_TRACK/SUBTITLE_TRACK. Segments/keys use 'arraybuffer'/'json'.
+    if (ctx.responseType === 'text') return true;
+    if (ctx.responseType === 'arraybuffer' || ctx.responseType === 'json')
+      return false;
+    const t = String(ctx.type || '');
+    return (
+      t === 'manifest' ||
+      t === 'level' ||
+      t === 'audioTrack' ||
+      t === 'subtitleTrack'
+    );
   }
 
   async function fetchMedia(
