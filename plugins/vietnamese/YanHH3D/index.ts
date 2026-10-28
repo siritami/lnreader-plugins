@@ -48,7 +48,7 @@ class YanHH3DPlugin extends NekoriBasePlugin {
   name = 'YanHH3D';
   icon = 'icon.png';
   site = SITE;
-  version = '1.0.0';
+  version = '1.0.1';
   minApiVersion = 2;
   contentType = ContentType.VIDEO;
   filters = filters;
@@ -83,23 +83,6 @@ class YanHH3DPlugin extends NekoriBasePlugin {
   }
 
   /**
-   * Rank server buttons by quality. `.m3u8` srcs resolve to a real playlist
-   * via the wrapper's `data-obf`; others are external iframes.
-   * Order: 4K > 1080+ > 1080 > HD > external links.
-   */
-  private rankQuality(btn: ServerButton): number {
-    const label = btn.label.toLowerCase();
-    let score = 0;
-    if (/\.m3u8(\?|$)/i.test(btn.src)) score += 1000;
-    if (/^4k/i.test(label)) score += 400;
-    else if (/^1080\+/.test(label)) score += 350;
-    else if (/^1080/.test(label)) score += 300;
-    else if (/^hd|^720/.test(label)) score += 200;
-    else if (/hyd|abyss|link10/i.test(label)) score += 10;
-    return score;
-  }
-
-  /**
    * `.m3u8` data-src URLs are JW Player wrapper HTML pages, not playlists.
    * They carry a `data-obf` attribute with base64 JSON:
    *   { sU: signed-url, pU: plain-url, eK: AES key, hD: hash }
@@ -118,20 +101,6 @@ class YanHH3DPlugin extends NekoriBasePlugin {
     } catch {
       return null;
     }
-  }
-
-  private pickBestServer(btns: ServerButton[]): ServerButton | null {
-    if (!btns.length) return null;
-    let best = btns[0];
-    let bestScore = this.rankQuality(best);
-    for (const b of btns) {
-      const s = this.rankQuality(b);
-      if (s > bestScore) {
-        best = b;
-        bestScore = s;
-      }
-    }
-    return best;
   }
 
   // ---------- list / search ----------
@@ -367,9 +336,8 @@ class YanHH3DPlugin extends NekoriBasePlugin {
     const candidates = buttons.filter(
       b => b.resolved || !/\.m3u8(\?|$)/i.test(b.src),
     );
-    const best = this.pickBestServer(candidates);
 
-    if (!best) {
+    if (!candidates.length) {
       return {
         state: 'checkpoint',
         type: 'video',
@@ -380,11 +348,7 @@ class YanHH3DPlugin extends NekoriBasePlugin {
     }
 
     const esc = encodeHtmlEntities;
-
-    // Encode all candidates in data attrs so customJS can render quality picker.
     const sourcesJson = esc(JSON.stringify(candidates));
-    const initialUrl = best.resolved || best.src;
-    const initialType = best.resolved ? 'm3u8' : 'iframe';
 
     const meta: string[] = ['<meta name="nekori-video-mode" content="lazy">'];
     if (poster)
@@ -393,8 +357,6 @@ class YanHH3DPlugin extends NekoriBasePlugin {
     const container = [
       '<div id="yanhh3d-player"',
       `  data-sources="${sourcesJson}"`,
-      `  data-best-src="${esc(initialUrl)}"`,
-      `  data-best-type="${initialType}"`,
       `  data-page-url="${esc(url)}"`,
       '  style="display:none"></div>',
     ].join(' ');

@@ -2,16 +2,22 @@
 type Source = {
   label: string;
   src: string;
-  /** real m3u8 playlist (resolved by plugin); when present, playHls this */
+  /** real m3u8 playlist resolved by plugin */
   resolved?: string;
 };
 
-const QUALITY_RE = /\.m3u8(\?|$)/i;
+const SITE = 'https://yanhh3d.plus';
+const M3U8_RE = /\.m3u8(\?|$)/i;
+const PNG_SIG = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a];
+const TS_PACKET = 188;
+const TS_SYNC = 0x47;
+const TS_SYNC_CHAIN = 8;
+const MAX_PREFIX = 4096;
 
 function rankQuality(btn: Source): number {
   const label = (btn.label || '').toLowerCase();
   let score = 0;
-  if (btn.resolved || QUALITY_RE.test(btn.src)) score += 1000;
+  if (btn.resolved || M3U8_RE.test(btn.src)) score += 1000;
   if (/^4k/.test(label)) score += 400;
   else if (/^1080\+/.test(label)) score += 350;
   else if (/^1080/.test(label)) score += 300;
@@ -20,17 +26,51 @@ function rankQuality(btn: Source): number {
   return score;
 }
 
-function pickBest(sources: Source[]): Source | null {
-  let best: Source | null = null;
-  let bestScore = -1;
-  for (const s of sources) {
-    const sc = rankQuality(s);
-    if (sc > bestScore) {
-      best = s;
-      bestScore = sc;
+function bandwidthOf(label: string): number {
+  const s = (label || '').toLowerCase();
+  if (/^4k/.test(s)) return 12000000;
+  if (/^1080\+/.test(s)) return 6000000;
+  if (/^1080/.test(s)) return 4500000;
+  if (/^hd|^720/.test(s)) return 2500000;
+  return 1500000;
+}
+
+function resolutionOf(label: string): string {
+  const s = (label || '').toLowerCase();
+  if (/^4k/.test(s)) return '3840x2160';
+  if (/^1080/.test(s)) return '1920x1080';
+  return '1280x720';
+}
+
+function isPng(buf: Uint8Array): boolean {
+  if (buf.length < 8) return false;
+  for (let i = 0; i < 8; i++) if (buf[i] !== PNG_SIG[i]) return false;
+  return true;
+}
+
+/** Strip PNG wrapper, return slice at first MPEG-TS sync byte. */
+function stripPngWrapper(ab: ArrayBuffer): ArrayBuffer {
+  try {
+    const u8 = new Uint8Array(ab);
+    if (!isPng(u8)) return ab;
+    if (u8.length < TS_PACKET * TS_SYNC_CHAIN) return ab;
+    const max = Math.min(u8.length, MAX_PREFIX);
+    for (let i = 0; i <= max; i++) {
+      if (u8[i] !== TS_SYNC) continue;
+      let ok = true;
+      for (let k = 1; k < TS_SYNC_CHAIN; k++) {
+        const idx = i + k * TS_PACKET;
+        if (idx >= u8.length || u8[idx] !== TS_SYNC) {
+          ok = false;
+          break;
+        }
+      }
+      if (ok) return u8.slice(i).buffer;
     }
+    return ab;
+  } catch {
+    return ab;
   }
-  return best;
 }
 
 void (async () => {
@@ -44,6 +84,10 @@ void (async () => {
   if (!container) throw new Error('YanHH3D container missing');
 
   const raw = container.getAttribute('data-sources') || '[]';
+  const pageUrl = container.getAttribute('data-page-url') || '';
+  // Derive origin from the actual chapter page — works even if SITE moves
+  const site = pageUrl ? new URL(pageUrl).origin : SITE;
+
   let sources: Source[] = [];
   try {
     sources = JSON.parse(raw);
@@ -51,74 +95,208 @@ void (async () => {
     sources = [];
   }
 
-  const best = pickBest(sources);
-  const fallbackSrc = container.getAttribute('data-best-src') || '';
+  // variants = only sources with resolved playlist, sorted high→low
+  const variants = sources
+    .filter(s => s.resolved)
+    .sort((a, b) => rankQuality(b) - rankQuality(a));
+  const iframeSources = sources.filter(s => !s.resolved);
 
-  const initial: Source | null = best
-    ? best
-    : fallbackSrc
-      ? { label: 'Default', src: fallbackSrc }
-      : null;
-
-  async function play(src: Source): Promise<void> {
-    const url = src.resolved || src.src;
-    if (src.resolved || QUALITY_RE.test(url)) {
-      await player.playHls(url, {});
-    } else {
-      await player.playIframe(url);
+  function buildMaster(): string {
+    const lines = ['#EXTM3U', '#EXT-X-VERSION:3'];
+    for (const v of variants) {
+      const label = (v.label || 'Source').replace(/"/g, '');
+      lines.push(
+        `#EXT-X-STREAM-INF:BANDWIDTH=${bandwidthOf(v.label)},` +
+          `AVERAGE-BANDWIDTH=${Math.floor(bandwidthOf(v.label) * 0.8)},` +
+          `RESOLUTION=${resolutionOf(v.label)},NAME="${label}",CODECS="avc1.4d401f,mp4a.40.2"`,
+        v.resolved as string,
+      );
     }
+    return lines.join('\n') + '\n';
   }
 
-  function buildUi(current: Source) {
-    const old = document.getElementById('yanhh3d-quality-bar');
-    if (old) old.remove();
+  function isPlaylistRequest(url: string, context: unknown): boolean {
+    const u = String(url || '');
+    const t = String((context && (context as { type?: string }).type) || '');
+    return (
+      u.indexOf('data:') === 0 ||
+      u.indexOf('blob:') === 0 ||
+      M3U8_RE.test(u) ||
+      u.indexOf('yanhh3d-master') !== -1 ||
+      t === 'manifest' ||
+      t === 'level'
+    );
+  }
 
-    const bar = document.createElement('div');
-    bar.id = 'yanhh3d-quality-bar';
-    bar.style.cssText =
-      'position:fixed;bottom:0;left:0;right:0;z-index:9999;display:flex;flex-wrap:wrap;gap:6px;padding:8px 10px;background:rgba(0,0,0,.75);backdrop-filter:blur(4px);font-family:system-ui,sans-serif;';
+  async function fetchMedia(
+    url: string,
+    signal?: AbortSignal,
+  ): Promise<ArrayBuffer> {
+    // reader.fetch proxies through host — handles CORS for cdn URLs
+    const fetchFn: typeof fetch = reader.fetch.bind(reader) as typeof fetch;
+    const res = await fetchFn(url, {
+      signal,
+      credentials: 'omit',
+      headers: { Referer: pageUrl || site + '/' },
+    });
+    if (!res.ok)
+      throw new Error('HTTP ' + res.status + ' for ' + url.slice(0, 120));
+    return res.arrayBuffer();
+  }
 
-    const label = document.createElement('span');
-    label.textContent = 'Nguồn:';
-    label.style.cssText =
-      'color:#bbb;font-size:12px;align-self:center;margin-right:4px;';
-    bar.appendChild(label);
+  function createLoader() {
+    const masterText = buildMaster();
+    const masterMarker = 'yanhh3d-master.m3u8';
 
-    const list = sources.length ? sources : [current];
-    for (const s of list) {
-      const btn = document.createElement('button');
-      btn.textContent = s.label || 'Source';
-      const active = s.src === current.src;
-      btn.style.cssText =
-        'padding:6px 12px;font-size:12px;border-radius:4px;border:1px solid ' +
-        (active ? '#ff6b35' : '#444') +
-        ';background:' +
-        (active ? '#ff6b35' : '#222') +
-        ';color:' +
-        (active ? '#fff' : '#ddd') +
-        ';cursor:pointer;';
-      btn.onclick = async () => {
-        try {
-          player.log('[YanHH3D] switch source ' + s.label);
-          await play(s);
-          buildUi(s);
-        } catch (e) {
-          player.log('[YanHH3D] switch failed ' + String(e));
-        }
+    // @ts-ignore
+    function YanLoader(config) {
+      // @ts-ignore
+      this._config = config;
+      // @ts-ignore
+      this.context = null;
+      // @ts-ignore
+      this.aborted = false;
+      // @ts-ignore
+      this.controller = null;
+      // @ts-ignore
+      this.stats = {
+        aborted: false,
+        loaded: 0,
+        retry: 0,
+        total: 0,
+        chunkCount: 0,
+        bwEstimate: 0,
+        loading: { start: 0, first: 0, end: 0 },
+        parsing: { start: 0, end: 0 },
+        buffering: { start: 0, first: 0, end: 0 },
       };
-      bar.appendChild(btn);
     }
-    document.body.appendChild(bar);
+    // @ts-ignore
+    YanLoader.prototype.destroy = function () {
+      this.abort();
+    };
+    // @ts-ignore
+    YanLoader.prototype.abort = function () {
+      // @ts-ignore
+      this.aborted = true;
+      // @ts-ignore
+      this.stats.aborted = true;
+      if (this.controller) this.controller.abort();
+      // @ts-ignore
+      this.controller = null;
+    };
+    // @ts-ignore
+    YanLoader.prototype.getResponseData = function (xhr: unknown) {
+      return (xhr as { response?: unknown })?.response;
+    };
+    // @ts-ignore
+    YanLoader.prototype.load = function (context, _config, callbacks) {
+      const self = this;
+      self.context = context;
+      self.aborted = false;
+      self.stats.aborted = false;
+      self.controller = new AbortController();
+      const url = (context && context.url) || '';
+      const t0 = performance.now();
+      self.stats.loading.start = t0;
+
+      // Master playlist synthesized locally — return immediately
+      if (url.indexOf(masterMarker) !== -1) {
+        self.stats.loading.first = performance.now();
+        self.stats.loading.end = performance.now();
+        self.stats.chunkCount = 1;
+        self.stats.loaded = masterText.length;
+        self.stats.total = masterText.length;
+        callbacks.onSuccess(
+          { data: masterText, url: url },
+          self.stats,
+          context,
+          null,
+        );
+        return;
+      }
+
+      const playlist = isPlaylistRequest(url, context);
+      fetchMedia(url, self.controller.signal)
+        .then(buf => {
+          if (self.aborted) return;
+          self.controller = null;
+          self.stats.loading.first = performance.now();
+          self.stats.loading.end = performance.now();
+          self.stats.chunkCount = 1;
+
+          if (playlist) {
+            const text = new TextDecoder().decode(buf);
+            self.stats.loaded = text.length;
+            self.stats.total = text.length;
+            callbacks.onSuccess(
+              { data: text, url: url },
+              self.stats,
+              context,
+              null,
+            );
+            return;
+          }
+
+          // Segment — strip PNG wrapper if present
+          const ranged =
+            typeof context.rangeStart === 'number' ||
+            typeof context.rangeEnd === 'number';
+          const clean = ranged
+            ? buf.slice(
+                context.rangeStart || 0,
+                typeof context.rangeEnd === 'number'
+                  ? context.rangeEnd
+                  : buf.byteLength,
+              )
+            : stripPngWrapper(buf);
+          self.stats.loaded = clean.byteLength;
+          self.stats.total = clean.byteLength;
+          callbacks.onSuccess(
+            { data: clean, url: url },
+            self.stats,
+            context,
+            null,
+          );
+        })
+        .catch(err => {
+          if (self.aborted) return;
+          callbacks.onError(
+            { code: 0, text: String(err) },
+            context,
+            null,
+            self.stats,
+          );
+        });
+    };
+    return YanLoader;
   }
 
-  if (!initial) {
-    reader.error('YanHH3D: no playable source found');
+  // No variants → fallback iframe of first available source
+  if (variants.length === 0) {
+    const fallback = iframeSources[0];
+    if (fallback) {
+      await player.playIframe(fallback.src);
+      return;
+    }
+    reader.error('YanHH3D: no playable source');
     return;
   }
 
+  const Loader = createLoader();
+  const masterUrl =
+    site + '/yanhh3d-master.m3u8?ep=' + encodeURIComponent(pageUrl || '');
+
   try {
-    await play(initial);
-    buildUi(initial);
+    player.log('[YanHH3D] starting, variants=' + variants.length);
+    await player.playHls(masterUrl, {
+      pLoader: Loader,
+      fLoader: Loader,
+      // start at highest variant (index 0 after sort)
+      startLevel: 0,
+      capLevelToPlayerSize: false,
+      autoStartLoad: true,
+    });
   } catch (e) {
     reader.error('YanHH3D playback failed: ' + String(e));
   }
