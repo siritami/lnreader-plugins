@@ -220,9 +220,7 @@ void (async () => {
     YanLoader.prototype.load = function (context, _config, callbacks) {
       debugLog(
         'loader ctor ok callbacks=' +
-          (callbacks
-            ? Object.keys(callbacks).join(',')
-            : 'MISSING'),
+          (callbacks ? Object.keys(callbacks).join(',') : 'MISSING'),
       );
       const self = this;
       self.context = context;
@@ -273,9 +271,7 @@ void (async () => {
       }
 
       const playlist = isPlaylistRequest(url, context);
-      debugLog(
-        'resolved as ' + (playlist ? 'PLAYLIST' : 'FRAGMENT/BINARY'),
-      );
+      debugLog('resolved as ' + (playlist ? 'PLAYLIST' : 'FRAGMENT/BINARY'));
       fetchMedia(url, self.controller.signal)
         .then(buf => {
           if (self.aborted) {
@@ -344,17 +340,19 @@ void (async () => {
         .catch(err => {
           if (self.aborted) {
             debugLog(
-              'fetch aborted url=' + String(url).slice(0, 60) + ' ' + String(err).slice(0, 60),
+              'fetch aborted url=' +
+                String(url).slice(0, 60) +
+                ' ' +
+                String(err).slice(0, 60),
             );
             return;
           }
           self.controller = null;
           debugLog(
             'load fail ' +
-              String(err && (err as Error).message ? (err as Error).message : err).slice(
-                0,
-                140,
-              ) +
+              String(
+                err && (err as Error).message ? (err as Error).message : err,
+              ).slice(0, 140) +
               ' url=' +
               String(url).slice(0, 80),
           );
