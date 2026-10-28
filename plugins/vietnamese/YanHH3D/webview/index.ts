@@ -290,29 +290,39 @@ void (async () => {
       debugLog('ctx keys=' + ctxKeys);
 
       // Serve synthesized master for ANY manifest-level request.
-      // hls.js fires a duplicate manifest load with empty url during
-      // loadSource — fetching it would fail and trigger "Levels reset"
+      // IMPORTANT: must be async — if onSuccess fires synchronously inside
+      // the MANIFEST_LOADING emit, MANIFEST_LOADED/LEVEL_LOADING fire BEFORE
+      // LevelController.onManifestLoading's resetLevels() runs, and the late
+      // reset wipes _levels populated during MANIFEST_PARSED.
       const isManifestType = ctxType === 'manifest';
       if (isManifestType || url.indexOf(masterMarker) !== -1) {
         debugLog(
-          'master served type=' +
+          'master queued type=' +
             String(ctxType) +
             ' len=' +
             masterText.length +
             ' url=' +
             String(url).slice(0, 80),
         );
-        self.stats.loading.first = performance.now();
-        self.stats.loading.end = performance.now();
-        self.stats.chunkCount = 1;
-        self.stats.loaded = masterText.length;
-        self.stats.total = masterText.length;
-        callbacks.onSuccess(
-          { data: masterText, url: url || 'yanhh3d-master.m3u8' },
-          self.stats,
-          context,
-          null,
-        );
+        self.controller = null;
+        setTimeout(() => {
+          if (self.aborted) {
+            debugLog('master serve aborted');
+            return;
+          }
+          self.stats.loading.first = performance.now();
+          self.stats.loading.end = performance.now();
+          self.stats.chunkCount = 1;
+          self.stats.loaded = masterText.length;
+          self.stats.total = masterText.length;
+          debugLog('master served async');
+          callbacks.onSuccess(
+            { data: masterText, url: url || 'yanhh3d-master.m3u8' },
+            self.stats,
+            context,
+            null,
+          );
+        }, 0);
         return;
       }
 
