@@ -14,42 +14,12 @@ import filters from './filters';
 
 const SITE = 'https://yanhh3d.plus';
 
-type ServerButton = {
-  label: string;
-  src: string;
-  /** real m3u8 playlist resolved from wrapper, or undefined for iframe-only sources */
-  resolved?: string;
-};
-
-const B64_CHARS =
-  'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=';
-
-function b64Decode(input: string): string {
-  // minimal atob replacement that works in Hermes too
-  let output = '';
-  let i = 0;
-  const clean = input.replace(/[^A-Za-z0-9+/=]/g, '');
-  while (i < clean.length) {
-    const e1 = B64_CHARS.indexOf(clean.charAt(i++));
-    const e2 = B64_CHARS.indexOf(clean.charAt(i++));
-    const e3 = B64_CHARS.indexOf(clean.charAt(i++));
-    const e4 = B64_CHARS.indexOf(clean.charAt(i++));
-    const c1 = (e1 << 2) | (e2 >> 4);
-    const c2 = ((e2 & 15) << 4) | (e3 >> 2);
-    const c3 = ((e3 & 3) << 6) | e4;
-    output += String.fromCharCode(c1);
-    if (e3 !== 64) output += String.fromCharCode(c2);
-    if (e4 !== 64) output += String.fromCharCode(c3);
-  }
-  return output;
-}
-
 class YanHH3DPlugin extends NekoriBasePlugin {
   id = 'yanhh3d.plus';
   name = 'YanHH3D';
   icon = 'icon.png';
   site = SITE;
-  version = '1.0.2';
+  version = '1.0.4';
   minApiVersion = 2;
   contentType = ContentType.VIDEO;
   filters = filters;
@@ -390,6 +360,36 @@ class YanHH3DPlugin extends NekoriBasePlugin {
   resolveUrl(path: string): string {
     return this.normalizeUrl(path);
   }
+}
+
+type ServerButton = {
+  label: string;
+  src: string;
+  /** real m3u8 playlist resolved from wrapper, or undefined for iframe-only sources */
+  resolved?: string;
+};
+
+const B64_CHARS =
+  'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=';
+
+function b64Decode(input: string): string {
+  // minimal atob replacement that works in Hermes too
+  let output = '';
+  let i = 0;
+  const clean = input.replace(/[^A-Za-z0-9+/=]/g, '');
+  while (i < clean.length) {
+    const e1 = B64_CHARS.indexOf(clean.charAt(i++));
+    const e2 = B64_CHARS.indexOf(clean.charAt(i++));
+    const e3 = B64_CHARS.indexOf(clean.charAt(i++));
+    const e4 = B64_CHARS.indexOf(clean.charAt(i++));
+    const c1 = (e1 << 2) | (e2 >> 4);
+    const c2 = ((e2 & 15) << 4) | (e3 >> 2);
+    const c3 = ((e3 & 3) << 6) | e4;
+    output += String.fromCharCode(c1);
+    if (e3 !== 64) output += String.fromCharCode(c2);
+    if (e4 !== 64) output += String.fromCharCode(c3);
+  }
+  return output;
 }
 
 export default new YanHH3DPlugin();

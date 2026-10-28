@@ -136,15 +136,14 @@ void (async () => {
 
   function isPlaylistRequest(url: string, context: unknown): boolean {
     const u = String(url || '');
-    const t = String((context && (context as { type?: string }).type) || '');
-    return (
-      u.indexOf('data:') === 0 ||
-      u.indexOf('blob:') === 0 ||
-      M3U8_RE.test(u) ||
-      u.indexOf('yanhh3d-master') !== -1 ||
-      t === 'manifest' ||
-      t === 'level'
-    );
+    if (u.indexOf('data:') === 0 || u.indexOf('blob:') === 0) return true;
+    if (u.indexOf('yanhh3d-master') !== -1) return true;
+    if (M3U8_RE.test(u)) return true;
+    const ctx = context as { frag?: unknown; type?: string } | undefined;
+    // segments carry context.frag — never treat as playlist
+    if (ctx && ctx.frag) return false;
+    const t = String((ctx && ctx.type) || '');
+    return t === 'manifest' || t === 'level';
   }
 
   async function fetchMedia(
@@ -323,6 +322,7 @@ void (async () => {
     await player.playHls(masterUrl, {
       pLoader: Loader,
       fLoader: Loader,
+      loader: Loader,
       // start at highest variant (index 0 after sort)
       startLevel: 0,
       capLevelToPlayerSize: false,
