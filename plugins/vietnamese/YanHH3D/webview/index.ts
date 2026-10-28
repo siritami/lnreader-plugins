@@ -99,6 +99,40 @@ void (async () => {
     }
   };
 
+  // Forward hls.js console output → debug overlay (debug:true set below)
+  const origLog = console.log.bind(console);
+  const origWarn = console.warn.bind(console);
+  const origError = console.error.bind(console);
+  const pipe = (kind: string, args: unknown[]) => {
+    try {
+      const s = args
+        .map(a => {
+          try {
+            return typeof a === 'string' ? a : JSON.stringify(a);
+          } catch {
+            return String(a);
+          }
+        })
+        .join(' ')
+        .slice(0, 240);
+      player.log('[hls.' + kind + '] ' + s);
+    } catch {
+      //
+    }
+  };
+  console.log = (...a: unknown[]) => {
+    pipe('log', a);
+    origLog(...a);
+  };
+  console.warn = (...a: unknown[]) => {
+    pipe('warn', a);
+    origWarn(...a);
+  };
+  console.error = (...a: unknown[]) => {
+    pipe('err', a);
+    origError(...a);
+  };
+
   let sources: Source[] = [];
   try {
     sources = JSON.parse(raw);
@@ -405,11 +439,14 @@ void (async () => {
     await player.playHls(masterUrl, {
       pLoader: Loader,
       fLoader: Loader,
-      loader: Loader,
       // start at highest variant (index 0 after sort)
       startLevel: 0,
       capLevelToPlayerSize: false,
       autoStartLoad: true,
+      // extra instrumentation: no retry so stall shows fast
+      manifestLoadingMaxRetry: 0,
+      levelLoadingMaxRetry: 0,
+      fragLoadingMaxRetry: 0,
     });
     debugLog('playHls resolved — watching for loader calls');
     // Heartbeat: if no new load() lines appear after this, hls.js is idle
