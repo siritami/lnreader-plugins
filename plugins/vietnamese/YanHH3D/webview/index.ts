@@ -218,6 +218,12 @@ void (async () => {
     };
     // @ts-ignore
     YanLoader.prototype.load = function (context, _config, callbacks) {
+      debugLog(
+        'loader ctor ok callbacks=' +
+          (callbacks
+            ? Object.keys(callbacks).join(',')
+            : 'MISSING'),
+      );
       const self = this;
       self.context = context;
       self.aborted = false;
@@ -227,9 +233,31 @@ void (async () => {
       const t0 = performance.now();
       self.stats.loading.start = t0;
 
+      // Dump full context once — tells us which hls.js codepath invoked us
+      const ctxType = context && context.type;
+      const ctxRt = context && context.responseType;
+      const ctxFrag = context && context.frag;
+      debugLog(
+        'load() type=' +
+          String(ctxType) +
+          ' rt=' +
+          String(ctxRt) +
+          ' frag=' +
+          (ctxFrag ? 'sn=' + ctxFrag.sn + ' cc=' + ctxFrag.cc : 'none') +
+          ' part=' +
+          (context && context.part ? 'yes' : 'no') +
+          ' url=' +
+          String(url).slice(0, 110),
+      );
+
       // Master playlist synthesized locally — return immediately
       if (url.indexOf(masterMarker) !== -1) {
-        debugLog('master playlist served len=' + masterText.length);
+        debugLog(
+          'master playlist served len=' +
+            masterText.length +
+            ' head=' +
+            masterText.slice(0, 60).replace(/\n/g, '|'),
+        );
         self.stats.loading.first = performance.now();
         self.stats.loading.end = performance.now();
         self.stats.chunkCount = 1;
@@ -246,14 +274,14 @@ void (async () => {
 
       const playlist = isPlaylistRequest(url, context);
       debugLog(
-        'load ' +
-          (playlist ? 'playlist' : 'frag') +
-          ' ' +
-          String(url).slice(0, 90),
+        'resolved as ' + (playlist ? 'PLAYLIST' : 'FRAGMENT/BINARY'),
       );
       fetchMedia(url, self.controller.signal)
         .then(buf => {
-          if (self.aborted) return;
+          if (self.aborted) {
+            debugLog('fetch done but aborted url=' + String(url).slice(0, 60));
+            return;
+          }
           self.controller = null;
           self.stats.loading.first = performance.now();
           self.stats.loading.end = performance.now();
@@ -261,7 +289,12 @@ void (async () => {
 
           if (playlist) {
             const text = new TextDecoder().decode(buf);
-            debugLog('playlist bytes=' + text.length);
+            debugLog(
+              'playlist bytes=' +
+                text.length +
+                ' head=' +
+                text.slice(0, 40).replace(/\n/g, '|'),
+            );
             self.stats.loaded = text.length;
             self.stats.total = text.length;
             callbacks.onSuccess(
@@ -285,7 +318,20 @@ void (async () => {
                   : buf.byteLength,
               )
             : stripPngWrapper(buf);
-          debugLog('frag ' + buf.byteLength + '→' + clean.byteLength);
+          const u8 = new Uint8Array(clean);
+          const head = Array.from(u8.slice(0, 4))
+            .map(b => b.toString(16).padStart(2, '0'))
+            .join(' ');
+          debugLog(
+            'frag ' +
+              buf.byteLength +
+              '→' +
+              clean.byteLength +
+              ' head=' +
+              head +
+              ' sync=' +
+              (u8[0] === 0x47 ? 'ok' : 'BAD'),
+          );
           self.stats.loaded = clean.byteLength;
           self.stats.total = clean.byteLength;
           callbacks.onSuccess(
@@ -296,9 +342,22 @@ void (async () => {
           );
         })
         .catch(err => {
-          if (self.aborted) return;
+          if (self.aborted) {
+            debugLog(
+              'fetch aborted url=' + String(url).slice(0, 60) + ' ' + String(err).slice(0, 60),
+            );
+            return;
+          }
           self.controller = null;
-          debugLog('load fail ' + String(err).slice(0, 120));
+          debugLog(
+            'load fail ' +
+              String(err && (err as Error).message ? (err as Error).message : err).slice(
+                0,
+                140,
+              ) +
+              ' url=' +
+              String(url).slice(0, 80),
+          );
           callbacks.onError(
             { code: 0, text: String(err) },
             context,
