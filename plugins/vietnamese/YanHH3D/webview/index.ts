@@ -85,21 +85,40 @@ void (async () => {
 
   const raw = container.getAttribute('data-sources') || '[]';
   const pageUrl = container.getAttribute('data-page-url') || '';
+  const debugEnabled = container.getAttribute('data-debug') === '1';
   // Derive origin from the actual chapter page — works even if SITE moves
   const site = pageUrl ? new URL(pageUrl).origin : SITE;
+
+  if (debugEnabled) player.setDebug?.(true);
+
+  const debugLog = (msg: string) => {
+    try {
+      player.log('[YanHH3D] ' + msg);
+    } catch {
+      //
+    }
+  };
 
   let sources: Source[] = [];
   try {
     sources = JSON.parse(raw);
-  } catch {
+  } catch (e) {
+    debugLog('sources parse fail ' + String(e));
     sources = [];
   }
+  debugLog('sources=' + sources.length + ' raw=' + raw.slice(0, 200));
 
   // variants = only sources with resolved playlist, sorted high→low
   const variants = sources
     .filter(s => s.resolved)
     .sort((a, b) => rankQuality(b) - rankQuality(a));
   const iframeSources = sources.filter(s => !s.resolved);
+  debugLog(
+    'variants=' +
+      variants.length +
+      ' labels=' +
+      variants.map(v => v.label).join(','),
+  );
 
   function buildMaster(): string {
     const lines = ['#EXTM3U', '#EXT-X-VERSION:3'];
@@ -202,6 +221,7 @@ void (async () => {
 
       // Master playlist synthesized locally — return immediately
       if (url.indexOf(masterMarker) !== -1) {
+        debugLog('master playlist served len=' + masterText.length);
         self.stats.loading.first = performance.now();
         self.stats.loading.end = performance.now();
         self.stats.chunkCount = 1;
@@ -217,6 +237,12 @@ void (async () => {
       }
 
       const playlist = isPlaylistRequest(url, context);
+      debugLog(
+        'load ' +
+          (playlist ? 'playlist' : 'frag') +
+          ' ' +
+          String(url).slice(0, 90),
+      );
       fetchMedia(url, self.controller.signal)
         .then(buf => {
           if (self.aborted) return;
@@ -227,6 +253,7 @@ void (async () => {
 
           if (playlist) {
             const text = new TextDecoder().decode(buf);
+            debugLog('playlist bytes=' + text.length);
             self.stats.loaded = text.length;
             self.stats.total = text.length;
             callbacks.onSuccess(
@@ -250,6 +277,7 @@ void (async () => {
                   : buf.byteLength,
               )
             : stripPngWrapper(buf);
+          debugLog('frag ' + buf.byteLength + '→' + clean.byteLength);
           self.stats.loaded = clean.byteLength;
           self.stats.total = clean.byteLength;
           callbacks.onSuccess(
@@ -261,6 +289,8 @@ void (async () => {
         })
         .catch(err => {
           if (self.aborted) return;
+          self.controller = null;
+          debugLog('load fail ' + String(err).slice(0, 120));
           callbacks.onError(
             { code: 0, text: String(err) },
             context,
@@ -275,6 +305,7 @@ void (async () => {
   // No variants → fallback iframe of first available source
   if (variants.length === 0) {
     const fallback = iframeSources[0];
+    debugLog('no variants, iframe fallback=' + (fallback?.src || 'none'));
     if (fallback) {
       await player.playIframe(fallback.src);
       return;
@@ -286,9 +317,9 @@ void (async () => {
   const Loader = createLoader();
   const masterUrl =
     site + '/yanhh3d-master.m3u8?ep=' + encodeURIComponent(pageUrl || '');
+  debugLog('playHls url=' + masterUrl.slice(0, 100));
 
   try {
-    player.log('[YanHH3D] starting, variants=' + variants.length);
     await player.playHls(masterUrl, {
       pLoader: Loader,
       fLoader: Loader,

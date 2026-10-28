@@ -2,6 +2,7 @@ import { defaultCover } from '@libs/defaultCover';
 import { fetchText } from '@libs/fetch';
 import { isUrlAbsolute } from '@libs/isAbsoluteUrl';
 import { NovelStatus } from '@libs/novelStatus';
+import { storage } from '@libs/storage';
 import { NekoriBasePlugin } from '@nekori/plugin';
 import { ContentType } from '@nekori/pluginMetadata';
 import { encodeHtmlEntities } from '@nekori/utils';
@@ -48,12 +49,24 @@ class YanHH3DPlugin extends NekoriBasePlugin {
   name = 'YanHH3D';
   icon = 'icon.png';
   site = SITE;
-  version = '1.0.1';
+  version = '1.0.2';
   minApiVersion = 2;
   contentType = ContentType.VIDEO;
   filters = filters;
 
   customJS = 'player.js';
+
+  pluginSettings: Plugin.PluginSettings = {
+    enableDebug: {
+      value: false,
+      label: 'Bật debug',
+      type: 'Switch',
+    },
+  };
+
+  get enableDebug(): boolean {
+    return storage.get('enableDebug') as boolean;
+  }
 
   imageRequestInit: Plugin.ImageRequestInit = {
     headers: {
@@ -350,7 +363,10 @@ class YanHH3DPlugin extends NekoriBasePlugin {
     const esc = encodeHtmlEntities;
     const sourcesJson = esc(JSON.stringify(candidates));
 
-    const meta: string[] = ['<meta name="nekori-video-mode" content="lazy">'];
+    const meta: string[] = [
+      '<meta name="nekori-video-mode" content="lazy">',
+      `<meta name="nekori-debug-mode" content="${Boolean(this.enableDebug)}">`,
+    ];
     if (poster)
       meta.push(`<meta name="nekori-video-poster" content="${esc(poster)}">`);
 
@@ -358,6 +374,7 @@ class YanHH3DPlugin extends NekoriBasePlugin {
       '<div id="yanhh3d-player"',
       `  data-sources="${sourcesJson}"`,
       `  data-page-url="${esc(url)}"`,
+      `  data-debug="${this.enableDebug ? '1' : '0'}"`,
       '  style="display:none"></div>',
     ].join(' ');
 
