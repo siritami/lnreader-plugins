@@ -373,17 +373,15 @@ void (async () => {
           }
 
           // Segment — strip PNG wrapper if present
-          const ranged =
-            typeof context.rangeStart === 'number' ||
-            typeof context.rangeEnd === 'number';
-          const clean = ranged
-            ? buf.slice(
-                context.rangeStart || 0,
-                typeof context.rangeEnd === 'number'
-                  ? context.rangeEnd
-                  : buf.byteLength,
-              )
-            : stripPngWrapper(buf);
+          // rangeStart/rangeEnd only count when rangeEnd > rangeStart
+          const rs =
+            typeof context.rangeStart === 'number' ? context.rangeStart : 0;
+          const re =
+            typeof context.rangeEnd === 'number'
+              ? context.rangeEnd
+              : buf.byteLength;
+          const ranged = re > rs;
+          const clean = ranged ? buf.slice(rs, re) : stripPngWrapper(buf);
           const u8 = new Uint8Array(clean);
           const head = Array.from(u8.slice(0, 4))
             .map(b => b.toString(16).padStart(2, '0'))
