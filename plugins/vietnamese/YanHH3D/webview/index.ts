@@ -231,10 +231,11 @@ void (async () => {
       const t0 = performance.now();
       self.stats.loading.start = t0;
 
-      // Dump full context once — tells us which hls.js codepath invoked us
+      // Dump full context — tells us which hls.js codepath invoked us
       const ctxType = context && context.type;
       const ctxRt = context && context.responseType;
       const ctxFrag = context && context.frag;
+      const ctxKeys = context ? Object.keys(context).join(',') : 'none';
       debugLog(
         'load() type=' +
           String(ctxType) +
@@ -244,9 +245,14 @@ void (async () => {
           (ctxFrag ? 'sn=' + ctxFrag.sn + ' cc=' + ctxFrag.cc : 'none') +
           ' part=' +
           (context && context.part ? 'yes' : 'no') +
+          ' range=' +
+          String((context && context.rangeStart) || 0) +
+          '-' +
+          String((context && context.rangeEnd) || 'end') +
           ' url=' +
-          String(url).slice(0, 110),
+          String(url),
       );
+      debugLog('ctx keys=' + ctxKeys);
 
       // Master playlist synthesized locally — return immediately
       if (url.indexOf(masterMarker) !== -1) {
@@ -285,12 +291,26 @@ void (async () => {
 
           if (playlist) {
             const text = new TextDecoder().decode(buf);
+            // Scan for tags hls.js cares about — if media playlist has
+            // EXT-X-MAP or no EXTINF, frag loading may never start
+            const tags = (text.match(/^#EXT-X-[A-Z-]+/gm) || [])
+              .slice(0, 20)
+              .join(' ');
+            const isMaster = text.indexOf('#EXT-X-STREAM-INF') !== -1;
+            const segCount = (text.match(/^#EXTINF:/gm) || []).length;
+            const endlist = text.indexOf('#EXT-X-ENDLIST') !== -1;
             debugLog(
               'playlist bytes=' +
                 text.length +
-                ' head=' +
-                text.slice(0, 40).replace(/\n/g, '|'),
+                ' kind=' +
+                (isMaster ? 'MASTER' : 'MEDIA') +
+                ' segs=' +
+                segCount +
+                ' endlist=' +
+                endlist,
             );
+            debugLog('playlist tags=' + tags);
+            debugLog('playlist head=' + text.slice(0, 200).replace(/\n/g, '|'));
             self.stats.loaded = text.length;
             self.stats.total = text.length;
             callbacks.onSuccess(
@@ -340,10 +360,7 @@ void (async () => {
         .catch(err => {
           if (self.aborted) {
             debugLog(
-              'fetch aborted url=' +
-                String(url).slice(0, 60) +
-                ' ' +
-                String(err).slice(0, 60),
+              'fetch aborted type=' + String(ctxType) + ' url=' + String(url),
             );
             return;
           }
@@ -394,6 +411,14 @@ void (async () => {
       capLevelToPlayerSize: false,
       autoStartLoad: true,
     });
+    debugLog('playHls resolved — watching for loader calls');
+    // Heartbeat: if no new load() lines appear after this, hls.js is idle
+    let heartbeat = 0;
+    const hb = setInterval(() => {
+      heartbeat++;
+      debugLog('heartbeat ' + heartbeat + ' (waiting for frag loads…)');
+      if (heartbeat > 15) clearInterval(hb);
+    }, 2000);
   } catch (e) {
     reader.error('YanHH3D playback failed: ' + String(e));
   }
