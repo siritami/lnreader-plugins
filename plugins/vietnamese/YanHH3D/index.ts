@@ -19,7 +19,7 @@ class YanHH3DPlugin extends NekoriBasePlugin {
   name = 'YanHH3D';
   icon = 'icon.png';
   site = SITE;
-  version = '1.1.3';
+  version = '1.1.4';
   minApiVersion = 2;
   contentType = ContentType.VIDEO;
   filters = filters;
@@ -112,16 +112,48 @@ class YanHH3DPlugin extends NekoriBasePlugin {
 
   async popularNovels(
     pageNo: number,
-    { filters: f }: Plugin.PopularNovelsOptions<typeof this.filters>,
+    {
+      filters: f,
+      showLatestNovels,
+    }: Plugin.PopularNovelsOptions<typeof this.filters>,
   ): Promise<Plugin.NovelItem[]> {
     const genre = f?.genre?.value;
     const cat = f?.category?.value || 'moi-cap-nhat';
-    let url = SITE + '/';
-    if (genre) url += `the-loai/${genre}`;
-    else url += cat;
-    url += `?page=${pageNo}`;
-    const html = await fetchText(url);
-    return this.parseCards(html);
+
+    // Latest tab → /moi-cap-nhat or filtered list (same codepath).
+    if (showLatestNovels || genre || cat !== 'moi-cap-nhat') {
+      let url = SITE + '/';
+      if (genre) url += `the-loai/${genre}`;
+      else url += cat;
+      url += `?page=${pageNo}`;
+      const html = await fetchText(url);
+      return this.parseCards(html);
+    }
+
+    // Popular tab → sidebar "Bảng Xếp Hạng" (top-viewed-day ranking on
+    // the index page). Site has no dedicated /hot URL — the chart lives
+    // inside /moi-cap-nhat as .anif-block-chart.
+    const html = await fetchText(SITE + '/moi-cap-nhat');
+    const $ = loadCheerio(html);
+    const novels: Plugin.NovelItem[] = [];
+    $('#top-viewed-day li.item-top').each((_, el) => {
+      const $el = $(el);
+      const $a = $el.find('.film-poster a').first();
+      const $name = $el.find('.film-name a, .dynamic-name').first();
+      const href = $a.attr('href') || $name.attr('href') || '';
+      const name = ($name.attr('title') || $name.text() || '').trim();
+      if (!href || !name) return;
+      const img =
+        $el.find('img.film-poster-img').attr('data-src') ||
+        $el.find('img.film-poster-img').attr('src') ||
+        '';
+      novels.push({
+        name,
+        path: this.urlToPath(href),
+        cover: this.normalizeUrl(img) || defaultCover,
+      });
+    });
+    return novels;
   }
 
   async searchNovels(
