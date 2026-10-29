@@ -19,7 +19,7 @@ class YanHH3DPlugin extends NekoriBasePlugin {
   name = 'YanHH3D';
   icon = 'icon.png';
   site = SITE;
-  version = '1.1.5';
+  version = '1.1.7';
   minApiVersion = 2;
   contentType = ContentType.VIDEO;
   filters = filters;
