@@ -19,7 +19,7 @@ class YanHH3DPlugin extends NekoriBasePlugin {
   name = 'YanHH3D';
   icon = 'icon.png';
   site = SITE;
-  version = '1.1.4';
+  version = '1.1.5';
   minApiVersion = 2;
   contentType = ContentType.VIDEO;
   filters = filters;
@@ -67,9 +67,11 @@ class YanHH3DPlugin extends NekoriBasePlugin {
 
   /**
    * `.m3u8` data-src URLs are JW Player wrapper HTML pages, not playlists.
-   * They carry a `data-obf` attribute with base64 JSON:
-   *   { sU: signed-url, pU: plain-url, eK: AES key, hD: hash }
-   * `pU` is the real playable m3u8 URL.
+   * Two wrapper flavours:
+   *   - `/o2/v/…` → `data-obf` attr: base64 JSON `{ sU, pU, eK, hD }`
+   *     → `pU` is the real playlist URL.
+   *   - `/o1/v/…` → plaintext `var cccc = "<url>"` in the script body
+   *     → that URL is the real playlist.
    */
   private async resolvePlaylistUrl(wrapperUrl: string): Promise<string | null> {
     try {
@@ -77,10 +79,16 @@ class YanHH3DPlugin extends NekoriBasePlugin {
         headers: { Referer: SITE + '/' },
       });
       if (!html) return null;
+      // o2 style — data-obf base64
       const obf = html.match(/data-obf="([^"]+)"/)?.[1];
-      if (!obf) return null;
-      const json = JSON.parse(b64Decode(obf)) as { pU?: string };
-      return json.pU || null;
+      if (obf) {
+        const json = JSON.parse(b64Decode(obf)) as { pU?: string };
+        if (json.pU) return json.pU;
+      }
+      // o1 style — jwplayer setup with var cccc = "…"
+      const cccc = html.match(/var\s+cccc\s*=\s*"([^"]+)"/)?.[1];
+      if (cccc) return cccc;
+      return null;
     } catch {
       return null;
     }
