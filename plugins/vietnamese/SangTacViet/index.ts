@@ -315,7 +315,7 @@ class SangTacVietPlugin extends NekoriBasePlugin {
   get site() {
     return DOMAINS[this.selectedDomain] || SITE;
   }
-  version = '1.1.1';
+  version = '1.1.2';
   minApiVersion = 2;
   webStorageUtilized = true;
 
@@ -762,6 +762,11 @@ class SangTacVietPlugin extends NekoriBasePlugin {
     // Step 2: probe POST that rotates `_ac`.
     // The browser sends the current `_ac` cookie value as the POST body.
     // Sending an empty body triggers the anti-bot heuristic (code 21).
+    // The probe's Set-Cookie returns the rotated `_ac`; the real request MUST
+    // send that rotated value or the server rejects with code 5 (err 4002).
+    // We capture it from the response header directly instead of relying on
+    // the shared cookie jar's flush timing, which races the next request.
+    let rotatedAc: string | null = null;
     try {
       const jar = await get(origin);
       const acValue =
@@ -778,20 +783,40 @@ class SangTacVietPlugin extends NekoriBasePlugin {
         body: acValue,
       });
       await probeRes.text();
-      if (probeRes.headers.get('set-cookie')) {
-        await setFromResponse(origin, probeRes.headers.get('set-cookie')!);
+      const probeSetCookie = probeRes.headers.get('set-cookie');
+      if (probeSetCookie) {
+        // Grab the newest `_ac` the server issued (last match wins).
+        for (const m of probeSetCookie.matchAll(/(?:^|,|;)\s*_ac=([^;,]+)/gi)) {
+          rotatedAc = m[1];
+        }
+        await setFromResponse(origin, probeSetCookie);
       }
     } catch {
       // probe is best-effort; carry on
     }
 
     // Step 3: actual chapter fetch using the rotated cookies.
+    // If the probe issued a new `_ac`, force it into the Cookie header so the
+    // request is guaranteed fresh even if the shared jar hasn't flushed yet.
+    const realCookieHeader = { ...(await this._cookieHeader(origin)) };
+    if (rotatedAc) {
+      const cookie = (realCookieHeader.Cookie ||
+        realCookieHeader.cookie ||
+        '') as string;
+      const parts = cookie
+        .split(';')
+        .map(p => p.trim())
+        .filter(p => p && !p.startsWith('_ac='));
+      parts.push(`_ac=${rotatedAc}`);
+      realCookieHeader.Cookie = parts.join('; ');
+      delete realCookieHeader.cookie;
+    }
     const chapRes = await fetchApi(apiUrl.toString(), {
       method: 'POST',
       headers: {
         'Content-Type': 'application/x-www-form-urlencoded',
         Referer: referer,
-        ...(await this._cookieHeader(origin)),
+        ...realCookieHeader,
       },
       body: this.forceFetch ? 'rescan=true&k=' : '',
     });
