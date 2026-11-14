@@ -310,7 +310,7 @@ class SangTacVietPlugin extends NekoriBasePlugin {
   get site() {
     return DOMAINS[this.selectedDomain] || SITE;
   }
-  version = '1.1.7';
+  version = '1.1.8';
   minApiVersion = 2;
   webStorageUtilized = true;
 
@@ -733,6 +733,7 @@ class SangTacVietPlugin extends NekoriBasePlugin {
     // the HTTPS domain through a fresh bot challenge -> code 5. Keep cf_* and
     // transmode/foreignlang; only expire the site anti-bot tokens.
     const oldCookies = await get(origin);
+    const epoch = new Date(0).toISOString();
     for (const k in oldCookies) {
       const lower = k.toLowerCase();
       const keep =
@@ -742,7 +743,17 @@ class SangTacVietPlugin extends NekoriBasePlugin {
         lower === 'transmode' ||
         lower === 'foreignlang';
       if (!keep) {
-        await set(origin, { name: k, value: '' });
+        // Truly delete (expires in the past), preserving the original
+        // domain/path so Chromium matches the exact stored cookie.
+        // Merely setting value='' left empty PHPSESSID/_ac cookies that
+        // poisoned the session -> code 7 after a few chapters.
+        await set(origin, {
+          name: k,
+          value: '',
+          domain: oldCookies[k].domain,
+          path: oldCookies[k].path,
+          expires: epoch,
+        });
       }
     }
 
