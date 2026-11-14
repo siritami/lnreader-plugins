@@ -315,7 +315,7 @@ class SangTacVietPlugin extends NekoriBasePlugin {
   get site() {
     return DOMAINS[this.selectedDomain] || SITE;
   }
-  version = '1.1.2';
+  version = '1.1.3';
   minApiVersion = 2;
   webStorageUtilized = true;
 
@@ -761,11 +761,9 @@ class SangTacVietPlugin extends NekoriBasePlugin {
 
     // Step 2: probe POST that rotates `_ac`.
     // The browser sends the current `_ac` cookie value as the POST body.
-    // Sending an empty body triggers the anti-bot heuristic (code 21).
-    // The probe's Set-Cookie returns the rotated `_ac`; the real request MUST
+    // The response issues a fresh `_ac` via Set-Cookie; the real request MUST
     // send that rotated value or the server rejects with code 5 (err 4002).
-    // We capture it from the response header directly instead of relying on
-    // the shared cookie jar's flush timing, which races the next request.
+    // Parse it from the Set-Cookie header; fall back to re-reading the jar.
     let rotatedAc: string | null = null;
     try {
       const jar = await get(origin);
@@ -785,7 +783,8 @@ class SangTacVietPlugin extends NekoriBasePlugin {
       await probeRes.text();
       const probeSetCookie = probeRes.headers.get('set-cookie');
       if (probeSetCookie) {
-        // Grab the newest `_ac` the server issued (last match wins).
+        // Parse the rotated `_ac` straight from the response header — the most
+        // reliable source, independent of jar flush timing.
         for (const m of probeSetCookie.matchAll(/(?:^|,|;)\s*_ac=([^;,]+)/gi)) {
           rotatedAc = m[1];
         }
@@ -795,9 +794,22 @@ class SangTacVietPlugin extends NekoriBasePlugin {
       // probe is best-effort; carry on
     }
 
+    // Fallback: if set-cookie parsing found nothing (Headers may strip it in
+    // some runtimes), re-read the shared jar — the host persists the probe's
+    // Set-Cookie into it before the body resolves.
+    if (!rotatedAc) {
+      const freshJar = await get(origin);
+      rotatedAc =
+        (freshJar._ac &&
+          (typeof freshJar._ac === 'string'
+            ? freshJar._ac
+            : freshJar._ac.value)) ||
+        null;
+    }
+
     // Step 3: actual chapter fetch using the rotated cookies.
-    // If the probe issued a new `_ac`, force it into the Cookie header so the
-    // request is guaranteed fresh even if the shared jar hasn't flushed yet.
+    // Rebuild the Cookie header from the fresh jar so the rotated `_ac` is
+    // guaranteed present (the plugin header overrides the jar per-name).
     const realCookieHeader = { ...(await this._cookieHeader(origin)) };
     if (rotatedAc) {
       const cookie = (realCookieHeader.Cookie ||
