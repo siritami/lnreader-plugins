@@ -2,12 +2,7 @@ import { defaultCover } from '@libs/defaultCover';
 import { fetchApi, fetchText } from '@libs/fetch';
 import { NovelStatus } from '@libs/novelStatus';
 import { storage } from '@libs/storage';
-import {
-  get,
-  removeSessionCookies,
-  set,
-  setFromResponse,
-} from '@nekori/cookie';
+import { get, set, setFromResponse } from '@nekori/cookie';
 import { NekoriBasePlugin } from '@nekori/plugin';
 import { decodeHtmlEntities, encodeHtmlEntities } from '@nekori/utils';
 /* eslint-disable no-useless-escape */
@@ -315,7 +310,7 @@ class SangTacVietPlugin extends NekoriBasePlugin {
   get site() {
     return DOMAINS[this.selectedDomain] || SITE;
   }
-  version = '1.1.4';
+  version = '1.1.5';
   minApiVersion = 2;
   webStorageUtilized = true;
 
@@ -716,12 +711,25 @@ class SangTacVietPlugin extends NekoriBasePlugin {
 
     const origin = new URL(this.site).origin;
 
-    // Step 0: clear session cookies but preserve translation preference.
+    // Step 0: clear the chapter API's anti-bot/session cookies but preserve
+    // translation preference AND Cloudflare clearance (cf_clearance/__cf_bm).
+    // Wiping ALL session cookies via removeSessionCookies() used to delete the
+    // Cloudflare clearance that the WebView solved, forcing every request on
+    // the HTTPS domain through a fresh bot challenge -> code 5. Keep cf_* and
+    // transmode/foreignlang; only expire the site anti-bot tokens.
     const oldCookies = await get(origin);
     for (const k in oldCookies) {
-      await set(origin, { name: k, value: '' });
+      const lower = k.toLowerCase();
+      const keep =
+        lower.startsWith('cf_') ||
+        lower.startsWith('__cf') ||
+        lower === 'cf_clearance' ||
+        lower === 'transmode' ||
+        lower === 'foreignlang';
+      if (!keep) {
+        await set(origin, { name: k, value: '' });
+      }
     }
-    await removeSessionCookies();
 
     // Set translation cookies BEFORE Step 1 so the server sees them
     // on the very first request (session creation).
@@ -830,10 +838,7 @@ class SangTacVietPlugin extends NekoriBasePlugin {
         Referer: referer,
         ...realCookieHeader,
       },
-      // The server requires a `k=` body param on the real request; an empty
-      // body is rejected (code 5/21) on the HTTPS domain while the raw-IP
-      // domain tolerates it. Always send `k=` (or rescan when forcing).
-      body: this.forceFetch ? 'rescan=true&k=' : 'k=',
+      body: this.forceFetch ? 'rescan=true&k=' : '',
     });
     const data = this.parseLooseJson(await chapRes.text());
     if (!data) {
