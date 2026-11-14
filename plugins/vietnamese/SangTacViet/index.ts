@@ -310,7 +310,7 @@ class SangTacVietPlugin extends NekoriBasePlugin {
   get site() {
     return DOMAINS[this.selectedDomain] || SITE;
   }
-  version = '1.1.6';
+  version = '1.1.7';
   minApiVersion = 2;
   webStorageUtilized = true;
 
@@ -680,7 +680,14 @@ class SangTacVietPlugin extends NekoriBasePlugin {
 
   // @ts-expect-error - public method with auto-retry wrapper
   async parseChapter(chapterPath: string): Promise<Plugin.ChapterContent> {
-    const maxRetries = this.autoRetry ? 10 : 1;
+    // Code 5 is a transient anti-bot/session rejection (e.g. the reader
+    // WebView and net.request racing over the shared `_ac` token on the
+    // Cloudflare-protected HTTPS domain). It almost always clears on retry
+    // with a fresh probe, so always allow a few attempts even when the
+    // user-facing autoRetry toggle is off. `shouldStopRetry` still gates
+    // genuinely fatal codes (captcha, login, deleted book).
+    const autoRetryEnabled = this.autoRetry;
+    const maxRetries = autoRetryEnabled ? 10 : 4;
     let attempt = 0;
     while (attempt < maxRetries) {
       try {
@@ -694,7 +701,15 @@ class SangTacVietPlugin extends NekoriBasePlugin {
           throw err;
         }
         console.warn(`Failed to load chapter (attempt ${attempt}):`, err);
-        await new Promise(res => setTimeout(res, 1000));
+        // Honor the server's `time` hint when present, else 1s.
+        const waitMs =
+          err instanceof STVChapterError &&
+          typeof err.raw?.time === 'number' &&
+          err.raw.time > 0 &&
+          err.raw.time < 10000
+            ? err.raw.time
+            : 1000;
+        await new Promise(res => setTimeout(res, waitMs));
       }
     }
   }
@@ -864,12 +879,7 @@ class SangTacVietPlugin extends NekoriBasePlugin {
     } else {
       console.warn('Unexpected chapter API response', data);
       switch (String(data.code)) {
-        case '21':
-        // The server also signals a required captcha by returning code 5 with
-        // a 4xxx sub-code (e.g. "...mã báo lỗi:4005") instead of code 21. Treat
-        // it the same so the verification widget renders and the user can clear
-        // the block; otherwise the plugin throws a bare "Lỗi không xác định".
-        case '5': {
+        case '21': {
           return {
             state: 'checkpoint',
             type: 'novel',
