@@ -2,7 +2,12 @@ import { defaultCover } from '@libs/defaultCover';
 import { fetchApi, fetchText } from '@libs/fetch';
 import { NovelStatus } from '@libs/novelStatus';
 import { storage } from '@libs/storage';
-import { get, set, setFromResponse } from '@nekori/cookie';
+import {
+  get,
+  removeSessionCookies,
+  set,
+  setFromResponse,
+} from '@nekori/cookie';
 import { NekoriBasePlugin } from '@nekori/plugin';
 import { decodeHtmlEntities, encodeHtmlEntities } from '@nekori/utils';
 /* eslint-disable no-useless-escape */
@@ -310,7 +315,7 @@ class SangTacVietPlugin extends NekoriBasePlugin {
   get site() {
     return DOMAINS[this.selectedDomain] || SITE;
   }
-  version = '1.1.2';
+  version = '1.1.1';
   minApiVersion = 2;
   webStorageUtilized = true;
 
@@ -412,45 +417,8 @@ class SangTacVietPlugin extends NekoriBasePlugin {
       }
     }
 
-    await this.setHostCookie(origin, 'transmode', transmode);
-    await this.setHostCookie(origin, 'foreignlang', foreignlang);
-  }
-
-  private async removeLegacyDomainCookie(
-    origin: string,
-    name: string,
-  ): Promise<void> {
-    // Android set() adds Domain; expire only that scope, preserving host-only cookies.
-    const accepted = await set(origin, {
-      name,
-      value: '',
-      domain: new URL(origin).hostname,
-      path: '/',
-      expires: '1970-01-01T00:00:00.000Z',
-    });
-    if (!accepted) throw new Error(`Không thể xóa cookie cũ ${name}.`);
-  }
-
-  private async setHostCookie(
-    origin: string,
-    name: string,
-    value: string,
-  ): Promise<void> {
-    await this.removeLegacyDomainCookie(origin, name);
-    const accepted = await setFromResponse(origin, `${name}=${value}; Path=/`);
-    if (!accepted) throw new Error(`Không thể cập nhật cookie ${name}.`);
-  }
-
-  private async applyResponseCookies(
-    origin: string,
-    response: Response,
-  ): Promise<void> {
-    const header = response.headers.get('set-cookie');
-    if (!header) return;
-    for (const cookie of header.split(/,(?=\s*[A-Za-z0-9_-]+=)/)) {
-      const accepted = await setFromResponse(origin, cookie.trim());
-      if (!accepted) throw new Error('Không thể cập nhật cookie từ máy chủ.');
-    }
+    await set(origin, { name: 'transmode', value: transmode });
+    await set(origin, { name: 'foreignlang', value: foreignlang });
   }
 
   private async _cookieHeader(origin: string): Promise<Record<string, string>> {
@@ -748,22 +716,38 @@ class SangTacVietPlugin extends NekoriBasePlugin {
 
     const origin = new URL(this.site).origin;
 
-    // Remove stale plugin-created _ac without clearing login or CAPTCHA sessions.
-    await this.removeLegacyDomainCookie(origin, '_ac');
+    // Step 0: clear session cookies but preserve translation preference.
+    const oldCookies = await get(origin);
+    for (const k in oldCookies) {
+      await set(origin, { name: k, value: '' });
+    }
+    await removeSessionCookies();
+
+    // Set translation cookies BEFORE Step 1 so the server sees them
+    // on the very first request (session creation).
     await this.applyTranslationCookies(origin);
 
-    const pageRes = await fetchApi(referer, {
-      headers: { ...(await this._cookieHeader(origin)) },
-    });
-    if (!pageRes.ok) {
-      throw new Error(`Không thể tải trang chương (HTTP ${pageRes.status}).`);
-    }
-    await this.applyResponseCookies(origin, pageRes);
-    const firstCookies = this.extractCookiesFromHtml(await pageRes.text());
-    for (const [name, value] of Object.entries(firstCookies)) {
-      await this.setHostCookie(origin, name, value);
+    // Step 1: prime the session — sends translation cookies with the GET.
+    try {
+      const pageRes = await fetchApi(referer, {
+        headers: { ...(await this._cookieHeader(origin)) },
+      });
+      const html = await pageRes.text();
+      const firstCookies = this.extractCookiesFromHtml(html);
+      for (const k in firstCookies) {
+        await set(origin, {
+          name: k,
+          value: firstCookies[k],
+        });
+      }
+      if (pageRes.headers.get('set-cookie')) {
+        await setFromResponse(origin, pageRes.headers.get('set-cookie')!);
+      }
+    } catch {
+      // continue — server may still recognise the WebView's cookie jar
     }
 
+    // Re-apply translation cookies in case Step 1's Set-Cookie overwrote them.
     await this.applyTranslationCookies(origin);
 
     const apiUrl = new URL(`${this.site}/index.php`);
@@ -775,8 +759,14 @@ class SangTacVietPlugin extends NekoriBasePlugin {
     apiUrl.searchParams.set('sty', '1');
     apiUrl.searchParams.set('exts', '');
 
-    // Only a fresh page token needs rotation; code 7 is normal for this probe.
-    if (firstCookies._ac) {
+    // Step 2: probe POST that rotates `_ac`.
+    // The browser sends the current `_ac` cookie value as the POST body.
+    // Sending an empty body triggers the anti-bot heuristic (code 21).
+    try {
+      const jar = await get(origin);
+      const acValue =
+        (jar._ac && (typeof jar._ac === 'string' ? jar._ac : jar._ac.value)) ||
+        '';
       const probeRes = await fetchApi(apiUrl.toString(), {
         method: 'POST',
         headers: {
@@ -785,15 +775,17 @@ class SangTacVietPlugin extends NekoriBasePlugin {
           Referer: referer,
           ...(await this._cookieHeader(origin)),
         },
-        body: firstCookies._ac,
+        body: acValue,
       });
-      if (!probeRes.ok) {
-        throw new Error(`Không thể khởi tạo chương (HTTP ${probeRes.status}).`);
-      }
       await probeRes.text();
-      await this.applyResponseCookies(origin, probeRes);
+      if (probeRes.headers.get('set-cookie')) {
+        await setFromResponse(origin, probeRes.headers.get('set-cookie')!);
+      }
+    } catch {
+      // probe is best-effort; carry on
     }
 
+    // Step 3: actual chapter fetch using the rotated cookies.
     const chapRes = await fetchApi(apiUrl.toString(), {
       method: 'POST',
       headers: {
@@ -803,12 +795,6 @@ class SangTacVietPlugin extends NekoriBasePlugin {
       },
       body: this.forceFetch ? 'rescan=true&k=' : '',
     });
-    if (!chapRes.ok) {
-      throw new Error(
-        `Không thể tải nội dung chương (HTTP ${chapRes.status}).`,
-      );
-    }
-    await this.applyResponseCookies(origin, chapRes);
     const data = this.parseLooseJson(await chapRes.text());
     if (!data) {
       throw new Error(
