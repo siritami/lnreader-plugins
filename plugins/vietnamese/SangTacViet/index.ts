@@ -310,7 +310,7 @@ class SangTacVietPlugin extends NekoriBasePlugin {
   get site() {
     return DOMAINS[this.selectedDomain] || SITE;
   }
-  version = '1.1.5';
+  version = '1.1.6';
   minApiVersion = 2;
   webStorageUtilized = true;
 
@@ -864,7 +864,12 @@ class SangTacVietPlugin extends NekoriBasePlugin {
     } else {
       console.warn('Unexpected chapter API response', data);
       switch (String(data.code)) {
-        case '21': {
+        case '21':
+        // The server also signals a required captcha by returning code 5 with
+        // a 4xxx sub-code (e.g. "...mã báo lỗi:4005") instead of code 21. Treat
+        // it the same so the verification widget renders and the user can clear
+        // the block; otherwise the plugin throws a bare "Lỗi không xác định".
+        case '5': {
           return {
             state: 'checkpoint',
             type: 'novel',
