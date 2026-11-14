@@ -315,7 +315,7 @@ class SangTacVietPlugin extends NekoriBasePlugin {
   get site() {
     return DOMAINS[this.selectedDomain] || SITE;
   }
-  version = '1.1.3';
+  version = '1.1.4';
   minApiVersion = 2;
   webStorageUtilized = true;
 
@@ -830,7 +830,10 @@ class SangTacVietPlugin extends NekoriBasePlugin {
         Referer: referer,
         ...realCookieHeader,
       },
-      body: this.forceFetch ? 'rescan=true&k=' : '',
+      // The server requires a `k=` body param on the real request; an empty
+      // body is rejected (code 5/21) on the HTTPS domain while the raw-IP
+      // domain tolerates it. Always send `k=` (or rescan when forcing).
+      body: this.forceFetch ? 'rescan=true&k=' : 'k=',
     });
     const data = this.parseLooseJson(await chapRes.text());
     if (!data) {
