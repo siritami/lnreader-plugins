@@ -10,7 +10,7 @@ import { Plugin } from '@/types/plugin';
 import filters from './filters';
 
 const SITE = 'https://truyenkira.net';
-const API = 'https://api.truyenkira.net';
+const API = SITE.replace('://', '://api.');
 
 const CHAPTERS_PER_VOLUME = 50;
 
