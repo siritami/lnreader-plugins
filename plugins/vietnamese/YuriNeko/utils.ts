@@ -21,7 +21,7 @@ export function extractMangaId(html: string): string | null {
 export function extractSignedImageUrls(html: string): string[] {
   const seen = new Set<string>();
   const urls: string[] = [];
-  const regex = /\/api\/img\?d=([^"\\\s]+?)&s=([^"\\\s]+)/g;
+  const regex = /\/api\/img\?d=([^"\\\s&]+?)(?:&|\\u0026)s=([^"\\\s&]+)/g;
   for (const match of html.matchAll(regex)) {
     const url = `/api/img?d=${match[1]}&s=${match[2]}`;
     if (!seen.has(url)) {
