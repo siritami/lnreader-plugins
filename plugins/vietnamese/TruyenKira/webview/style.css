@@ -1,30 +1,21 @@
-/* Manga chapters only: full-bleed, edge-to-edge images.
-   Scoped to .truyenkira-pages so novel text chapters keep
-   normal reader margins and padding. */
+.truyenkira-manga {
+  --reader-margin-right: 0px;
+  --reader-margin-left: 0px;
+}
+
 #nekori-reader .truyenkira-pages {
-  display: block;
   margin: 0;
   padding: 0;
 }
 
 #nekori-reader .truyenkira-pages figure {
+  margin: 0 !important;
   padding: 0 !important;
   display: block !important;
-  /* Negative margins auto-stretch the block past .nekori-reader padding.
-     min() picks the larger compensation whether the app uses
-     --reader-margin-* or --readerSettings-padding. */
-  margin: 0
-    min(
-      calc(-1 * var(--reader-margin-right, 0px)),
-      calc(-1 * var(--readerSettings-padding, 0px))
-    )
-    0
-    min(
-      calc(-1 * var(--reader-margin-left, 0px)),
-      calc(-1 * var(--readerSettings-padding, 0px))
-    ) !important;
-  width: auto !important;
+  width: calc(100% + (var(--readerSettings-padding) * 2)) !important;
   max-width: none !important;
+  margin-left: calc(-1 * var(--readerSettings-padding)) !important;
+  margin-right: calc(-1 * var(--readerSettings-padding)) !important;
   overflow: hidden;
 }
 
