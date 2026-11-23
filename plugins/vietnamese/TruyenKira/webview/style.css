@@ -8,16 +8,23 @@
 }
 
 #nekori-reader .truyenkira-pages figure {
-  margin: 0 !important;
   padding: 0 !important;
   display: block !important;
-  /* Cancel .nekori-reader inline padding (--reader-margin-*) */
-  width: calc(
-    100% + var(--reader-margin-left) + var(--reader-margin-right)
-  ) !important;
+  /* Negative margins auto-stretch the block past .nekori-reader padding.
+     min() picks the larger compensation whether the app uses
+     --reader-margin-* or --readerSettings-padding. */
+  margin: 0
+    min(
+      calc(-1 * var(--reader-margin-right, 0px)),
+      calc(-1 * var(--readerSettings-padding, 0px))
+    )
+    0
+    min(
+      calc(-1 * var(--reader-margin-left, 0px)),
+      calc(-1 * var(--readerSettings-padding, 0px))
+    ) !important;
+  width: auto !important;
   max-width: none !important;
-  margin-left: calc(-1 * var(--reader-margin-left)) !important;
-  margin-right: calc(-1 * var(--reader-margin-right)) !important;
   overflow: hidden;
 }
 

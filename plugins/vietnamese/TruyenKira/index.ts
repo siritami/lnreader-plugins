@@ -59,7 +59,7 @@ class TruyenKiraPlugin extends NekoriBasePlugin {
   name = 'TruyenKira';
   site = SITE;
   icon = 'icon.png';
-  version = '1.0.4';
+  version = '1.0.5';
   customCSS = 'style.css';
   contentType = ContentType.MIXED;
   contentWarning = ContentWarning.SAFE;
