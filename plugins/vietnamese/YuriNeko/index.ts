@@ -89,7 +89,7 @@ class YuriNekoPlugin extends NekoriBasePlugin {
   name = 'YuriNeko';
   icon = 'icon.png';
   site = SITE;
-  version = '1.0.3';
+  version = '1.0.4';
   contentType = ContentType.MIXED;
   contentWarning = ContentWarning.MIXED;
 

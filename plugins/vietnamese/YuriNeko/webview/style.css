@@ -1,6 +1,11 @@
-#nekori-reader .yurineko-pages {
+/* Manga (image) chapters: full-bleed pages like CosplayTele.
+   :has() scoping keeps novel chapters untouched. */
+#nekori-reader:has(.yurineko-pages) {
   --reader-margin-right: 0px;
   --reader-margin-left: 0px;
+}
+
+#nekori-reader .yurineko-pages {
   margin: 0;
   padding: 0;
 }
