@@ -1,23 +1,23 @@
 /* Manga chapters only: full-bleed, edge-to-edge images.
    Scoped to .truyenkira-pages so novel text chapters keep
-   normal reader margins. */
+   normal reader margins and padding. */
 #nekori-reader .truyenkira-pages {
   display: block;
   margin: 0;
   padding: 0;
-  /* Escape reader padding and margins: stretch to full viewport width */
-  width: 100vw;
-  max-width: none;
-  margin-left: calc(50% - 50vw);
-  margin-right: calc(50% - 50vw);
 }
 
 #nekori-reader .truyenkira-pages figure {
   margin: 0 !important;
   padding: 0 !important;
   display: block !important;
-  width: 100% !important;
+  /* Cancel .nekori-reader inline padding (--reader-margin-*) */
+  width: calc(
+    100% + var(--reader-margin-left) + var(--reader-margin-right)
+  ) !important;
   max-width: none !important;
+  margin-left: calc(-1 * var(--reader-margin-left)) !important;
+  margin-right: calc(-1 * var(--reader-margin-right)) !important;
   overflow: hidden;
 }
 

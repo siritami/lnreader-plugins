@@ -59,20 +59,20 @@ class TruyenKiraPlugin extends NekoriBasePlugin {
   name = 'TruyenKira';
   site = SITE;
   icon = 'icon.png';
-  version = '1.0.1';
+  version = '1.0.4';
   customCSS = 'style.css';
   contentType = ContentType.MIXED;
   contentWarning = ContentWarning.SAFE;
   filters = filters;
 
+  private readonly requestHeaders = {
+    Accept: 'application/json',
+    Referer: SITE + '/',
+    Origin: SITE,
+  };
+
   private async fetchJson<T>(url: string): Promise<T> {
-    const res = await fetchApi(url, {
-      headers: {
-        Accept: 'application/json',
-        Referer: SITE + '/',
-        Origin: SITE,
-      },
-    });
+    const res = await fetchApi(url, { headers: this.requestHeaders });
     if (!res.ok) {
       throw new Error(`Request failed ${res.status}: ${url}`);
     }
@@ -196,9 +196,23 @@ class TruyenKiraPlugin extends NekoriBasePlugin {
       throw new Error('Invalid chapter path: ' + chapterPath);
     }
     const [, slug, chapterId] = match;
-    const data = await this.fetchJson<ChapterContentResponse>(
-      `${API}/comics/${slug}/chapters/${chapterId}`,
-    );
+    const res = await fetchApi(`${API}/comics/${slug}/chapters/${chapterId}`, {
+      headers: this.requestHeaders,
+    });
+    if (res.status === 401 || res.status === 402 || res.status === 403) {
+      return {
+        state: 'checkpoint',
+        type: 'image',
+        html: `<div><p>Chương này yêu cầu đăng nhập hoặc trả phí trên truyenkira.net.</p></div>`,
+        checkpointMessage: 'Chapter requires login or purchase',
+        noCache: true,
+        noPrefetch: true,
+      };
+    }
+    if (!res.ok) {
+      throw new Error(`Request failed ${res.status}: ${chapterPath}`);
+    }
+    const data = (await res.json()) as ChapterContentResponse;
 
     if (data.images && data.images.length > 0) {
       const figures = data.images
@@ -207,7 +221,7 @@ class TruyenKiraPlugin extends NekoriBasePlugin {
           img =>
             `<figure><img src="${encodeHtmlEntities(
               img.src,
-            )}" alt="Page ${img.page}" /></figure>`,
+            )}" alt="Page ${img.page}" loading="lazy" /></figure>`,
         )
         .join('\n');
       return {

@@ -11,6 +11,7 @@ import filters from './filters';
 import { extractMangaId, extractSignedImageUrls, stripHtml } from './utils';
 
 const SITE = 'https://yurinekoz.com';
+const CDN = SITE.replace('https://', 'https://cdn.');
 const API = `${SITE}/api/v1`;
 
 const LIST_LIMIT = 24;
@@ -65,7 +66,7 @@ type ChapterDetailDto = ChapterDto & {
 function coverUrl(path?: string | null): string {
   if (!path) return defaultCover;
   if (path.startsWith('http')) return path;
-  return `${SITE}/${path.replace(/^\/+/, '')}`;
+  return `${CDN}/${path.replace(/^\/+/, '')}`;
 }
 
 function parseStatus(status?: string): string {
