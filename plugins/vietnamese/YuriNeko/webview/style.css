@@ -1,5 +1,3 @@
-/* Manga (image) chapters: full-bleed pages like CosplayTele.
-   :has() scoping keeps novel chapters untouched. */
 #nekori-reader:has(.yurineko-pages) {
   --reader-margin-right: 0px;
   --reader-margin-left: 0px;
@@ -30,7 +28,6 @@
   padding: 0 !important;
 }
 
-/* Novel text chapters: inline illustrations keep normal sizing */
 #nekori-reader img {
   max-width: 100% !important;
   height: auto !important;
