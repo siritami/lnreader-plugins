@@ -8,16 +8,10 @@
   padding: 0;
 }
 
-#nekori-reader .yurineko-pages figure,
-#nekori-reader p:has(img),
-#nekori-reader div:has(img):not(#nekori-reader):not(.yurineko-novel),
-#nekori-reader figure {
+#nekori-reader .yurineko-pages figure {
   margin: 0 !important;
   padding: 0 !important;
   display: block !important;
-}
-
-#nekori-reader .yurineko-pages figure {
   width: calc(100% + (var(--readerSettings-padding) * 2)) !important;
   max-width: none !important;
   margin-left: calc(-1 * var(--readerSettings-padding)) !important;
@@ -34,6 +28,7 @@
   padding: 0 !important;
 }
 
+/* Novel text chapters: inline illustrations keep normal sizing */
 #nekori-reader img {
   max-width: 100% !important;
   height: auto !important;

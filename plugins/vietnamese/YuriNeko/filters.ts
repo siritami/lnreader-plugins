@@ -4,8 +4,9 @@ export default {
   type: {
     type: FilterTypes.Picker,
     label: 'Loại truyện',
-    value: 'NOVEL',
+    value: '',
     options: [
+      { label: 'Tất cả', value: '' },
       { label: 'Novel', value: 'NOVEL' },
       { label: 'Manga', value: 'MANGA' },
       { label: 'Manhwa', value: 'MANHWA' },

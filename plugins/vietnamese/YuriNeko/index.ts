@@ -89,7 +89,7 @@ class YuriNekoPlugin extends NekoriBasePlugin {
   name = 'YuriNeko';
   icon = 'icon.png';
   site = SITE;
-  version = '1.0.0';
+  version = '1.0.1';
   contentType = ContentType.MIXED;
   contentWarning = ContentWarning.MIXED;
 
@@ -131,8 +131,8 @@ class YuriNekoPlugin extends NekoriBasePlugin {
       page: String(pageNo),
       limit: String(LIST_LIMIT),
       sort: showLatestNovels ? 'latest' : f?.sort?.value ?? 'latest',
-      type: f?.type?.value || 'NOVEL',
     });
+    if (f?.type?.value) params.set('type', f.type.value);
     if (f?.status?.value) params.set('status', f.status.value);
     if (f?.creator?.value) {
       params.set('authorSlugs', f.creator.value);
