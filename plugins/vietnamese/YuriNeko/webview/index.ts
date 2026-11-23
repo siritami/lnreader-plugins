@@ -37,7 +37,12 @@ void (async () => {
     const { keyHex, key } = decodeD(src);
 
     const absolute = src.startsWith('http') ? src : `${location.origin}${src}`;
-    const init = { headers: { 'X-Ik': keyHex } };
+    const init = {
+      headers: {
+        'X-Ik': keyHex,
+        Referer: `${location.origin}/`,
+      },
+    };
     let res: Response;
     try {
       res = await reader.fetch(absolute, init);
