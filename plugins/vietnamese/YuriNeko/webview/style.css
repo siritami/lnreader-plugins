@@ -1,9 +1,6 @@
-:root {
+#nekori-reader .yurineko-pages {
   --reader-margin-right: 0px;
   --reader-margin-left: 0px;
-}
-
-#nekori-reader .yurineko-pages {
   margin: 0;
   padding: 0;
 }
